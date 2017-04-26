@@ -22,8 +22,8 @@
   exact-nonnegative-integer?)
 (define Field? symbol?)
 (define-type Type
-  ;; This is for external data (i.e. pointers)
-  (OpaqT)
+  ;; This is for external data
+  (PtrT)
   (IntT [signed? boolean?] [w IntegerBitWidth?])
   (FloT [w FloatBitWidth?])
   ;; xxx Is this too restrictive, because we can't take arbitrary
@@ -31,7 +31,7 @@
   (ArrT [dim Dimension?] [elem Type?])
   (RecT [list-of-field*ty (listof (cons/c Field? Type?))]))
 (define AtomicT?
-  (or/c OpaqT? IntT? FloT?))
+  (or/c PtrT? IntT? FloT?))
 (define NumT?
   (or/c IntT? FloT?))
 
@@ -39,11 +39,11 @@
   (begin (define id (IntT signed? w)) ...))
 
 (define-Integers
-  [ U1 #f  1] [ S1 #t  1]
+  [ U1 #f  1]
   [ U8 #f  8] [ S8 #t  8]
   [U16 #f 16] [S16 #t 16]
-  [U32 #f 16] [S32 #t 16]
-  [U64 #f 16] [S64 #t 16])
+  [U32 #f 32] [S32 #t 32]
+  [U64 #f 64] [S64 #t 64])
 (define Bool U1)
 (define F32 (FloT 32))
 (define F64 (FloT 64))
@@ -51,28 +51,45 @@
 (define Variable? symbol?)
 (define Label? symbol?)
 
-(define BinaryOperator?
-  (or/c 'add 'fadd 'sub 'fsub 'mul 'fmul 'udiv 'sdiv 'fdiv 'urem 'srem 'frem
-        'shl 'lshr 'ashr 'and 'or 'xor))
-(define ICmpOperator?
-  (or/c 'eq 'ne 'ugt 'uge 'ult 'ule 'sgt 'sge 'slt 'sle))
-(define FCmpOperator?
-  (or/c 'false 'oeq 'ogt 'oge 'olt 'ole 'one 'ord
-        'true 'ueq 'uge 'uge 'ult 'ule 'une 'uno))
+(define BinOperator?
+  (or/c
+   ;; IBinOp
+   'iadd 'isub 'imul 'iudiv 'isdiv 'iurem 'isrem
+   'ishl 'ilshr 'iashr 'iand 'ior 'ixor
+   ;; FBinOp
+   'fadd 'fsub 'fmul 'fdiv 'frem
+   ;; ICmp
+   'ieq 'ine 'iugt 'iuge 'iult 'iule 'isgt 'isge 'islt 'isle
+   ;; FCmp
+   'ffalse 'foeq 'fogt 'foge 'folt 'fole 'fone 'ford
+   'ftrue 'fueq 'fuge 'fuge 'fult 'fule 'fune 'funo))
 (define-type Expr
   (VarR [x Variable?])
-  (IntegerV [ty IntT?] [i exact-integer?])
-  (FloatV [ty FloT?] [f flonum?])
-  (RecordV [list-of-field*exp (listof (cons/c Field? Expr?))])
-  (RecordR [r Expr?] [f Field?])
-  (ArrayV [vs (listof Expr?)])
-  (ArrayR [a Expr?] [i Expr?])
-  ;; NOTE In compiler/verifier, assert that i is correct dimension
+  (IntV [ty IntT?] [i exact-integer?])
+  (FloV [ty FloT?] [f flonum?])
+  (RecV [list-of-field*exp (listof (cons/c Field? Expr?))])
+  (RecR [r Expr?] [f Field?])
+  (ArrV [vs (listof Expr?)])
+  (ArrR [a Expr?] [i Expr?])
+  ;; NOTE In compiler/verifier, assert that i is within bounds. This
+  ;; means we need to know a's type during the emit/verify process.
   (Call [p Procedure?] [ins (listof Expr?)] [refs (listof LHS?)] [outs (listof LHS?)])
-  (NumCast [ty NumT?] [e Expr?])
-  (BinOp [op BinaryOperator?] [l Expr?] [r Expr?])
-  (ICmpOp [op ICmpOperator?] [l Expr?] [r Expr?])
-  (FCmpOp [op FCmpOperator?] [l Expr?] [r Expr?]))
+  (Cast [ty NumT?] [e Expr?])
+  (Bin [op BinOperator?] [l Expr?] [r Expr?]))
+
+;; xxx
+(define-type TypeError
+  (TyErrEq [lhs Type?] [rhs Type?])
+  (TyErrPred [where string?] [pred string?] [ty Type?])
+  (TyErrReturn [where string?] ))
+
+;; xxx
+(define-type TypesExprR
+  ;; Γ |- e => ListOfErrors x (T|#f) x CanWrite? x {VarsRead}
+  (ATypesExprR [errs (listof TypeError?)]
+               [ty (or/c #f Type?)]
+               [can-write? boolean?]
+               [vars-read (set/c Variable?)]))
 
 (define-type LHS
   (VarLHS [x Variable?])
@@ -157,13 +174,13 @@
     (match (hash-ref var-env x #f)
       [(cons xt _) xt]
       [#f (error 'typec "Unbound variable: ~v" x)])]
-   [(IntegerV ty i)
+   [(IntV ty i)
     (typec-int ty i)
     ty]
-   [(FloatV ty f)
+   [(FloV ty f)
     (typec-float ty f)
     ty]
-   [(RecordV lofe)
+   [(RecV lofe)
     ;; FIXME Should find all the duplicates
     (match (check-duplicates (map car lofe))
       [#f (void)]
@@ -172,13 +189,13 @@
      (for/list ([fe (in-list lofe)])
        (match-define (cons f e) fe)
        (cons f (rec e))))]
-   [(RecordR r rf)
+   [(RecR r rf)
     (match-define (RecT loft) (rec r))
     (for/or ([ft (in-list loft)])
       (match-define (cons f t) ft)
       (and (eq? rf f)
            t))]
-   [(ArrayV vs)
+   [(ArrV vs)
     (define len (length vs))
     (when (zero? len)
       (error 'typec "Array must have non-zero length"))
@@ -187,7 +204,7 @@
     (for/and ([vi (in-list vn)])
       (type= "homogeneous array elements" (rec vi) v0t))
     (ArrT len v0t)]
-   [(ArrayR a i)
+   [(ArrR a i)
     (match-define (ArrT len vt) (rec a))
     (match-define (IntT #f bw) (rec i))
     (define (closest-bitwidth some-bw)
@@ -213,32 +230,30 @@
     (compare 'refs (rec-lhs #f) refs_p refs)
     (compare 'outs (rec-lhs #t) outs_p outs)
     ret_p]
-   [(NumCast t e)
+   [(Cast t e)
     (define et (rec e))
     (unless (NumT? et)
       (error 'typec "May only cast numbers: ~v" et))
     t]
-   [(BinOp op l r)
+   [(Bin op l r)
     (define lt (rec l))
     (define rt (rec r))
-    (type= "BinOp" lt rt)
-    (unless (NumT? lt)
-      (error 'typec "Not integer in BinOp"))
-    lt]
-   [(ICmpOp op l r)
-    (define lt (rec l))
-    (define rt (rec r))
-    (type= "ICmpOp" lt rt)
-    (unless (IntT? lt)
-      (error 'typec "Not integer in ICmpOp"))
-    Bool]
-   [(FCmpOp op l r)
-    (define lt (rec l))
-    (define rt (rec r))
-    (type= "FCmpOp" lt rt)
-    (unless (FloT? lt)
-      (error 'typec "Not float in FCmpOp"))
-    Bool]))
+    (type= "Bin" lt rt)
+    (define-values (Which? Result)
+      (match op
+        [(or 'iadd 'isub 'imul 'iudiv 'isdiv 'iurem 'isrem
+             'ishl 'ilshr 'iashr 'iand 'ior 'ixor)
+         (values IntT? lt)]
+        [(or 'fadd 'fsub 'fmul 'fdiv 'frem)
+         (values FloT? lt)]
+        [(or 'ieq 'ine 'iugt 'iuge 'iult 'iule 'isgt 'isge 'islt 'isle)
+         (values IntT? Bool)]
+        [(or 'ffalse 'foeq 'fogt 'foge 'folt 'fole 'fone 'ford
+             'ftrue 'fueq 'fuge 'fuge 'fult 'fule 'fune 'funo)
+         (values FloT? Bool)]))
+    (unless (Which? lt)
+      (error 'typec "Wrong argument in Bin"))
+    Result]))
 
 (define (typec-lhs l
                    #:p->t p->t
@@ -259,9 +274,9 @@
        xt]
       [_ (error 'typec-lhs "Unbound variable: ~v" x)])]
    [(ArrayLHS a i)
-    (error 'typec-lhs "XXX ArrayLHS: Code is basically same as typec-expr for ArrayR, except that we need to check that the array is writeable, which is not currently available.")]
+    (error 'typec-lhs "XXX ArrayLHS: Code is basically same as typec-expr for ArrR, except that we need to check that the array is writeable, which is not currently available.")]
    [(RecordLHS r i)
-    (error 'typec-lhs "XXX RecordLHS: Code is basically same as typec-expr for RecordR, except that we need to check that the array is writeable, which is not currently available.")]))
+    (error 'typec-lhs "XXX RecordLHS: Code is basically same as typec-expr for RecR, except that we need to check that the array is writeable, which is not currently available.")]))
 
 (define (typec-stmt s
                     #:p->t p->t
@@ -368,12 +383,10 @@
 (define (lhs-write! lv nv)
   ((lhs-value-writer lv) nv))
 
-(define (eval-primitive which op lv rv)
-  ((match which
-     ['ICmp
-      (match op
-        ['eq =]
-        ['slt <])])
+(define (eval-primitive op lv rv)
+  ((match op
+     ['ieq =]
+     ['islt <])
    lv rv))
 
 (define (eval-expr σ e)
@@ -382,23 +395,23 @@
   (match-type
    Expr e
    [(VarR x) (unbox (hash-ref σ x))]
-   [(IntegerV _ i) i]
-   [(FloatV _ f) f]
-   [(RecordV lofe)
+   [(IntV _ i) i]
+   [(FloV _ f) f]
+   [(RecV lofe)
     (define r (make-hasheq))
     (for ([fe (in-list lofe)])
       (match-define (cons f e) fe)
       (hash-set! r f (rec e)))
     r]
-   [(RecordR r f)
+   [(RecR r f)
     (hash-ref (rec r) f)]
-   [(ArrayV vs)
+   [(ArrV vs)
     (apply vector (map rec vs))]
-   [(ArrayR a i)
+   [(ArrR a i)
     (vector-ref (rec a) (rec i))]
    [(Call p ins refs outs)
     (eval-proc p (map rec ins) (map rec-lhs refs) (map rec-lhs outs))]
-   [(NumCast t e)
+   [(Cast t e)
     (define conv
       (match t
         [(IntT sign? bw)
@@ -408,12 +421,8 @@
         [(FloT 32) real->single-flonum]
         [(FloT 64) real->double-flonum]))
     (conv (rec e))]
-   [(BinOp op l r)
-    (eval-primitive 'Bin op (rec l) (rec r))]
-   [(ICmpOp op l r)
-    (eval-primitive 'ICmp op (rec l) (rec r))]
-   [(FCmpOp op l r)
-    (eval-primitive 'FCmp op (rec l) (rec r))]))
+   [(Bin op l r)
+    (eval-primitive op (rec l) (rec r))]))
 
 (define (eval-lhs σ l)
   (match-type
@@ -452,7 +461,7 @@
     (rec #:var-env (hash-set var-env x (box (eval-expr var-env e)))
          b)]
    [(Seq f r)
-    (rec f) ;; <--- Any 0-valued return is here
+    (rec f) ;; <--- Any 0-valued return is to here here
     (rec r)]
    [(If c t f)
     (if (eval-expr var-env c)
@@ -466,7 +475,7 @@
                #:label-env (hash-set label-env lab (cons break continue))
                b))))]
    ;; The type-checker has ensured that these 0-valued returns are
-   ;; okay
+   ;; okay, because of the must-return? part
    [(Break lab)
     (match-define (cons b c) (hash-ref label-env lab))
     (b)]
@@ -503,19 +512,19 @@
           (list)
           (Seq
            (Loop 'main U8 'i 0 N
-                 (If (ICmpOp 'eq (VarR 'i) (VarR 'x))
-                     (Return (NumCast S8 (VarR 'i)))
+                 (If (Bin 'ieq (VarR 'i) (VarR 'x))
+                     (Return (Cast S8 (VarR 'i)))
                      (Continue 'main)))
-           (Return (IntegerV S8 -1)))))
+           (Return (IntV S8 -1)))))
   (define Main
     (Proc U8 (list) (list) (list)
-          (Let #t 'a (ArrayV (for/list ([i (in-range N)])
-                               (IntegerV U8 i)))
+          (Let #t 'a (ArrV (for/list ([i (in-range N)])
+                             (IntV U8 i)))
                (Let #t 'res (Call LinearSearch
-                                  (list (IntegerV U8 5))
+                                  (list (IntV U8 5))
                                   (list (VarLHS 'a))
                                   (list))
-                    (If (ICmpOp 'slt (VarR 'res) (IntegerV S8 0))
-                        (Return (IntegerV U8 1))
-                        (Return (IntegerV U8 0)))))))
+                    (If (Bin 'islt (VarR 'res) (IntV S8 0))
+                        (Return (IntV U8 1))
+                        (Return (IntV U8 0)))))))
   (adqc-eval Main))
