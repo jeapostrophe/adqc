@@ -82,6 +82,9 @@
   ;; NOTE This is a static slice (so we can predict what the size of
   ;; the resulting array will be)
   (ArrS [a Expr?] [s exact-nonnegative-integer?] [e exact-nonnegative-integer?])
+  ;; XXX Embedding p directly like this makes it hard to translate
+  ;; this definition to Coq, because it makes everything mutually
+  ;; recursive
   (Call [p Procedure?]
         [ro-cpy (listof Expr?)] [ro-ref (listof LHS?)]
         [rw-ref (listof LHS?)])
@@ -100,12 +103,14 @@
 ;; xxx
 (define-type TypesExprR
   ;; Γ |- e => ListOfErrors x (T|#f) x CanWrite? x {VarsRead}
+  ;; xxx add derivation
   (ATypesExprR [errs (listof TypeError?)]
                [ty (or/c #f Type?)]
                ;; xxx would it be better to explicitly evaluate to a pointer?
                [can-write? boolean?]
                [pure? boolean?]
-               ;; xxx things other than vars are written
+               ;; xxx things other than vars are written, but they are
+               ;; always discovered through variables.
                [vars-written (set/c Variable?)]
                [vars-read (set/c Variable?)]))
 
@@ -169,7 +174,15 @@
   
   ;; NOTE A procedure must return an atomic (register-sized) thing, so
   ;; the only way to get a bigger one is to allocate it before and
-  ;; then pass it as `rw-ref` to the procedure
+  ;; then pass it as `rw-ref` to the procedure.
+
+  ;; DESIGN An alternative design would be to specify something like a
+  ;; `wo-ref` that said the variable could only be used for writing or
+  ;; to make Call a binding form, or something like that. The main
+  ;; problem I forsee with this is that a pure procedure cannot return
+  ;; a data-structure, but has to return something atomic. This means
+  ;; that a function like `map` can't be pure. The only reason purity
+  ;; matters (right now) is for asserts, so this isn't so bad.
   (Proc [ret AtomicT?]
         [ro-cpy (listof (cons/c Variable? Type?))]
         [ro-ref (listof (cons/c Variable? Type?))]
@@ -177,12 +190,6 @@
         [body Statement?]))
 
 ;; Type Checker
-
-;; xxx type-checker should return a maybe type, a writeability (to
-;; know if an array/record reference is writeable), list of errors,
-;; and set of read variables, and really a whole derivation so we can
-;; make a type-directed compiler (useful for figuring out the right
-;; assertions to spit out, for example)
 
 (define (type= where x y)
   (unless (equal? x y)
@@ -353,10 +360,6 @@
    Statement s
    [(Assert e)
     ;; xxx e should be pure?
-    ;;
-    ;;     a procedure is impure if it has any outs (but not if it has
-    ;;     refs, maybe this means I should have a kind of parameter
-    ;;     that is purely out [outs is really inouts])
     (type= "Assert" (rec-e e) Bool)
     (doesnt-return!)]
    [(Assign l e)
@@ -505,7 +508,6 @@
    [(ArrayLHS a i)
     (define av (eval-expr σ a))
     (define iv (eval-expr σ i))
-    ;; xxx check if valid (if we had typing judgement to know a's type)
     (lhs-value (λ () (svector-ref av iv))
                (λ (nv) (svector-set! av iv nv)))]
    [(RecordLHS r f)
