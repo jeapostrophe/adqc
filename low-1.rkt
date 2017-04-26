@@ -24,6 +24,7 @@
 (define-type Type
   ;; This is for external data
   (PtrT)
+  ;; XXX add vectors?
   (IntT [signed? boolean?] [w IntegerBitWidth?])
   (FloT [w FloatBitWidth?])
   ;; xxx Is this too restrictive, because we can't take arbitrary
@@ -69,6 +70,7 @@
   (FloV [ty FloT?] [f flonum?])
   (RecV [list-of-field*exp (listof (cons/c Field? Expr?))])
   (RecR [r Expr?] [f Field?])
+  ;; xxx slice array
   (ArrV [vs (listof Expr?)])
   (ArrR [a Expr?] [i Expr?])
   ;; NOTE In compiler/verifier, assert that i is within bounds. This
@@ -76,6 +78,9 @@
   (Call [p Procedure?] [ins (listof Expr?)] [refs (listof LHS?)] [outs (listof LHS?)])
   (Cast [ty NumT?] [e Expr?])
   (Bin [op BinOperator?] [l Expr?] [r Expr?]))
+
+(define (BoolV b)
+  (IntV Bool (if b 1 0)))
 
 ;; xxx
 (define-type TypeError
@@ -88,7 +93,11 @@
   ;; Γ |- e => ListOfErrors x (T|#f) x CanWrite? x {VarsRead}
   (ATypesExprR [errs (listof TypeError?)]
                [ty (or/c #f Type?)]
+               ;; xxx would it be better to explicitly evaluate to a pointer?
                [can-write? boolean?]
+               [pure? boolean?]
+               ;; xxx things other than vars are written
+               [vars-written (set/c Variable?)]
                [vars-read (set/c Variable?)]))
 
 (define-type LHS
@@ -106,9 +115,10 @@
        ;; x MUST be used
        [b Statement?])
   (Seq [f Statement?] [s Statement?])
-  (If [c Expr?] [t Statement?] [e Statement?])
+  (If [c Expr?] [t Statement?] [f Statement?])
   (Loop [lab Label?] [ty IntT?] [idx Variable?]
-        [start exact-integer?] [end exact-integer?]
+        [end exact-nonnegative-integer?]
+        [end-e Expr?]
         ;; idx is read-only - if you need to skip around an array like
         ;; in binary search, then you need to use another variable and
         ;; this idx becomes a time bound.
@@ -119,6 +129,24 @@
         [body Statement?])
   (Break [label Label?])
   (Continue [label Label?]))
+
+(define Nop (Assert (BoolV #t)))
+(define (When c t)
+  (If c t Nop))
+(define (Unless c f)
+  (If c Nop f))
+(define (While lab ty idx end end-e pred body)
+  (Loop lab ty idx end end-e
+        (Seq body
+             (Unless pred
+                     (Break lab)))))
+(define (For lab ty idx end end-e
+             f_id f_init f_pred f_iter
+             body)
+  (Let #f f_id f_init
+       (While lab ty idx end end-e f_pred
+              (Seq body
+                   f_iter))))
 
 (define-type ProcType
   (ProcArr [ret AtomicT?]
@@ -305,6 +333,11 @@
   (match-type
    Statement s
    [(Assert e)
+    ;; xxx e should be pure?
+    ;;
+    ;;     a procedure is impure if it has any outs (but not if it has
+    ;;     refs, maybe this means I should have a kind of parameter
+    ;;     that is purely out [outs is really inouts])
     (type= "Assert" (rec-e e) Bool)
     (doesnt-return!)]
    [(Assign l e)
@@ -329,11 +362,9 @@
    [(If c t e)
     (type= "If Condition" (rec-e c) Bool)
     (and (rec t) (rec e))]
-   [(Loop lab ty idx start end b)
-    (typec-int ty start)
+   [(Loop lab ty idx end end-e b)
     (typec-int ty end)
-    (unless (< start end)
-      (error 'typec-stmt "loop start not before loop end"))
+    (type= "Loop dynamic end" (rec-e end-e) ty)
     (rec b
          #:var-env (hash-set var-env idx (cons ty #f))
          #:label-set (set-add label-set lab))]
@@ -467,9 +498,9 @@
     (if (eval-expr var-env c)
       (rec t)
       (rec f))]
-   [(Loop lab _ i s e b)
+   [(Loop lab _ i e ee b)
     (let/ec break
-      (for ([ci (in-range s e)])
+      (for ([ci (in-range (min (eval-expr var-env ee) e))])
         (let/ec continue
           (rec #:var-env (hash-set var-env i (box ci))
                #:label-env (hash-set label-env lab (cons break continue))
@@ -511,7 +542,7 @@
           (list (cons 'array (ArrT N U8)))
           (list)
           (Seq
-           (Loop 'main U8 'i 0 N
+           (Loop 'main U8 'i N (IntV U8 N)
                  (If (Bin 'ieq (VarR 'i) (VarR 'x))
                      (Return (Cast S8 (VarR 'i)))
                      (Continue 'main)))
@@ -528,3 +559,5 @@
                         (Return (IntV U8 1))
                         (Return (IntV U8 0)))))))
   (adqc-eval Main))
+
+;; xxx make NES synth example
