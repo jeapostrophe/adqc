@@ -24,11 +24,16 @@
 (define-type Type
   ;; This is for external data
   (PtrT)
-  ;; XXX add vectors?
+  ;; DESIGN I'm not adding vectors (for SIMD) because it is
+  ;; complicated. In the future, I may but for now I won't and just
+  ;; rely on optimizer to add them. If I do, I think I should just add
+  ;; what OpenCL/GLSL does.
   (IntT [signed? boolean?] [w IntegerBitWidth?])
   (FloT [w FloatBitWidth?])
-  ;; xxx Is this too restrictive, because we can't take arbitrary
-  ;; sized arrays?
+  ;; NOTE This means that functions are not polymorphic in the array
+  ;; dimension, so we have to use meta-programming to generate many
+  ;; versions of the same function specialized for different sizes, or
+  ;; we have to slice arrays.
   (ArrT [dim Dimension?] [elem Type?])
   (RecT [list-of-field*ty (listof (cons/c Field? Type?))]))
 (define AtomicT?
@@ -70,9 +75,11 @@
   (FloV [ty FloT?] [f flonum?])
   (RecV [list-of-field*exp (listof (cons/c Field? Expr?))])
   (RecR [r Expr?] [f Field?])
-  ;; xxx slice array
   (ArrV [vs (listof Expr?)])
   (ArrR [a Expr?] [i Expr?])
+  ;; NOTE This is a static slice (so we can predict what the size of
+  ;; the resulting array will be)
+  (ArrS [a Expr?] [s exact-nonnegative-integer?] [e exact-nonnegative-integer?])
   ;; NOTE In compiler/verifier, assert that i is within bounds. This
   ;; means we need to know a's type during the emit/verify process.
   (Call [p Procedure?] [ins (listof Expr?)] [refs (listof LHS?)] [outs (listof LHS?)])
@@ -241,6 +248,15 @@
     (unless (= (closest-bitwidth (integer-length len)) bw)
       (error 'typec "Bitwidth of index is too large for array dimension"))
     vt]
+   [(ArrS a s e)
+    (match-define (ArrT len vt) (rec a))
+    (unless (<= s e)
+      (error 'typec "ArrS - Start must be before end"))
+    (unless (<= s len)
+      (error 'typec "ArrS - Start must be within range"))
+    (unless (<= e len)
+      (error 'typec "ArrS - End must be within range"))
+    (ArrT (- e s) vt)]
    [(Call p ins refs outs)
     (match-define (ProcArr ret_p ins_p refs_p outs_p) (typec-proc p->t p))
     (define (compare kind rec tys es)
@@ -408,6 +424,25 @@
      (error 'main-type "Invalid main function(~e) returns (~e)" m mt)]))
 
 ;; Interpreter
+(struct *svector (vec s e) #:transparent)
+(define (svector l)
+  (define vec (list->vector l))
+  (*svector vec 0 (vector-length vec)))
+(define (svector-dec sv i)
+  (match-define (*svector vec s e) sv)
+  (unless (< i e)
+    (error 'svector-ref "Out of bounds access"))
+  (values vec (+ s i)))
+(define (svector-ref sv i)
+  (define-values (vec idx) (svector-dec sv i))
+  (vector-ref vec idx))
+(define (svector-set! sv i nv)
+  (define-values (vec idx) (svector-dec sv i))
+  (vector-ref vec idx nv))
+(define (svector-slice sv ns ne)
+  (match-define (*svector vec s e) sv)
+  (*svector vec (+ s ns) ne))
+
 (struct lhs-value (reader writer))
 (define (lhs-read lv)
   ((lhs-value-reader lv)))
@@ -437,9 +472,11 @@
    [(RecR r f)
     (hash-ref (rec r) f)]
    [(ArrV vs)
-    (apply vector (map rec vs))]
+    (svector (map rec vs))]
    [(ArrR a i)
-    (vector-ref (rec a) (rec i))]
+    (svector-ref (rec a) (rec i))]
+   [(ArrS a s e)
+    (svector-slice (rec a) s e)]
    [(Call p ins refs outs)
     (eval-proc p (map rec ins) (map rec-lhs refs) (map rec-lhs outs))]
    [(Cast t e)
@@ -465,8 +502,9 @@
    [(ArrayLHS a i)
     (define av (eval-expr σ a))
     (define iv (eval-expr σ i))
-    (lhs-value (λ () (vector-ref av iv))
-               (λ (nv) (vector-set! av iv nv)))]
+    ;; xxx check if valid (if we had typing judgement to know a's type)
+    (lhs-value (λ () (svector-ref av iv))
+               (λ (nv) (svector-set! av iv nv)))]
    [(RecordLHS r f)
     (define rv (eval-expr σ r))
     (lhs-value (λ () (hash-ref rv f))
