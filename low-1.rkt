@@ -76,13 +76,15 @@
   (RecV [list-of-field*exp (listof (cons/c Field? Expr?))])
   (RecR [r Expr?] [f Field?])
   (ArrV [vs (listof Expr?)])
+  ;; NOTE In compiler/verifier, assert that i is within bounds. This
+  ;; means we need to know a's type during the emit/verify process.
   (ArrR [a Expr?] [i Expr?])
   ;; NOTE This is a static slice (so we can predict what the size of
   ;; the resulting array will be)
   (ArrS [a Expr?] [s exact-nonnegative-integer?] [e exact-nonnegative-integer?])
-  ;; NOTE In compiler/verifier, assert that i is within bounds. This
-  ;; means we need to know a's type during the emit/verify process.
-  (Call [p Procedure?] [ins (listof Expr?)] [refs (listof LHS?)] [outs (listof LHS?)])
+  (Call [p Procedure?]
+        [ro-cpy (listof Expr?)] [ro-ref (listof LHS?)]
+        [rw-ref (listof LHS?)])
   (Cast [ty NumT?] [e Expr?])
   (Bin [op BinOperator?] [l Expr?] [r Expr?]))
 
@@ -157,20 +159,21 @@
 
 (define-type ProcType
   (ProcArr [ret AtomicT?]
-           [ins (listof Type?)]
-           [refs (listof Type?)]
-           [outs (listof Type?)]))
+           [ro-cpy (listof Type?)]
+           [ro-ref (listof Type?)]
+           [rw-ref (listof Type?)]))
 (define-type Procedure
-  ;; No name, because no recursion
+  ;; NOTE Procedures do not have names in the core language, because
+  ;; there is no recursion. We use their identity to ensure that they
+  ;; are only type-checked once.
+  
+  ;; NOTE A procedure must return an atomic (register-sized) thing, so
+  ;; the only way to get a bigger one is to allocate it before and
+  ;; then pass it as `rw-ref` to the procedure
   (Proc [ret AtomicT?]
-        [ins (listof (cons/c Variable? Type?))]
-        ;; in is copied?
-        [refs (listof (cons/c Variable? Type?))]
-        ;; refs is not copied, but not write-able
-        [outs (listof (cons/c Variable? Type?))]
-        ;; out is not copied? but write-able
-        ;; ins, refs, and outs are bound in body
-        ;; body must return ret (it is guaranteed to be register sized)
+        [ro-cpy (listof (cons/c Variable? Type?))]
+        [ro-ref (listof (cons/c Variable? Type?))]
+        [rw-ref (listof (cons/c Variable? Type?))]
         [body Statement?]))
 
 ;; Type Checker
@@ -257,22 +260,22 @@
     (unless (<= e len)
       (error 'typec "ArrS - End must be within range"))
     (ArrT (- e s) vt)]
-   [(Call p ins refs outs)
-    (match-define (ProcArr ret_p ins_p refs_p outs_p) (typec-proc p->t p))
+   [(Call p ro-cpy ro-ref rw-ref)
+    (match-define (ProcArr ret_p ro-cpy_p ro-ref_p rw-ref_p) (typec-proc p->t p))
     (define (compare kind rec tys es)
       (unless (= (length tys) (length es))
         (error 'typec "Argument count mismatch: ~a" kind))
       (for/list ([t (in-list tys)]
                  [e (in-list es)])
         (type= (format "call ~a arguments" kind) (rec e) t)))
-    (compare 'ins rec ins_p ins)
+    (compare 'ins rec ro-cpy_p ro-cpy)
     (define ((rec-lhs check-read-only?) l)
       (typec-lhs l
                  #:p->t p->t
                  #:var-env var-env
                  #:check-read-only? check-read-only?))
-    (compare 'refs (rec-lhs #f) refs_p refs)
-    (compare 'outs (rec-lhs #t) outs_p outs)
+    (compare 'refs (rec-lhs #f) ro-ref_p ro-ref)
+    (compare 'outs (rec-lhs #t) rw-ref_p rw-ref)
     ret_p]
    [(Cast t e)
     (define et (rec e))
@@ -396,16 +399,16 @@
   (hash-ref!
    p->t p
    (λ ()
-     (match-define (Proc ret ins refs outs body) p)
+     (match-define (Proc ret ro-cpy ro-ref rw-ref body) p)
      (define (add-vars to l writeable?)
        (for/fold ([σ to]) ([i (in-list l)])
          (match-define (cons ii it) i)
          (when (hash-has-key? σ ii)
            (error 'typec-proc "Duplicate argument: ~e" ii))
          (hash-set σ ii (cons it writeable?))))
-     (define var-env0 (add-vars (hasheq) ins #t))
-     (define var-env1 (add-vars var-env0 refs #f))
-     (define var-env2 (add-vars var-env1 outs #t))
+     (define var-env0 (add-vars (hasheq) ro-cpy #t))
+     (define var-env1 (add-vars var-env0 ro-ref #f))
+     (define var-env2 (add-vars var-env1 rw-ref #t))
      (and
       (typec-stmt body
                   #:p->t p->t
@@ -413,7 +416,7 @@
                   #:return-ty ret
                   #:var-env var-env2
                   #:label-set (seteq))
-      (ProcArr ret (map cdr ins) (map cdr refs) (map cdr outs))))))
+      (ProcArr ret (map cdr ro-cpy) (map cdr ro-ref) (map cdr rw-ref))))))
 (define (typec-main m)
   (define p->t (make-hasheq))
   (define mt (typec-proc p->t m))
@@ -477,8 +480,8 @@
     (svector-ref (rec a) (rec i))]
    [(ArrS a s e)
     (svector-slice (rec a) s e)]
-   [(Call p ins refs outs)
-    (eval-proc p (map rec ins) (map rec-lhs refs) (map rec-lhs outs))]
+   [(Call p ro-cpy ro-ref rw-ref)
+    (eval-proc p (map rec ro-cpy) (map rec-lhs ro-ref) (map rec-lhs rw-ref))]
    [(Cast t e)
     (define conv
       (match t
@@ -552,15 +555,15 @@
     (match-define (cons b c) (hash-ref label-env lab))
     (c)]))
 
-(define (eval-proc p invs refvs outvs)
-  (match-define (Proc _ ins refs outs b) p)
+(define (eval-proc p ro-cpyv ro-refv rw-refv)
+  (match-define (Proc _ ro-cpy ro-ref rw-ref b) p)
   (define (add-vars to ids vs)
     (for/fold ([σ to]) ([i (in-list ids)] [iv (in-list vs)])
       (match-define (cons ii it) i)
       (hash-set σ ii (box iv))))
-  (define var-env0 (add-vars (hasheq) ins invs))
-  (define var-env1 (add-vars var-env0 refs refvs))
-  (define var-env2 (add-vars var-env1 outs outvs))
+  (define var-env0 (add-vars (hasheq) ro-cpy ro-cpyv))
+  (define var-env1 (add-vars var-env0 ro-ref ro-refv))
+  (define var-env2 (add-vars var-env1 rw-ref rw-refv))
   (let/ec return
     (eval-stmt var-env2 (hasheq) return b)))
 
