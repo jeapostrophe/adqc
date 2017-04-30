@@ -33,6 +33,10 @@
                [vars-written (set/c Variable?)]
                [vars-read (set/c Variable?)]))
 
+;; xxx would it be better to use a global (parameter) database of all
+;; this stuff mapped per expr/stmt/etc? (Not great because code is in
+;; different environments.)
+
 ;; Type Checker
 (define (type= where x y)
   (unless (equal? x y)
@@ -447,3 +451,9 @@
   (adqc-eval Main))
 
 ;; xxx make NES synth example
+
+;; xxx compute space and time
+
+;; xxx liveness analysis of variables to compute how to re-use space
+
+;; xxx MIC-1 simulator/assembler/microcompiler

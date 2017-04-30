@@ -46,6 +46,8 @@
 (define Variable? symbol?)
 (define Label? symbol?)
 
+;; xxx global variables (& static as hidden globals)
+
 (define BinOperator?
   (or/c
    ;; IBinOp
