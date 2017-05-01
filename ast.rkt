@@ -186,6 +186,15 @@
         [rw-ref (listof (cons/c Variable? Type?))]
         [body Statement?]))
 
-;; make macros that tack on 'here' unless a keyword is present, so you
-;; don't have to provide the loc
+(define-syntax-rule
+  (match-type ty e [(Variant f ...) body ...] ...)
+  (type-case
+   ty e
+   [Variant (f ...) (let () body ...)]
+   ...))
+
+;; xxx make macros that tack on 'here' unless a keyword is present, so
+;; you don't have to provide the loc
+
+;; xxx
 (provide (all-defined-out))
