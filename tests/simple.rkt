@@ -1,6 +1,6 @@
 #lang racket/base
-(require "ast.rkt"
-         "interp.rkt")
+(require "../ast.rkt"
+         "../interp.rkt")
 
 ;; Examples
 (module+ test

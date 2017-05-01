@@ -33,10 +33,10 @@
 
 ;; xxx Force a particular indentation when writing directly
 
-(interface addy
+#;(interface addy
   )
 
-(component add addy
+#;(component add addy
   (define (f [S8 x] [U32 y] [S64 z] -> [S8 a] [U8 b])
     #:pre (> x 0) (> y x) (> z (+ x y))
     #:post (= (+ a b) (+ z x))
