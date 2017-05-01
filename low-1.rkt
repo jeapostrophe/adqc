@@ -62,17 +62,17 @@
                 #:var-env var-env))
   (match-type
    Expr e
-   [(VarR x)
+   [(VarR _ x)
     (match (hash-ref var-env x #f)
       [(cons xt _) xt]
       [#f (error 'typec "Unbound variable: ~v" x)])]
-   [(IntV ty i)
+   [(IntV _ ty i)
     (typec-int ty i)
     ty]
-   [(FloV ty f)
+   [(FloV _ ty f)
     (typec-float ty f)
     ty]
-   [(RecV lofe)
+   [(RecV _ lofe)
     ;; FIXME Should find all the duplicates
     (match (check-duplicates (map car lofe))
       [#f (void)]
@@ -81,13 +81,13 @@
      (for/list ([fe (in-list lofe)])
        (match-define (cons f e) fe)
        (cons f (rec e))))]
-   [(RecR r rf)
+   [(RecR _ r rf)
     (match-define (RecT loft) (rec r))
     (for/or ([ft (in-list loft)])
       (match-define (cons f t) ft)
       (and (eq? rf f)
            t))]
-   [(ArrV vs)
+   [(ArrV _ vs)
     (define len (length vs))
     (when (zero? len)
       (error 'typec "Array must have non-zero length"))
@@ -96,7 +96,7 @@
     (for/and ([vi (in-list vn)])
       (type= "homogeneous array elements" (rec vi) v0t))
     (ArrT len v0t)]
-   [(ArrR a i)
+   [(ArrR _ a i)
     (match-define (ArrT len vt) (rec a))
     (match-define (IntT #f bw) (rec i))
     (define (closest-bitwidth some-bw)
@@ -105,7 +105,7 @@
     (unless (= (closest-bitwidth (integer-length len)) bw)
       (error 'typec "Bitwidth of index is too large for array dimension"))
     vt]
-   [(ArrS a s e)
+   [(ArrS _ a s e)
     (match-define (ArrT len vt) (rec a))
     (unless (<= s e)
       (error 'typec "ArrS - Start must be before end"))
@@ -114,7 +114,7 @@
     (unless (<= e len)
       (error 'typec "ArrS - End must be within range"))
     (ArrT (- e s) vt)]
-   [(Call p ro-cpy ro-ref rw-ref)
+   [(Call _ p ro-cpy ro-ref rw-ref)
     (match-define (ProcArr ret_p ro-cpy_p ro-ref_p rw-ref_p) (typec-proc p->t p))
     (define (compare kind rec tys es)
       (unless (= (length tys) (length es))
@@ -131,12 +131,12 @@
     (compare 'refs (rec-lhs #f) ro-ref_p ro-ref)
     (compare 'outs (rec-lhs #t) rw-ref_p rw-ref)
     ret_p]
-   [(Cast t e)
+   [(Cast _ t e)
     (define et (rec e))
     (unless (NumT? et)
       (error 'typec "May only cast numbers: ~v" et))
     t]
-   [(Bin op l r)
+   [(Bin _ op l r)
     (define lt (rec l))
     (define rt (rec r))
     (type= "Bin" lt rt)
@@ -166,7 +166,7 @@
                 #:var-env var-env))
   (match-type
    LHS l
-   [(VarLHS x)
+   [(VarLHS _ x)
     (match (hash-ref var-env x #f)
       [(cons xt writeable?)
        (unless writeable?
@@ -174,9 +174,9 @@
            (error 'typec-lhs "~e is read-only" x)))
        xt]
       [_ (error 'typec-lhs "Unbound variable: ~v" x)])]
-   [(ArrayLHS a i)
+   [(ArrayLHS _ a i)
     (error 'typec-lhs "XXX ArrayLHS: Code is basically same as typec-expr for ArrR, except that we need to check that the array is writeable, which is not currently available.")]
-   [(RecordLHS r i)
+   [(RecordLHS _ r i)
     (error 'typec-lhs "XXX RecordLHS: Code is basically same as typec-expr for RecR, except that we need to check that the array is writeable, which is not currently available.")]))
 
 (define (typec-stmt s
@@ -205,11 +205,11 @@
                 #:var-env var-env))
   (match-type
    Statement s
-   [(Assert e)
+   [(Assert _ e)
     ;; xxx e should be pure?
     (type= "Assert" (rec-e e) Bool)
     (doesnt-return!)]
-   [(Assign l e)
+   [(Assign _ l e)
     (define lt
       (typec-lhs l
                  #:p->t p->t
@@ -218,30 +218,30 @@
     (define et (rec-e e))
     (type= "Assign" lt et)
     (doesnt-return!)]
-   [(Return e)
+   [(Return _ e)
     (type= "Return" (rec-e e) return-ty)]
-   [(Let read-only? x e b)
+   [(Let _ read-only? x e b)
     (define et (rec-e e))
     ;; xxx x MUST be read in b
     (rec b #:var-env (hash-set var-env x (cons et (not read-only?))))]
-   [(Seq f r)
+   [(Seq _ f r)
     (and
      (rec f #:must-return? #f)
      (rec r))]
-   [(If c t e)
+   [(If _ c t e)
     (type= "If Condition" (rec-e c) Bool)
     (and (rec t) (rec e))]
-   [(Loop lab ty idx end end-e b)
+   [(Loop _ lab ty idx end end-e b)
     (typec-int ty end)
     (type= "Loop dynamic end" (rec-e end-e) ty)
     (rec b
          #:var-env (hash-set var-env idx (cons ty #f))
          #:label-set (set-add label-set lab))]
-   [(Break lab)
+   [(Break _ lab)
     (unless (set-member? label-set lab)
       (error 'typec-stmt "Unknown label: ~v" lab))
     (doesnt-return!)]
-   [(Continue lab)
+   [(Continue _ lab)
     (unless (set-member? label-set lab)
       (error 'typec-stmt "Unknown label: ~v" lab))
     (doesnt-return!)]))
@@ -249,7 +249,7 @@
   (hash-ref!
    p->t p
    (λ ()
-     (match-define (Proc ret ro-cpy ro-ref rw-ref body) p)
+     (match-define (Proc _ ret ro-cpy ro-ref rw-ref body) p)
      (define (add-vars to l writeable?)
        (for/fold ([σ to]) ([i (in-list l)])
          (match-define (cons ii it) i)
@@ -313,26 +313,26 @@
   (define (rec-lhs l) (lhs-read (eval-lhs σ l)))
   (match-type
    Expr e
-   [(VarR x) (unbox (hash-ref σ x))]
-   [(IntV _ i) i]
-   [(FloV _ f) f]
-   [(RecV lofe)
+   [(VarR _ x) (unbox (hash-ref σ x))]
+   [(IntV _l _ i) i]
+   [(FloV _l _ f) f]
+   [(RecV _ lofe)
     (define r (make-hasheq))
     (for ([fe (in-list lofe)])
       (match-define (cons f e) fe)
       (hash-set! r f (rec e)))
     r]
-   [(RecR r f)
+   [(RecR _ r f)
     (hash-ref (rec r) f)]
-   [(ArrV vs)
+   [(ArrV _ vs)
     (svector (map rec vs))]
-   [(ArrR a i)
+   [(ArrR _ a i)
     (svector-ref (rec a) (rec i))]
-   [(ArrS a s e)
+   [(ArrS _ a s e)
     (svector-slice (rec a) s e)]
-   [(Call p ro-cpy ro-ref rw-ref)
+   [(Call _ p ro-cpy ro-ref rw-ref)
     (eval-proc p (map rec ro-cpy) (map rec-lhs ro-ref) (map rec-lhs rw-ref))]
-   [(Cast t e)
+   [(Cast _ t e)
     (define conv
       (match t
         [(IntT sign? bw)
@@ -342,22 +342,22 @@
         [(FloT 32) real->single-flonum]
         [(FloT 64) real->double-flonum]))
     (conv (rec e))]
-   [(Bin op l r)
+   [(Bin _ op l r)
     (eval-primitive op (rec l) (rec r))]))
 
 (define (eval-lhs σ l)
   (match-type
    LHS l
-   [(VarLHS x)
+   [(VarLHS _ x)
     (define xb (hash-ref σ x))
     (lhs-value (λ () (unbox xb))
                (λ (nv) (set-box! xb nv)))]
-   [(ArrayLHS a i)
+   [(ArrayLHS _ a i)
     (define av (eval-expr σ a))
     (define iv (eval-expr σ i))
     (lhs-value (λ () (svector-ref av iv))
                (λ (nv) (svector-set! av iv nv)))]
-   [(RecordLHS r f)
+   [(RecordLHS _ r f)
     (define rv (eval-expr σ r))
     (lhs-value (λ () (hash-ref rv f))
                (λ (nv) (hash-set! rv f nv)))]))
@@ -369,26 +369,26 @@
     (eval-stmt var-env label-env return s))
   (match-type
    Statement s
-   [(Assert e)
+   [(Assert _ e)
     (unless (eval-expr var-env e)
       (error 'eval "Assert failed: ~v" e))]
-   [(Assign l e)
+   [(Assign _ l e)
     (define lv (eval-lhs var-env l))
     (define nv (eval-expr var-env e))
     (lhs-write! lv nv)]
-   [(Return e)
+   [(Return _ e)
     (return (eval-expr var-env e))]
-   [(Let _ x e b)
+   [(Let _l _ x e b)
     (rec #:var-env (hash-set var-env x (box (eval-expr var-env e)))
          b)]
-   [(Seq f r)
+   [(Seq _ f r)
     (rec f) ;; <--- Any 0-valued return is to here here
     (rec r)]
-   [(If c t f)
+   [(If _ c t f)
     (if (eval-expr var-env c)
       (rec t)
       (rec f))]
-   [(Loop lab _ i e ee b)
+   [(Loop _l lab _ i e ee b)
     (let/ec break
       (for ([ci (in-range (min (eval-expr var-env ee) e))])
         (let/ec continue
@@ -397,15 +397,15 @@
                b))))]
    ;; The type-checker has ensured that these 0-valued returns are
    ;; okay, because of the must-return? part
-   [(Break lab)
+   [(Break _ lab)
     (match-define (cons b c) (hash-ref label-env lab))
     (b)]
-   [(Continue lab)
+   [(Continue _ lab)
     (match-define (cons b c) (hash-ref label-env lab))
     (c)]))
 
 (define (eval-proc p ro-cpyv ro-refv rw-refv)
-  (match-define (Proc _ ro-cpy ro-ref rw-ref b) p)
+  (match-define (Proc _ _ ro-cpy ro-ref rw-ref b) p)
   (define (add-vars to ids vs)
     (for/fold ([σ to]) ([i (in-list ids)] [iv (in-list vs)])
       (match-define (cons ii it) i)
@@ -425,29 +425,34 @@
 
 ;; Examples
 (module+ test
+  (require (for-syntax racket/base)
+           syntax/location)
+  (define-syntax (h stx)
+    #`(quote-srcloc #,stx))
   (define N 12)
   (define LinearSearch
-    (Proc S8
+    (Proc h S8
           (list (cons 'x U8))
           (list (cons 'array (ArrT N U8)))
           (list)
           (Seq
-           (Loop 'main U8 'i N (IntV U8 N)
-                 (If (Bin 'ieq (VarR 'i) (VarR 'x))
-                     (Return (Cast S8 (VarR 'i)))
-                     (Continue 'main)))
-           (Return (IntV S8 -1)))))
+           h
+           (Loop h 'main U8 'i N (IntV h U8 N)
+                 (If h (Bin h 'ieq (VarR h 'i) (VarR h 'x))
+                     (Return h (Cast h S8 (VarR h 'i)))
+                     (Continue h 'main)))
+           (Return h (IntV h S8 -1)))))
   (define Main
-    (Proc U8 (list) (list) (list)
-          (Let #t 'a (ArrV (for/list ([i (in-range N)])
-                             (IntV U8 i)))
-               (Let #t 'res (Call LinearSearch
-                                  (list (IntV U8 5))
-                                  (list (VarLHS 'a))
-                                  (list))
-                    (If (Bin 'islt (VarR 'res) (IntV S8 0))
-                        (Return (IntV U8 1))
-                        (Return (IntV U8 0)))))))
+    (Proc h U8 (list) (list) (list)
+          (Let h #t 'a (ArrV h (for/list ([i (in-range N)])
+                                 (IntV h U8 i)))
+               (Let h #t 'res (Call h LinearSearch
+                                    (list (IntV h U8 5))
+                                    (list (VarLHS h 'a))
+                                    (list))
+                    (If h (Bin h 'islt (VarR h 'res) (IntV h S8 0))
+                        (Return h (IntV h U8 1))
+                        (Return h (IntV h U8 0)))))))
   (adqc-eval Main))
 
 ;; xxx make NES synth example

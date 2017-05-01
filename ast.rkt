@@ -1,6 +1,9 @@
 #lang racket/base
 (require racket/contract/base
-         plai/datatype)
+         plai/datatype
+         (for-syntax racket/base
+                     racket/syntax
+                     syntax/parse))
 
 (define bitwidths '(1 8 16 32 64))
 (define IntegerBitWidth?
@@ -60,7 +63,26 @@
    ;; FCmp
    'ffalse 'foeq 'fogt 'foge 'folt 'fole 'fone 'ford
    'ftrue 'fueq 'fuge 'fuge 'fult 'fule 'fune 'funo))
-(define-type Expr
+
+(define-syntax (define-ptype stx)
+  (syntax-parse stx
+    [(_ (type-name:id [pf-id:id pf-ctc])
+        (Variant:id [vf-id:id vf-ctc] ...)
+        ...)
+     (with-syntax ([type-name-pf-id (format-id #'type-name "~a-~a" #'type-name #'pf-id)])
+       (quasisyntax/loc stx
+         (begin
+           #,(datum->syntax
+              stx
+              `(,#'define-type ,#'type-name
+                 ,@#'((Variant [pf-id pf-ctc] [vf-id vf-ctc] ...)
+                      ...)))
+           (define (type-name-pf-id x)
+             (type-case type-name x
+                        [Variant (pf-id vf-id ...) pf-id]
+                        ...)))))]))
+
+(define-ptype (Expr [loc any/c])
   (VarR [x Variable?])
   (IntV [ty IntT?] [i exact-integer?])
   (FloV [ty FloT?] [f flonum?])
@@ -87,16 +109,15 @@
   (Cast [ty NumT?] [e Expr?])
   (Bin [op BinOperator?] [l Expr?] [r Expr?]))
 
-(define (BoolV b)
-  (IntV Bool (if b 1 0)))
+(define (BoolV loc b)
+  (IntV loc Bool (if b 1 0)))
 
-(define-type LHS
+(define-ptype (LHS [loc any/c])
   (VarLHS [x Variable?])
   (ArrayLHS [a Expr?] [i Expr?])
   (RecordLHS [r Expr?] [f Field?]))
 
-(define-type Statement
-  ;; xxx add note? (or just add srcloc everywhere?)
+(define-ptype (Statement [loc any/c])
   (Assert [e Expr?])
   (Assign [l LHS?] [e Expr?])
   (Return [e Expr?])
@@ -120,22 +141,22 @@
   (Break [label Label?])
   (Continue [label Label?]))
 
-(define Nop (Assert (BoolV #t)))
-(define (When c t)
-  (If c t Nop))
-(define (Unless c f)
-  (If c Nop f))
-(define (While lab ty idx end end-e pred body)
-  (Loop lab ty idx end end-e
-        (Seq body
-             (Unless pred
-                     (Break lab)))))
-(define (For lab ty idx end end-e
+(define (Nop loc) (Assert loc (BoolV loc #t)))
+(define (When loc c t)
+  (If loc c t (Nop loc)))
+(define (Unless loc c f)
+  (If loc c (Nop loc) f))
+(define (While loc lab ty idx end end-e pred body)
+  (Loop loc lab ty idx end end-e
+        (Seq loc body
+             (Unless loc pred
+                     (Break loc lab)))))
+(define (For loc lab ty idx end end-e
              f_id f_init f_pred f_iter
              body)
-  (Let #f f_id f_init
-       (While lab ty idx end end-e f_pred
-              (Seq body
+  (Let loc #f f_id f_init
+       (While loc lab ty idx end end-e f_pred
+              (Seq loc body
                    f_iter))))
 
 (define-type ProcType
@@ -143,11 +164,11 @@
            [ro-cpy (listof Type?)]
            [ro-ref (listof Type?)]
            [rw-ref (listof Type?)]))
-(define-type Procedure
+(define-ptype (Procedure [loc any/c])
   ;; NOTE Procedures do not have names in the core language, because
   ;; there is no recursion. We use their identity to ensure that they
   ;; are only type-checked once.
-  
+
   ;; NOTE A procedure must return an atomic (register-sized) thing, so
   ;; the only way to get a bigger one is to allocate it before and
   ;; then pass it as `rw-ref` to the procedure.
@@ -165,4 +186,6 @@
         [rw-ref (listof (cons/c Variable? Type?))]
         [body Statement?]))
 
+;; make macros that tack on 'here' unless a keyword is present, so you
+;; don't have to provide the loc
 (provide (all-defined-out))
