@@ -26,7 +26,7 @@
           (Let h #t 'a (ArrV h (for/list ([i (in-range N)])
                                  (IntV h U8 i)))
                (Let h #t 'res (Call h LinearSearch
-                                    (list (IntV h U8 5))
+                                    (list (IntV h U8 5)) ;; <-- look for 5
                                     (list (VarLHS h 'a))
                                     (list))
                     (If h (Bin h 'islt (VarR h 'res) (IntV h S8 0))
@@ -41,3 +41,9 @@
 ;; xxx liveness analysis of variables to compute how to re-use space
 
 ;; xxx MIC-1 simulator/assembler/microcompiler
+
+;; xxx entity component system (Artemis, EntityX, Anax)
+
+;; xxx modules/units/components
+
+;; xxx FSM language

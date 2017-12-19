@@ -33,6 +33,8 @@
 
 ;; xxx Force a particular indentation when writing directly
 
+;; xxx Enforce lower-bound on loops?
+
 #;(interface addy
   )
 
