@@ -58,6 +58,11 @@
    [Flo (or/c #f FloatBitWidth?)]))
 ;; XXX fmt should have a variable to add it to
 
+(define (Type-union x y)
+  (or (and (eq? x y) x)
+      (error 'type-union "Cannot union ~a & ~a"
+             x y)))
+
 (define Void
   (Type #:size 0
         #:ctc none/c
@@ -123,6 +128,7 @@
 
 (define/contract (RecT field->ty)
   (-> (hash/c #:immutable #t Field? Type?) Type?)
+  ;; XXX drop #f in ty
   (Type #:size (for/sum ([t (in-hash-values field->ty)])
                  (Type-size t))
         #:ctc (and/c hash? (λ (h) (= (hash-count h) (hash-count field->ty)))
@@ -139,6 +145,7 @@
 
 (define/contract (UniT mode->ty)
   (-> (hash/c #:immutable #t Field? Type?) Type?)
+  ;; XXX drop #f in ty
   (Type #:size (for/fold ([m 0]) ([t (in-hash-values mode->ty)])
                  (max m (Type-size t)))
         #:ctc (and/c hash? (λ (h) (= (hash-count h) (hash-count mode->ty)))
@@ -167,26 +174,36 @@
 ;;;; Interval Arithmetic
 (struct ival (lo hi) #:transparent)
 (define (iunit x) (ival x x))
-(define (ival+ . xs)
-  (for/fold ([lo 0] [hi 0] #:result (ival lo hi))
-            ([x (in-list xs)])
-    (match-define (ival lox hix) x)
-    (values (+ lo lox) (+ hi hix))))
+(define (ival+ x y)
+  (match-define (ival lx hx) x)
+  (match-define (ival ly hy) y)
+  (ival (+ lx ly) (+ hx hy)))
+(define (ivalU x y)
+  (match-define (ival lx hx) x)
+  (match-define (ival ly hy) y)
+  (ival (min lx ly) (max hx hy)))
 ;;;; / Interval Arithmetic
 
 (define Variable? symbol?)
 
+(define (Exprs-unsafe? . xs)
+  (for/or ([x (in-list xs)])
+    (Expr-unsafe? x)))
+
 (define-interface Expr
   ([type Type?]
    [unsafe? boolean?]
+   ;; XXX write convenient combiners for these
    [read-vs (set/c Variable?)]
    [write-vs (set/c Variable?)]
    [v->ty (hash/c #:immutable #t Variable? Type?)]
+   ;; XXX </>
    [mem Type?]
    [rtime ival?]))
 ;; XXX format (should take a mapping from variable to path)
 ;; XXX weakest-precondition
-;; XXX strongest-precondition
+;; XXX strongest-postcondition
+;; XXX lval
 
 (define mt-set (seteq))
 (define mt-map (hasheq))
@@ -195,11 +212,7 @@
     (hash-update x k
                  (λ (old)
                    (or (and (not old) v)
-                       (eq? old v)
-                       #; ;; XXX implement Type-union
-                       ((Type-union old) v)
-                       (error 'map-union "Cannot merge map component ~a: ~a vs ~a"
-                              k old v)))
+                       (Type-union old v)))
                  #f)))
 
 (define/contract (VarR ty x)
@@ -233,7 +246,7 @@
              (set-member? bs-writes v))
     (error 'Let "Cannot mutate read-only variable: ~a" v))
   (Expr #:type (Expr-type be)
-        #:unsafe? (or (Expr-unsafe? e) (Expr-unsafe? be))
+        #:unsafe? (Exprs-unsafe? e be)
         #:read-vs (set-union (Expr-read-vs e)
                              (set-remove (Expr-read-vs be) v))
         #:write-vs (set-union (Expr-write-vs e)
@@ -241,10 +254,15 @@
         #:v->ty (map-union (Expr-v->ty e)
                            (hash-remove (Expr-v->ty be) v))
         #:mem
+        ;; NOTE e might be substitutable -- which we could track by
+        ;; changing read/write to multisets. However, doing the
+        ;; substitution would require recomputing `be`, which is not
+        ;; possible, unless we add that to the interface, which we
+        ;; don't want to.
         (RecT (hasheq 'var (Expr-type e)
                       'body (UniT (hasheq 'e (Expr-mem e)
                                           'be (Expr-mem be)))))
-        #:rtime (ival+ (Expr-rtime e) (iunit 1) (Expr-rtime be))))
+        #:rtime (ival+ (Expr-rtime e) (ival+ (iunit 1) (Expr-rtime be)))))
 
 (define BinOperator?
   (or/c
@@ -281,33 +299,50 @@
     (error 'Bin "Cannot perform ~a on ~a and ~a, types are wrong ~a and ~a"
            op lhs rhs lhs-ty rhs-ty))
   (Expr #:type result-ty
-        #:unsafe? (or (Expr-unsafe? lhs) (Expr-unsafe? rhs))
+        #:unsafe? (Exprs-unsafe? lhs rhs)
         #:read-vs (set-union (Expr-read-vs lhs) (Expr-read-vs rhs))
         #:write-vs (set-union (Expr-write-vs lhs) (Expr-write-vs rhs))
         #:v->ty (map-union (Expr-v->ty lhs) (Expr-v->ty rhs))
         #:mem (UniT (hasheq 'lhs (Expr-mem lhs) 'rhs (Expr-mem rhs)))
-        #:rtime (ival+ (Expr-rtime lhs) (Expr-rtime rhs) (iunit 1))))
+        #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit 1)))))
 
 ;; XXX ArrR
 ;; XXX RecR
 ;; XXX UniR
 
-;; XXX Unsafe
+;; XXX Unsafe (i.e. call C function)
 ;; XXX Cast
 
 ;; XXX Assert
 ;; XXX Assign
 ;; XXX Seq
-;; XXX If
+
+(define/contract (If c t f)
+  (-> Expr? Expr? Expr? Expr?)
+  (Expr #:type (Type-union (Expr-type t) (Expr-type f))
+        #:unsafe? (Exprs-unsafe? c t f)
+        #:read-vs (set-union (Expr-read-vs c) (Expr-read-vs t) (Expr-read-vs f))
+        #:write-vs (set-union (Expr-write-vs c) (Expr-write-vs t) (Expr-write-vs f))
+        #:v->ty (map-union (Expr-v->ty c) (map-union (Expr-v->ty t) (Expr-v->ty f)))
+        #:mem (RecT (hasheq 'c (Expr-mem c)
+                            'k (UniT (hasheq 't (Expr-mem t)
+                                             'f (Expr-mem f)))))
+        #:rtime (ival+ (Expr-rtime c) (ivalU (Expr-rtime t) (Expr-rtime f)))))
+
 ;; XXX Loop
 ;; XXX Break
 ;; XXX Continue
 
+;; XXX Specification (i.e. function call spot, rather than fully-inlining everything)
+
 (module+ test
   (pretty-print
-   (Let 'x (Val U32 6)
-        (Let 'y (Val F64 3.14)
-             (Bin 'iadd (VarR U32 'x) (Val U32 8))))))
+   (If (Val Bool #t)
+       (Let 'x (Val U32 6)
+            (Let 'y (Val F64 3.14)
+                 (Bin 'iadd (VarR U32 'x) (Val U32 8))))
+       (Let 'z (Val U32 16)
+            (Bin 'iadd (VarR U32 'z) (Val U32 9))))))
 
 ;; XXX
 
@@ -327,7 +362,7 @@
    ;; operation that can be written on top of Rename.
 
    (define-type (Expr [ty Type?] [v->ty (hash/c Variable? Type?)])
-     
+
      (*RecR [r Expr?] [f Field?])
      ;; NOTE In compiler/verifier, assert that i is within bounds. This
      ;; means we need to know a's type during the emit/verify process.
