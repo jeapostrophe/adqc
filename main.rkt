@@ -172,16 +172,18 @@
 ;;; Expression
 
 ;;;; Interval Arithmetic
-(struct ival (lo hi) #:transparent)
-(define (iunit x) (ival x x))
+(struct ival (l e h) #:transparent)
+(define (iunit x) (ival x x x))
 (define (ival+ x y)
-  (match-define (ival lx hx) x)
-  (match-define (ival ly hy) y)
-  (ival (+ lx ly) (+ hx hy)))
-(define (ivalU x y)
-  (match-define (ival lx hx) x)
-  (match-define (ival ly hy) y)
-  (ival (min lx ly) (max hx hy)))
+  (match-define (ival lx ex hx) x)
+  (match-define (ival ly ey hy) y)
+  (ival (+ lx ly) (+ ex ey) (+ hx hy)))
+(define (ivalU P x y)
+  (match-define (ival lx ex hx) x)
+  (match-define (ival ly ey hy) y)
+  (ival (min lx ly)
+        (+ (* P ex) (* (- 1 P) ey))
+        (max hx hy)))
 ;;;; / Interval Arithmetic
 
 (define Variable? symbol?)
@@ -322,8 +324,8 @@
 ;; XXX Assign
 ;; XXX Seq
 
-(define/contract (If c t f)
-  (-> Expr? Expr? Expr? Expr?)
+(define/contract (If c #:P [P 0.5] t f)
+  (->* (Expr? Expr? Expr?) (#:P real?) Expr?)
   (Expr #:type (Type-union (Expr-type t) (Expr-type f))
         #:unsafe? (Exprs-unsafe? c t f)
         #:read-vs (Exprs-read-vs c t f)
@@ -332,7 +334,7 @@
         #:mem (RecT (hasheq 'c (Expr-mem c)
                             'k (UniT (hasheq 't (Expr-mem t)
                                              'f (Expr-mem f)))))
-        #:rtime (ival+ (Expr-rtime c) (ivalU (Expr-rtime t) (Expr-rtime f)))))
+        #:rtime (ival+ (Expr-rtime c) (ivalU P (Expr-rtime t) (Expr-rtime f)))))
 
 ;; XXX Loop
 ;; XXX Break
