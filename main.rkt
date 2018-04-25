@@ -284,6 +284,11 @@
    'ffalse 'foeq 'fogt 'foge 'folt 'fole 'fone 'ford
    'ftrue 'fueq 'fuge 'fuge 'fult 'fule 'fune 'funo))
 
+(define (Type-cmp= Type-cmp x y)
+  (define cx (Type-cmp x))
+  (define cy (Type-cmp y))
+  (and cx cy (equal? cx cy)))
+
 (define/contract (Bin op lhs rhs)
   (-> BinOperator? Expr? Expr? Expr?)
   (define lhs-ty (Expr-type lhs))
@@ -300,9 +305,7 @@
       [(or 'ffalse 'foeq 'fogt 'foge 'folt 'fole 'fone 'ford
            'ftrue 'fueq 'fuge 'fuge 'fult 'fule 'fune 'funo)
        (values Type-Flo Bool)]))
-  (unless (and (Type-cmp lhs-ty)
-               (Type-cmp rhs-ty)
-               (equal? lhs-ty rhs-ty))
+  (unless (Type-cmp= Type-cmp lhs-ty rhs-ty)
     (error 'Bin "Cannot perform ~a on ~a and ~a, types are wrong ~a and ~a"
            op lhs rhs lhs-ty rhs-ty))
   (Expr #:type result-ty
@@ -320,9 +323,17 @@
 ;; XXX Unsafe (i.e. call C function)
 ;; XXX Cast
 
-;; XXX Assert
 ;; XXX Assign
-;; XXX Seq
+
+(define/contract (Seq f s)
+  (-> Expr? Expr? Expr?)  
+  (Expr #:type (Expr-type s)
+        #:unsafe? (Exprs-unsafe? f s)
+        #:read-vs (Exprs-read-vs f s)
+        #:write-vs (Exprs-write-vs f s)
+        #:v->ty (Exprs-v->ty f s)
+        #:mem (UniT (hasheq 'f (Expr-mem f) 's (Expr-mem s)))
+        #:rtime (ival+ (Expr-rtime f) (Expr-rtime s))))
 
 (define/contract (If c #:P [P 0.5] t f)
   (->* (Expr? Expr? Expr?) (#:P real?) Expr?)
@@ -335,6 +346,27 @@
                             'k (UniT (hasheq 't (Expr-mem t)
                                              'f (Expr-mem f)))))
         #:rtime (ival+ (Expr-rtime c) (ivalU P (Expr-rtime t) (Expr-rtime f)))))
+
+(define/contract Skip Expr?
+  (Expr #:type Void
+        #:unsafe? #f
+        #:read-vs mt-set
+        #:write-vs mt-set
+        #:v->ty mt-map
+        #:mem Void
+        #:rtime (iunit 0)))
+
+(define/contract Abort Expr?
+  (Expr #:type Void
+        #:unsafe? #f
+        #:read-vs mt-set
+        #:write-vs mt-set
+        #:v->ty mt-map
+        #:mem Void
+        #:rtime (iunit 0)))
+
+(define/contract (Assert ?) (-> Expr? Expr?)
+  (If ? Skip Abort))
 
 ;; XXX Loop
 ;; XXX Break
@@ -354,20 +386,6 @@
 ;; XXX
 
 #;(
-
-   ;;; Expressions := Only read from memory, perform no allocation
-
-   ;; XXX It should be possible to take an expression like "x.f" and
-   ;; "x[5]" and combine them into "x.f + y[5]" by writing something
-   ;; like:
-   #;(Bin 'iadd
-          (RecR (VarR 'x) 'f)
-          (Rename (hasheq 'y 'x)
-                  (ArrR (VarR 'x) (IntV 5))))
-   ;; Perhaps it should also be possible to do something like a "Prefix"
-   ;; to add a prefix to everything inside... although perhaps that's an
-   ;; operation that can be written on top of Rename.
-
    (define-type (Expr [ty Type?] [v->ty (hash/c Variable? Type?)])
 
      (*RecR [r Expr?] [f Field?])
@@ -411,13 +429,4 @@
           (or (NumT? ety)
               (fail! e "is not a number"))
           (*Cast ty (Expr-v->ty e) e)))
-
-   ;;; Statements := May write to memory
-
-   #;(RecV [list-of-field*exp (listof (cons/c Field? Expr?))])
-   #;(ArrV [vs (listof Expr?)])
-
-   ;;; Programs := Fix a memory rep and gives names
-
-   ;; /AST
-   )
+)
