@@ -53,27 +53,29 @@
 (define-interface Type
   ([size exact-nonnegative-integer?]
    [ctc contract?]
-   [fmt any/c]
+   [fmt (-> string any/c)]
    [Int (or/c #f (cons/c boolean? IntegerBitWidth?))]
    [Flo (or/c #f FloatBitWidth?)]))
-;; XXX fmt should have a variable to add it to
 
 (define (Type-union x y)
   (or (and (eq? x y) x)
       (error 'type-union "Cannot union ~a & ~a"
              x y)))
 
+(define (fmt-right ty)
+  (λ (v) (list* ty " " v)))
+
 (define Void
   (Type #:size 0
         #:ctc none/c
-        #:fmt "void"
+        #:fmt (fmt-right "void")
         #:Int #f
         #:Flo #f))
 
 (define PtrT
   (Type #:size 64
         #:ctc none/c
-        #:fmt "(void *)"
+        #:fmt (fmt-right "(void *)")
         #:Int #f
         #:Flo #f))
 
@@ -86,8 +88,9 @@
             (integer-in (if signed? (* -1 W) 0)
                         (sub1 W)))
         #:fmt
-        (if (= w 1) "bool"
-            (format "~aint~a_t" (if signed? "" "u") w))
+        (fmt-right
+         (if (= w 1) "bool"
+             (format "~aint~a_t" (if signed? "" "u") w)))
 
         #:Int (cons signed? w)
         #:Flo #f))
@@ -106,7 +109,7 @@
   (-> FloatBitWidth? Type?)
   (Type #:size w
         #:ctc (match w [32 single-flonum?] [64 double-flonum?])
-        #:fmt (match w [32 "float"] [64 "double"])
+        #:fmt (fmt-right (match w [32 "float"] [64 "double"]))
         #:Int #f
         #:Flo w))
 
@@ -122,7 +125,7 @@
   (Type #:size (* dim (Type-size elem))
         #:ctc (and/c vector? (λ (v) (= (vector-length v) dim))
                      (vectorof (Type-ctc elem)))
-        #:fmt (format "~a[~a]" (Type-fmt elem) dim)
+        #:fmt (λ (v) (list* ((Type-fmt elem) v) "[" dim "]"))
         #:Int #f
         #:Flo #f))
 
@@ -142,10 +145,11 @@
                            [f (apply or/c (hash-keys field->ty))]
                            [v (f) (Type-ctc (hash-ref field->ty f))]
                            #:immutable #t))
-             #:fmt (list "struct {"
-                         (for/list ([(k v) (in-hash field->ty)])
-                           (list (Type-fmt v) " " k ";"))
-                         "}")
+             #:fmt (λ (v)
+                     (list* "struct {"
+                            (for/list ([(k v) (in-hash field->ty)])
+                              (list* ((Type-fmt v) k) ";"))
+                            "} " v))
              #:Int #f
              #:Flo #f)))
 
@@ -160,10 +164,11 @@
                            [f (apply or/c (hash-keys mode->ty))]
                            [v (f) (Type-ctc (hash-ref mode->ty f))]
                            #:immutable #t))
-             #:fmt (list "union {"
-                         (for/list ([(k v) (in-hash mode->ty)])
-                           (list (Type-fmt v) " " k ";"))
-                         "}")
+             #:fmt (λ (v)
+                     (list* "union {"
+                            (for/list ([(k v) (in-hash mode->ty)])
+                              (list* ((Type-fmt v) k) ";"))
+                            "} " v))
              #:Int #f
              #:Flo #f)))
 
