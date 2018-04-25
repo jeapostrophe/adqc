@@ -66,7 +66,7 @@
 (define Void
   (Type #:size 0
         #:ctc none/c
-        #:fmt #f
+        #:fmt "void"
         #:Int #f
         #:Flo #f))
 
@@ -126,39 +126,46 @@
         #:Int #f
         #:Flo #f))
 
-(define/contract (RecT field->ty)
-  (-> (hash/c #:immutable #t Field? Type?) Type?)
-  ;; XXX drop #f in ty
-  (Type #:size (for/sum ([t (in-hash-values field->ty)])
-                 (Type-size t))
-        #:ctc (and/c hash? (λ (h) (= (hash-count h) (hash-count field->ty)))
-                     (hash/dc
-                      [f (apply or/c (hash-keys field->ty))]
-                      [v (f) (Type-ctc (hash-ref field->ty f))]
-                      #:immutable #t))
-        #:fmt (list "struct {"
-                    (for/list ([(k v) (in-hash field->ty)])
-                      (list (Type-fmt v) " " k ";"))
-                    "}")
-        #:Int #f
-        #:Flo #f))
+(define (hasheq-filter-tv h)
+  (for/hasheq ([(k v) (in-hash h)]
+               #:when v)
+    (values k v)))
 
-(define/contract (UniT mode->ty)
-  (-> (hash/c #:immutable #t Field? Type?) Type?)
-  ;; XXX drop #f in ty
-  (Type #:size (for/fold ([m 0]) ([t (in-hash-values mode->ty)])
-                 (max m (Type-size t)))
-        #:ctc (and/c hash? (λ (h) (= (hash-count h) (hash-count mode->ty)))
-                     (hash/dc
-                      [f (apply or/c (hash-keys mode->ty))]
-                      [v (f) (Type-ctc (hash-ref mode->ty f))]
-                      #:immutable #t))
-        #:fmt (list "union {"
-                    (for/list ([(k v) (in-hash mode->ty)])
-                      (list (Type-fmt v) " " k ";"))
-                    "}")
-        #:Int #f
-        #:Flo #f))
+(define/contract (RecT -field->ty)
+  (-> (hash/c #:immutable #t Field? (or/c #f Type?)) (or/c #f Type?))
+  (define field->ty (hasheq-filter-tv -field->ty))
+  (and (not (hash-empty? field->ty))
+       (Type #:size (for/sum ([t (in-hash-values field->ty)])
+                      (Type-size t))
+             #:ctc (and/c hash? (λ (h) (= (hash-count h) (hash-count field->ty)))
+                          (hash/dc
+                           [f (apply or/c (hash-keys field->ty))]
+                           [v (f) (Type-ctc (hash-ref field->ty f))]
+                           #:immutable #t))
+             #:fmt (list "struct {"
+                         (for/list ([(k v) (in-hash field->ty)])
+                           (list (Type-fmt v) " " k ";"))
+                         "}")
+             #:Int #f
+             #:Flo #f)))
+
+(define/contract (UniT -mode->ty)
+  (-> (hash/c #:immutable #t Field? (or/c #f Type?)) (or/c #f Type?))
+  (define mode->ty (hasheq-filter-tv -mode->ty))
+  (and (not (hash-empty? mode->ty))
+       (Type #:size (for/fold ([m 0]) ([t (in-hash-values mode->ty)])
+                      (max m (Type-size t)))
+             #:ctc (and/c hash? (λ (h) (= (hash-count h) (hash-count mode->ty)))
+                          (hash/dc
+                           [f (apply or/c (hash-keys mode->ty))]
+                           [v (f) (Type-ctc (hash-ref mode->ty f))]
+                           #:immutable #t))
+             #:fmt (list "union {"
+                         (for/list ([(k v) (in-hash mode->ty)])
+                           (list (Type-fmt v) " " k ";"))
+                         "}")
+             #:Int #f
+             #:Flo #f)))
 
 (provide PtrT
          U1 Bool U8 S8 U16 S16 U32 S32 U64 S64
@@ -203,7 +210,7 @@
    [read-vs (set/c Variable?)]
    [write-vs (set/c Variable?)]
    [v->ty (hash/c #:immutable #t Variable? Type?)]
-   [mem Type?]
+   [mem (or/c #f Type?)]
    [rtime ival?]))
 ;; XXX format (should take a mapping from variable to path)
 ;; XXX weakest-precondition
@@ -229,7 +236,7 @@
         #:read-vs (seteq x)
         #:write-vs mt-set
         #:v->ty (hasheq x ty)
-        #:mem Void
+        #:mem #f
         #:rtime (iunit 1)))
 
 (define/contract (Val ty v)
@@ -239,11 +246,8 @@
         #:read-vs mt-set
         #:write-vs mt-set
         #:v->ty mt-map
-        #:mem Void
+        #:mem #f
         #:rtime (iunit 1)))
-
-(define (hash-set? h k v)
-  (if v (hash-set h k v) h))
 
 (define/contract (Let v #:read-only? [read-only? boolean?]
                       e be)
@@ -326,7 +330,7 @@
 ;; XXX Assign
 
 (define/contract (Seq f s)
-  (-> Expr? Expr? Expr?)  
+  (-> Expr? Expr? Expr?)
   (Expr #:type (Expr-type s)
         #:unsafe? (Exprs-unsafe? f s)
         #:read-vs (Exprs-read-vs f s)
@@ -353,7 +357,7 @@
         #:read-vs mt-set
         #:write-vs mt-set
         #:v->ty mt-map
-        #:mem Void
+        #:mem #f
         #:rtime (iunit 0)))
 
 (define/contract Abort Expr?
@@ -362,7 +366,7 @@
         #:read-vs mt-set
         #:write-vs mt-set
         #:v->ty mt-map
-        #:mem Void
+        #:mem #f
         #:rtime (iunit 0)))
 
 (define/contract (Assert ?) (-> Expr? Expr?)
@@ -429,4 +433,4 @@
           (or (NumT? ety)
               (fail! e "is not a number"))
           (*Cast ty (Expr-v->ty e) e)))
-)
+   )
