@@ -185,26 +185,6 @@
 ;;;; / Interval Arithmetic
 
 (define Variable? symbol?)
-
-(define (Exprs-unsafe? . xs)
-  (for/or ([x (in-list xs)])
-    (Expr-unsafe? x)))
-
-(define-interface Expr
-  ([type Type?]
-   [unsafe? boolean?]
-   ;; XXX write convenient combiners for these
-   [read-vs (set/c Variable?)]
-   [write-vs (set/c Variable?)]
-   [v->ty (hash/c #:immutable #t Variable? Type?)]
-   ;; XXX </>
-   [mem Type?]
-   [rtime ival?]))
-;; XXX format (should take a mapping from variable to path)
-;; XXX weakest-precondition
-;; XXX strongest-postcondition
-;; XXX lval
-
 (define mt-set (seteq))
 (define mt-map (hasheq))
 (define (map-union x y)
@@ -214,6 +194,31 @@
                    (or (and (not old) v)
                        (Type-union old v)))
                  #f)))
+
+(define-interface Expr
+  ([type Type?]
+   [unsafe? boolean?]
+   [read-vs (set/c Variable?)]
+   [write-vs (set/c Variable?)]
+   [v->ty (hash/c #:immutable #t Variable? Type?)]
+   [mem Type?]
+   [rtime ival?]))
+;; XXX format (should take a mapping from variable to path)
+;; XXX weakest-precondition
+;; XXX strongest-postcondition
+;; XXX lval
+
+(define (Exprs-unsafe? . es)
+  (for/or ([e (in-list es)])
+    (Expr-unsafe? e)))
+
+(define ((Exprs-*-vs set-union Expr-read-vs) e . es)
+  (for/fold ([s (Expr-read-vs e)]) ([e (in-list es)])
+    (set-union s (Expr-read-vs e))))
+
+(define Exprs-read-vs (Exprs-*-vs set-union Expr-read-vs))
+(define Exprs-write-vs (Exprs-*-vs set-union Expr-write-vs))
+(define Exprs-v->ty (Exprs-*-vs map-union Expr-v->ty))
 
 (define/contract (VarR ty x)
   (-> Type? Variable? Expr?)
@@ -300,9 +305,9 @@
            op lhs rhs lhs-ty rhs-ty))
   (Expr #:type result-ty
         #:unsafe? (Exprs-unsafe? lhs rhs)
-        #:read-vs (set-union (Expr-read-vs lhs) (Expr-read-vs rhs))
-        #:write-vs (set-union (Expr-write-vs lhs) (Expr-write-vs rhs))
-        #:v->ty (map-union (Expr-v->ty lhs) (Expr-v->ty rhs))
+        #:read-vs (Exprs-read-vs lhs rhs)
+        #:write-vs (Exprs-write-vs lhs rhs)
+        #:v->ty (Exprs-v->ty lhs rhs)
         #:mem (UniT (hasheq 'lhs (Expr-mem lhs) 'rhs (Expr-mem rhs)))
         #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit 1)))))
 
@@ -321,9 +326,9 @@
   (-> Expr? Expr? Expr? Expr?)
   (Expr #:type (Type-union (Expr-type t) (Expr-type f))
         #:unsafe? (Exprs-unsafe? c t f)
-        #:read-vs (set-union (Expr-read-vs c) (Expr-read-vs t) (Expr-read-vs f))
-        #:write-vs (set-union (Expr-write-vs c) (Expr-write-vs t) (Expr-write-vs f))
-        #:v->ty (map-union (Expr-v->ty c) (map-union (Expr-v->ty t) (Expr-v->ty f)))
+        #:read-vs (Exprs-read-vs c t f)
+        #:write-vs (Exprs-write-vs c t f)
+        #:v->ty (Exprs-v->ty c t f)
         #:mem (RecT (hasheq 'c (Expr-mem c)
                             'k (UniT (hasheq 't (Expr-mem t)
                                              'f (Expr-mem f)))))
