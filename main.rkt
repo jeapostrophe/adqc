@@ -374,6 +374,8 @@
         #:mem #f
         #:rtime (iunit 0)))
 
+;; XXX May be better to make this primitive so it can be more easily
+;; removed
 (define/contract (Assert ?) (-> Expr? Expr?)
   (If ? Skip Abort))
 
