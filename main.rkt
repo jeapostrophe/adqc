@@ -4,14 +4,14 @@
          racket/match
          racket/set
          racket/format
+         racket/pretty
          syntax/parse/define
          (for-syntax racket/base
                      racket/syntax
                      syntax/parse
                      syntax/parse/experimental/template))
 (module+ test
-  (require chk
-           racket/pretty))
+  (require chk))
 
 ;;; Library
 (begin-for-syntax
@@ -50,11 +50,12 @@
 (define Index?
   exact-nonnegative-integer?)
 (define Field? symbol?)
+(define Variable? symbol?)
 
 (define-interface Type
   ([size exact-nonnegative-integer?]
    [ctc contract?]
-   [fmt-decl (-> string? any/c)]
+   [fmt-decl (-> Variable? any/c)]
    [fmt-val (-> any/c any/c)]
    [Int (or/c #f (cons/c boolean? IntegerBitWidth?))]
    [Flo (or/c #f FloatBitWidth?)]))
@@ -222,7 +223,67 @@
   (ival (* l lx) (* e ex) (* h hx)))
 ;;;; / Interval Arithmetic
 
-(define Variable? symbol?)
+;;;; Logic
+(struct logic () #:prefab)
+(struct logic-const logic (c) #:prefab)
+(struct logic-var logic (v) #:prefab)
+(struct *logic-bin logic (op lhs rhs) #:prefab)
+(struct *logic-not logic (arg) #:prefab)
+(struct logic-XXX logic (where) #:prefab)
+
+(define (logic-not a)
+  (match a
+    [(logic-const #t) (logic-const #f)]
+    [(logic-const #f) (logic-const #t)]
+    [(*logic-not a) a]
+    [_ (*logic-not a)]))
+
+(define (logic-bin o l r)
+  (match* (o l r)
+    [((or 'eq 'ieq) x x) (logic-const #t)]
+
+    [('or (logic-const #t) _) (logic-const #t)]
+    [('or _ (logic-const #t)) (logic-const #t)]
+    [('or (logic-const #f) r) r]
+    [('or l (logic-const #f)) l]
+
+    [('and (logic-const #t) r) r]
+    [('and l (logic-const #t)) l]
+    [('and (logic-const #f) r) (logic-const #f)]
+    [('and l (logic-const #f)) (logic-const #f)]
+
+    [(_ _ _) (*logic-bin o l r)]))
+
+(define (logic-eq lhs rhs) (logic-bin 'eq lhs rhs))
+(define (logic-or lhs rhs) (logic-bin 'or lhs rhs))
+(define (logic-and lhs rhs) (logic-bin 'and lhs rhs))
+(define (logic-implies lhs rhs) (logic-bin 'or (logic-not lhs) rhs))
+
+(define (logic-subst e x c)
+  (match e
+    [(logic-var y)
+     (if (eq? x y) c e)]
+    [(*logic-bin op l r)
+     (logic-bin op
+                (logic-subst l x c)
+                (logic-subst r x c))]
+    [(*logic-not e)
+     (logic-not (logic-subst e x c))]
+    [(or (? logic-const?)
+         (? logic-XXX?))
+     e]))
+
+(define (logic-format l)
+  (define rec
+    (match-lambda
+      [(logic-const c) c]
+      [(logic-var v) v]
+      [(*logic-not l) (list 'not (rec l))]
+      [(*logic-bin op l r) (list op (rec l) (rec r))]
+      [(logic-XXX where) (list 'XXX where)]))
+  (pretty-format (rec l)))
+;;;; / Logic
+
 (define mt-set (seteq))
 (define mt-map (hasheq))
 (define (map-union x y)
@@ -242,10 +303,10 @@
    [v->ty (hash/c #:immutable #t Variable? Type?)]
    [mem (or/c #f Type?)]
    [rtime ival?]
-   [fmt-c (-> (hash/c Variable? string?) (-> any/c any/c) any/c)]
-   [lval-ret (-> (hash/c Variable? string?) (-> any/c any/c))]))
-;; XXX weakest-precondition
-;; XXX strongest-postcondition
+   [fmt-c (-> (hash/c Variable? Variable?) (-> any/c any/c) any/c)]
+   [lval-ret (-> (hash/c Variable? Variable?) (-> any/c any/c))]
+   [wp (-> (or/c #f Variable?) logic? logic?)]
+   [sp (-> (or/c #f Variable?) logic? logic?)]))
 
 (define (Exprs-unsafe? . es)
   (for/or ([e (in-list es)])
@@ -269,8 +330,13 @@
         #:v->ty (hasheq x ty)
         #:mem #f
         #:rtime (iunit 1)
+
         #:fmt-c (λ (v->c ret) (ret (hash-ref v->c x)))
-        #:lval-ret (λ (v->c) (λ (v) (list* (hash-ref v->c x) " = " v ";")))))
+        #:lval-ret (λ (v->c) (λ (v) (list* (hash-ref v->c x) " = " v ";")))
+
+        #:wp (λ (r Q) (logic-subst Q r (logic-var x)))
+        #:sp (λ (r P) (logic-implies P (logic-eq (logic-var r) (logic-var x))))
+        ))
 
 (define not-lval
   (λ (v->c)
@@ -287,7 +353,10 @@
         #:v->ty mt-map
         #:mem #f
         #:rtime (iunit 1)
-        #:fmt-c (λ (v->c ret) (ret ((Type-fmt-val ty) v)))))
+        #:fmt-c (λ (v->c ret) (ret ((Type-fmt-val ty) v)))
+
+        #:wp (λ (r Q) (logic-subst Q r (logic-const v)))
+        #:sp (λ (r P) (logic-implies P (logic-eq (logic-var r) (logic-const v))))))
 
 (define True (Val Bool #t))
 (define False (Val Bool #f))
@@ -300,6 +369,7 @@
   (when (and read-only? was-mutated?)
     (error 'Let "Cannot mutate read-only variable: ~a" v))
   (define et (Expr-type e))
+  (define v-id (gensym 'Let_v))
   (Expr #:type (Expr-type be)
         #:unsafe? (Exprs-unsafe? e be)
         #:read-vs (set-union (Expr-read-vs e)
@@ -322,12 +392,16 @@
         #:rtime (ival+ (Expr-rtime e) (ival+ (iunit 1) (Expr-rtime
                                                         be)))
         #:fmt-c (λ (v->c ret)
-                  (define v-id (symbol->string (gensym 'Let_v)))
                   (list* "{ " indent++
                          ((Type-fmt-decl et) v-id) ";" indent-nl
                          ((Expr-fmt-c e) v->c (fmt-assign v-id)) indent-nl
                          ((Expr-fmt-c be) (hash-set v->c v v-id) ret)
-                         indent-- " }"))))
+                         indent-- " }"))
+
+        ;; XXX might need to use v-id and subst
+        #:wp (λ (r Q) ((Expr-wp e) v ((Expr-wp be) r Q)))
+        #:sp (λ (r P) ((Expr-sp be) r ((Expr-sp e) v P)))
+        ))
 
 (define BinOperator?
   (or/c
@@ -375,6 +449,8 @@
   (unless (Type-cmp= Type-cmp lhs-ty rhs-ty)
     (error 'Bin "Cannot perform ~a on ~a and ~a, types are wrong ~a and ~a"
            op lhs rhs lhs-ty rhs-ty))
+  (define lhs-id (gensym 'Bin_lhs))
+  (define rhs-id (gensym 'Bin_rhs))
   (Expr #:type result-ty
         #:unsafe? (Exprs-unsafe? lhs rhs)
         #:read-vs (Exprs-read-vs lhs rhs)
@@ -385,15 +461,26 @@
         #:mem (UniT (hasheq 'lhs (Expr-mem lhs) 'rhs (Expr-mem rhs)))
         #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit 1)))
         #:fmt-c (λ (v->c ret)
-                  (define lhs-id (symbol->string (gensym 'Bin_lhs)))
-                  (define rhs-id (symbol->string (gensym 'Bin_rhs)))
                   (list* "{ " indent++
                          ((Type-fmt-decl lhs-ty) lhs-id) ";" indent-nl
                          ((Expr-fmt-c lhs) v->c (fmt-assign lhs-id)) indent-nl
                          ((Type-fmt-decl rhs-ty) rhs-id) ";" indent-nl
                          ((Expr-fmt-c rhs) v->c (fmt-assign rhs-id)) indent-nl
                          (ret (list* lhs-id " " (hash-ref bin->op op) " " rhs-id))
-                         indent-- " }"))))
+                         indent-- " }"))
+
+        #:wp (λ (r Q)
+               ((Expr-wp lhs)
+                lhs-id
+                ((Expr-wp rhs)
+                 rhs-id
+                 (logic-subst Q r
+                              (logic-bin op (logic-var lhs-id) (logic-var rhs-id))))))
+        #:sp (λ (r P)
+               (logic-implies
+                ((Expr-sp rhs) rhs-id ((Expr-sp lhs) lhs-id P))
+                (logic-eq (logic-var r)
+                          (logic-bin op (logic-var lhs-id) (logic-var rhs-id)))))))
 
 ;; XXX ArrR
 ;; XXX RecR
@@ -416,7 +503,10 @@
         #:mem (UniT (hasheq 'lhs (Expr-mem lhs) 'rhs (Expr-mem rhs)))
         #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit
                                                                  1)))
-        #:fmt-c (λ (v->c ret) ((Expr-fmt-c rhs) v->c ((Expr-lval-ret lhs) v->c)))))
+        #:fmt-c (λ (v->c ret) ((Expr-fmt-c rhs) v->c ((Expr-lval-ret lhs) v->c)))
+
+        #:wp (λ (r Q) ((Expr-wp rhs) (Expr-lval lhs) Q))
+        #:sp (λ (r P) ((Expr-sp rhs) (Expr-lval lhs) P))))
 
 (define/contract (Seq f s)
   (-> (and/c Expr?
@@ -436,7 +526,10 @@
                           v->c
                           (λ (v) (error 'Seq-f "Should not return")))
                          indent-nl
-                         ((Expr-fmt-c s) v->c ret)))))
+                         ((Expr-fmt-c s) v->c ret)))
+
+        #:wp (λ (r Q) ((Expr-wp f) #f ((Expr-wp s) r Q)))
+        #:sp (λ (r P) ((Expr-sp s) r ((Expr-sp f) #f P)))))
 
 (define Expr-Bool?
   (and/c Expr?
@@ -445,6 +538,7 @@
 
 (define/contract (If c #:P [P 0.5] t f)
   (->* (Expr-Bool? Expr? Expr?) (#:P real?) Expr?)
+  (define c-id (gensym 'If_c))
   (Expr #:type (Type-union (Expr-type t) (Expr-type f))
         #:unsafe? (Exprs-unsafe? c t f)
         #:read-vs (Exprs-read-vs c t f)
@@ -460,14 +554,26 @@
         #:fmt-c (λ (v->c ret)
                   ;; XXX if c can be an expression (not a statement,
                   ;; then drop it in)
-                  (define c-id (symbol->string (gensym 'If_c)))
                   (list* "{ " indent++
                          ((Type-fmt-decl (Expr-type c)) c-id) ";" indent-nl
                          ((Expr-fmt-c c) v->c (fmt-assign c-id)) indent-nl
                          "if (" c-id ") {" indent++ indent-nl
                          ((Expr-fmt-c t) v->c ret)
                          indent-- " }" indent-nl "else {" indent++ indent-nl
-                         ((Expr-fmt-c f) v->c ret) indent-- " }" indent-- " }"))))
+                         ((Expr-fmt-c f) v->c ret) indent-- " }" indent-- " }"))
+
+        #:wp (λ (r Q)
+               ((Expr-wp c)
+                c-id
+                (logic-and (logic-implies (logic-var c-id)
+                                          ((Expr-wp t) r Q))
+                           (logic-implies (logic-not (logic-var c-id))
+                                          ((Expr-wp f) r Q)))))
+        #:sp (λ (r P)
+               ((Expr-sp c)
+                c-id
+                (logic-or ((Expr-sp t) r (logic-and (logic-var c-id) P))
+                          ((Expr-sp f) r (logic-and (logic-not (logic-var c-id)) P)))))))
 
 (define/contract Skip Expr?
   (Expr #:type Void
@@ -479,7 +585,10 @@
         #:v->ty mt-map
         #:mem #f
         #:rtime (iunit 0)
-        #:fmt-c (λ (v->c ret) ";")))
+        #:fmt-c (λ (v->c ret) ";")
+
+        #:wp (λ (r Q) Q)
+        #:sp (λ (r P) P)))
 
 (define/contract (Seq* . more)
   (-> Expr? ... Expr?)
@@ -505,7 +614,10 @@
         #:mem #f
         #:rtime (iunit 0)
         #:fmt-c (λ (v->c ret) (list* "fprintf(stderr, " (~v msg) ");" indent-nl
-                                     "exit(1);"))))
+                                     "exit(1);"))
+
+        #:wp (λ (r Q) (logic-const #f))
+        #:sp (λ (r P) (logic-const #f))))
 
 (define/contract (Assert ?) (-> Expr? Expr?)
   ;; XXX Annotate that it can be removed?
@@ -522,6 +634,9 @@
   (define cb-write-vs (Exprs-write-vs c b))
   (when (set-member? cb-write-vs idx)
     (error 'Loop "Cannot mutate loop index"))
+  (define c-id (gensym 'Loop_cond))
+  (define inv-id (gensym 'Loop_inv))
+  (define idx-id (gensym 'Loop_idx))
   (Expr #:type Void
         #:unsafe? (Exprs-unsafe? c b)
         #:read-vs (set-remove (Exprs-read-vs c b) idx)
@@ -536,12 +651,11 @@
                  (ival+ (Expr-rtime c) (ival+ (Expr-rtime b) (iunit 1))))
         #:fmt-c
         (λ (v->c ret)
-          (define idx-id (symbol->string (gensym 'Loop_idx)))
-          (define c-id (symbol->string (gensym 'Loop_cond)))
           (define v->c+ (hash-set v->c idx idx-id))
           (list* "{ " indent++
                  ((Type-fmt-decl idx-ty) idx-id) " = 0;" indent-nl
                  ((Type-fmt-decl c-ty) c-id) " = 1;" indent-nl
+                 ;; XXX Need to assert that c-id is false when idx-id = max-count
                  "while ( " idx-id " < " max-count " && " c-id " ) {" indent++ indent-nl
                  ((Expr-fmt-c c) v->c+ (fmt-assign c-id)) indent-nl
                  "if ( " c-id ") {" indent++ indent-nl
@@ -549,7 +663,31 @@
                  indent-- " }" indent-nl
                  idx-id "++;" indent-nl
                  indent-- "}"
-                 indent-- " }"))))
+                 indent-- " }"))
+
+        #:wp (λ (r Q)
+               (logic-implies
+                (logic-bin 'iult (logic-var idx) (logic-const max-count))
+                ((Expr-wp c)
+                 c-id
+                 ((Expr-wp invariant)
+                  inv-id
+                  (logic-and
+                   (logic-var inv-id)
+                   (logic-and (logic-implies (logic-and (logic-var c-id)
+                                                        (logic-var inv-id))
+                                             ((Expr-wp b) r (logic-var inv-id)))
+                              (logic-implies (logic-and (logic-not (logic-var c-id))
+                                                        (logic-var inv-id)) Q)))))))
+        #:sp (λ (r P)
+               ((Expr-sp c)
+                c-id
+                (logic-and
+                 (logic-not (logic-var c-id))
+                 (for/fold ([P P]) ([i (in-range max-count)])
+                   (logic-or
+                    P
+                    ((Expr-sp b) #f (logic-and (logic-var c-id) P)))))))))
 
 (define/contract (While max-count c b
                         #:I [invariant True]
@@ -557,10 +695,11 @@
   (->* (exact-nonnegative-integer? Expr? Expr?)
        (#:I Expr? #:E exact-nonnegative-integer?)
        Expr?)
-  (Loop (gensym 'While-idx) max-count c b #:I invariant #:E
-        expected-count))
+  (Loop (gensym 'While-idx) max-count c b
+        #:I invariant #:E expected-count))
 
 (define/contract (For idx max-count max-e b
+                      #:label [label (gensym 'While-label)]
                       #:I [invariant True]
                       #:E [expected-count max-count])
   (->* (Variable? exact-nonnegative-integer? Expr? Expr?)
@@ -568,9 +707,6 @@
        Expr?)
   (Loop idx max-count (Bin 'iult (Var (nearest-IntT #f max-count) idx) max-e)
         b #:I invariant #:E expected-count))
-
-;; XXX Break
-;; XXX Continue
 
 ;; XXX Specification (i.e. function call spot, rather than
 ;; fully-inlining everything)
@@ -605,13 +741,17 @@
              "#include <stdlib.h>" indent-nl
              indent-nl
              "int main() {" indent++ indent-nl
-             "// Pre = XXX" indent-nl
+             "/* Pre = " (logic-format ((Expr-wp e) 'r (logic-const #t)))
+             " */" indent-nl
              "// Memory = " (Type-size (Expr-mem e)) " bits" indent-nl
              "// Runtime = ["rl","re","rh"]" indent-nl
              ((Expr-fmt-c e) (hasheq) (λ (v) (list "return " v ";"))) indent-nl
-             "// Post = XXX" indent-nl
+             "/* Post = " (logic-format ((Expr-sp e) 'r (logic-const #t)))
+             " */" indent-nl
              "return 0;"
              indent-- " }")))
+
+;; XXX Study what LLVM does to this program
 
 (module+ test
   (Expr-emit
@@ -629,11 +769,11 @@
              (Let 'z (Val U32 16)
                   (Bin 'iadd (Var U32 'z) (Val U32 9))))
          (Seq*
-          (Loop 'i 10 False
+          (Loop 'i 2 False
                 (Assert (Bin 'ieq (Val U32 10) (Val U32 11))))
-          (While 10 False
+          (While 2 False
                  (Assert (Bin 'ieq (Val U32 10) (Val U32 11))))
-          (For 'i 10 (Val U8 8)
+          (For 'i 2 (Val U8 8)
                (Assert (Bin 'iule (Var U8 'i) (Val U8 11)))))))))
 
 ;; XXX
