@@ -105,6 +105,11 @@
   [U64 #f 64] [S64 #t 64])
 (define Bool U1)
 
+(define (nearest-IntT signed? max-count)
+  (for/or ([w (in-list bitwidths)])
+    (and (< max-count (expt 2 w))
+         (IntT signed? w))))
+
 (define/contract (FloT w)
   (-> FloatBitWidth? Type?)
   (Type #:size w
@@ -196,6 +201,9 @@
   (ival (min lx ly)
         (+ (* P ex) (* (- 1 P) ey))
         (max hx hy)))
+(define (ival*k l e h x)
+  (match-define (ival lx ex hx) x)
+  (ival (* l lx) (* e ex) (* h hx)))
 ;;;; / Interval Arithmetic
 
 (define Variable? symbol?)
@@ -256,12 +264,15 @@
         #:mem #f
         #:rtime (iunit 1)))
 
+(define True (Val Bool #t))
+(define False (Val Bool #f))
+
 (define/contract (Let v #:read-only? [read-only? boolean?]
                       e be)
   (->* (Variable? Expr? Expr?) (#:read-only? boolean?) Expr?)
   (define bs-writes (Expr-write-vs be))
-  (when (and read-only?
-             (set-member? bs-writes v))
+  (define was-mutated? (set-member? bs-writes v))
+  (when (and read-only? was-mutated?)
     (error 'Let "Cannot mutate read-only variable: ~a" v))
   (Expr #:type (Expr-type be)
         #:unsafe? (Exprs-unsafe? e be)
@@ -385,6 +396,14 @@
         #:mem #f
         #:rtime (iunit 0)))
 
+(define/contract (When c #:P [P 0.5] t)
+  (->* (Expr? Expr?) (#:P real?) Expr?)
+  (If c #:P P t Skip))
+
+(define/contract (Unless c #:P [P 0.5] f)
+  (->* (Expr? Expr?) (#:P real?) Expr?)
+  (If c #:P P Skip f))
+
 (define/contract (Abort msg) (-> string? Expr?)
   ;; XXX use msg
   (Expr #:type Void
@@ -400,7 +419,47 @@
   ;; XXX Annotate that it can be removed?
   (If #:P 1.0 ? Skip (Abort "XXX assertion violation")))
 
-;; XXX Loop
+(define/contract (Loop idx max-count c b
+                       #:I [invariant True]
+                       #:E [expected-count max-count])
+  (->* (Variable? exact-nonnegative-integer? Expr? Expr?)
+       (#:I Expr? #:E exact-nonnegative-integer?)
+       Expr?)
+  (define idx-ty (nearest-IntT #f max-count))
+  (define cb-write-vs (Exprs-write-vs c b))
+  (when (set-member? cb-write-vs idx)
+    (error 'Loop "Cannot mutate loop index"))
+  (Expr #:type idx-ty
+        #:unsafe? (Exprs-unsafe? c b)
+        #:read-vs (set-remove (Exprs-read-vs c b) idx)
+        #:lval #f
+        #:write-vs cb-write-vs
+        #:v->ty (hash-remove (Exprs-v->ty c b) idx)
+        #:mem (RecT (hasheq 'c (Expr-mem c)
+                            'b (Expr-mem b)))
+        #:rtime (ival*k
+                 0 expected-count max-count
+                 (ival+ (Expr-rtime c) (ival+ (Expr-rtime b) (iunit
+                                                              1))))))
+
+(define/contract (While max-count c b
+                        #:I [invariant True]
+                        #:E [expected-count max-count])
+  (->* (exact-nonnegative-integer? Expr? Expr?)
+       (#:I Expr? #:E exact-nonnegative-integer?)
+       Expr?)
+  (Loop (gensym 'While-idx) max-count c b #:I invariant #:E
+        expected-count))
+
+;; XXX maybe add max-e
+(define/contract (For idx max-count b
+                      #:I [invariant True]
+                      #:E [expected-count max-count])
+  (->* (Variable? exact-nonnegative-integer? Expr?)
+       (#:I Expr? #:E exact-nonnegative-integer?)
+       Expr?)
+  (Loop idx max-count True b #:I invariant #:E expected-count))
+
 ;; XXX Break
 ;; XXX Continue
 
