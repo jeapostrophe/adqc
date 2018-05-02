@@ -3,6 +3,7 @@
          racket/contract/region
          racket/match
          racket/set
+         racket/format
          syntax/parse/define
          (for-syntax racket/base
                      racket/syntax
@@ -53,12 +54,16 @@
 (define-interface Type
   ([size exact-nonnegative-integer?]
    [ctc contract?]
-   [fmt (-> string any/c)]
+   [fmt-decl (-> string? any/c)]
+   [fmt-val (-> any/c any/c)]
    [Int (or/c #f (cons/c boolean? IntegerBitWidth?))]
    [Flo (or/c #f FloatBitWidth?)]))
 
 (define (Type-union x y)
-  (or (and (eq? x y) x)
+  (or (and (or (eq? x y)
+               (Type-cmp= Type-Int x y)
+               (Type-cmp= Type-Flo x y))
+           x)
       (error 'type-union "Cannot union ~a & ~a"
              x y)))
 
@@ -68,14 +73,16 @@
 (define Void
   (Type #:size 0
         #:ctc none/c
-        #:fmt (fmt-right "void")
+        #:fmt-decl (fmt-right "void")
+        #:fmt-val (λ (v) (error 'fmt-val "No values of type Void"))
         #:Int #f
         #:Flo #f))
 
 (define PtrT
   (Type #:size 64
         #:ctc none/c
-        #:fmt (fmt-right "(void *)")
+        #:fmt-decl (fmt-right "(void *)")
+        #:fmt-val (λ (v) (error 'fmt-val "No values of type Void"))
         #:Int #f
         #:Flo #f))
 
@@ -87,11 +94,13 @@
         (if (= w 1) (or/c 0 1 boolean?)
             (integer-in (if signed? (* -1 W) 0)
                         (sub1 W)))
-        #:fmt
+        #:fmt-decl
         (fmt-right
          (if (= w 1) "bool"
              (format "~aint~a_t" (if signed? "" "u") w)))
-
+        #:fmt-val (if (= w 1)
+                    (λ (x) (if x "1" "0"))
+                    number->string)
         #:Int (cons signed? w)
         #:Flo #f))
 
@@ -114,7 +123,8 @@
   (-> FloatBitWidth? Type?)
   (Type #:size w
         #:ctc (match w [32 single-flonum?] [64 double-flonum?])
-        #:fmt (fmt-right (match w [32 "float"] [64 "double"]))
+        #:fmt-decl (fmt-right (match w [32 "float"] [64 "double"]))
+        #:fmt-val number->string
         #:Int #f
         #:Flo w))
 
@@ -130,7 +140,9 @@
   (Type #:size (* dim (Type-size elem))
         #:ctc (and/c vector? (λ (v) (= (vector-length v) dim))
                      (vectorof (Type-ctc elem)))
-        #:fmt (λ (v) (list* ((Type-fmt elem) v) "[" dim "]"))
+        #:fmt-decl (λ (v) (list* ((Type-fmt-decl elem) v) "[" dim
+                                 "]"))
+        #:fmt-val (λ (v) (error 'fmt-val "XXX ArrT"))
         #:Int #f
         #:Flo #f))
 
@@ -150,11 +162,12 @@
                            [f (apply or/c (hash-keys field->ty))]
                            [v (f) (Type-ctc (hash-ref field->ty f))]
                            #:immutable #t))
-             #:fmt (λ (v)
-                     (list* "struct {"
-                            (for/list ([(k v) (in-hash field->ty)])
-                              (list* ((Type-fmt v) k) ";"))
-                            "} " v))
+             #:fmt-decl (λ (v)
+                          (list* "struct {"
+                                 (for/list ([(k v) (in-hash field->ty)])
+                                   (list* ((Type-fmt-decl v) k) ";"))
+                                 "} " v))
+             #:fmt-val (λ (v) (error 'fmt-val "XXX RecT"))
              #:Int #f
              #:Flo #f)))
 
@@ -169,11 +182,12 @@
                            [f (apply or/c (hash-keys mode->ty))]
                            [v (f) (Type-ctc (hash-ref mode->ty f))]
                            #:immutable #t))
-             #:fmt (λ (v)
-                     (list* "union {"
-                            (for/list ([(k v) (in-hash mode->ty)])
-                              (list* ((Type-fmt v) k) ";"))
-                            "} " v))
+             #:fmt-decl (λ (v)
+                          (list* "union {"
+                                 (for/list ([(k v) (in-hash mode->ty)])
+                                   (list* ((Type-fmt-decl v) k) ";"))
+                                 "} " v))
+             #:fmt-val (λ (v) (error 'fmt-val "XXX UniT"))
              #:Int #f
              #:Flo #f)))
 
@@ -225,8 +239,8 @@
    [lval (or/c #f Variable?)]
    [v->ty (hash/c #:immutable #t Variable? Type?)]
    [mem (or/c #f Type?)]
-   [rtime ival?]))
-;; XXX format (should take a mapping from variable to path)
+   [rtime ival?]
+   [fmt-c (-> any/c (-> any/c any/c) any/c)]))
 ;; XXX weakest-precondition
 ;; XXX strongest-postcondition
 
@@ -251,7 +265,8 @@
         #:write-vs mt-set
         #:v->ty (hasheq x ty)
         #:mem #f
-        #:rtime (iunit 1)))
+        #:rtime (iunit 1)
+        #:fmt-c (λ (v->c ret) (ret (hash-ref v->c x)))))
 
 (define/contract (Val ty v)
   (->i ([ty Type?] [v (ty) (Type-ctc ty)]) [r Expr?])
@@ -262,18 +277,20 @@
         #:write-vs mt-set
         #:v->ty mt-map
         #:mem #f
-        #:rtime (iunit 1)))
+        #:rtime (iunit 1)
+        #:fmt-c (λ (v->c ret) (ret ((Type-fmt-val ty) v)))))
 
 (define True (Val Bool #t))
 (define False (Val Bool #f))
 
-(define/contract (Let v #:read-only? [read-only? boolean?]
+(define/contract (Let v #:read-only? [read-only? #f]
                       e be)
   (->* (Variable? Expr? Expr?) (#:read-only? boolean?) Expr?)
   (define bs-writes (Expr-write-vs be))
   (define was-mutated? (set-member? bs-writes v))
   (when (and read-only? was-mutated?)
     (error 'Let "Cannot mutate read-only variable: ~a" v))
+  (define et (Expr-type e))
   (Expr #:type (Expr-type be)
         #:unsafe? (Exprs-unsafe? e be)
         #:read-vs (set-union (Expr-read-vs e)
@@ -289,10 +306,18 @@
         ;; substitution would require recomputing `be`, which is not
         ;; possible, unless we add that to the interface, which we
         ;; don't want to.
-        (RecT (hasheq 'var (Expr-type e)
+        (RecT (hasheq 'var et
                       'body (UniT (hasheq 'e (Expr-mem e)
                                           'be (Expr-mem be)))))
-        #:rtime (ival+ (Expr-rtime e) (ival+ (iunit 1) (Expr-rtime be)))))
+        #:rtime (ival+ (Expr-rtime e) (ival+ (iunit 1) (Expr-rtime
+                                                        be)))
+        #:fmt-c (λ (v->c ret)
+                  (define v-id (symbol->string (gensym 'Let_v)))
+                  (list* "{ " indent++
+                         ((Type-fmt-decl et) v-id) ";" indent-nl
+                         ((Expr-fmt-c e) v->c (λ (v) (list v-id " = " v ";"))) indent-nl
+                         ((Expr-fmt-c be) (hash-set v->c v v-id) ret)
+                         indent-- "}"))))
 
 (define BinOperator?
   (or/c
@@ -338,7 +363,9 @@
         #:write-vs (Exprs-write-vs lhs rhs)
         #:v->ty (Exprs-v->ty lhs rhs)
         #:mem (UniT (hasheq 'lhs (Expr-mem lhs) 'rhs (Expr-mem rhs)))
-        #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit 1)))))
+        #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit
+                                                                 1)))
+        #:fmt-c (λ (v->c ret) "XXX Bin")))
 
 ;; XXX ArrR
 ;; XXX RecR
@@ -360,7 +387,9 @@
         #:write-vs (set-add (Exprs-write-vs lhs rhs) (Expr-lval lhs))
         #:v->ty (Exprs-v->ty lhs rhs)
         #:mem (UniT (hasheq 'lhs (Expr-mem lhs) 'rhs (Expr-mem rhs)))
-        #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit 1)))))
+        #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit
+                                                                 1)))
+        #:fmt-c (λ (v->c ret) "XXX Assign")))
 
 (define/contract (Seq f s)
   (-> Expr? Expr? Expr?)
@@ -371,7 +400,13 @@
         #:write-vs (Exprs-write-vs f s)
         #:v->ty (Exprs-v->ty f s)
         #:mem (UniT (hasheq 'f (Expr-mem f) 's (Expr-mem s)))
-        #:rtime (ival+ (Expr-rtime f) (Expr-rtime s))))
+        #:rtime (ival+ (Expr-rtime f) (Expr-rtime s))
+        #:fmt-c (λ (v->c ret)
+                  (list* ((Expr-fmt-c f)
+                          v->c
+                          (λ (v) (error 'Seq-f "Should not return")))
+                         ";" indent-nl
+                         ((Expr-fmt-c s) v->c ret)))))
 
 (define/contract (If c #:P [P 0.5] t f)
   (->* (Expr? Expr? Expr?) (#:P real?) Expr?)
@@ -384,7 +419,19 @@
         #:mem (RecT (hasheq 'c (Expr-mem c)
                             'k (UniT (hasheq 't (Expr-mem t)
                                              'f (Expr-mem f)))))
-        #:rtime (ival+ (Expr-rtime c) (ivalU P (Expr-rtime t) (Expr-rtime f)))))
+        #:rtime (ival+ (Expr-rtime c) (ivalU P (Expr-rtime t)
+                                             (Expr-rtime f)))
+        #:fmt-c (λ (v->c ret)
+                  ;; XXX if c can be an expression (not a statement,
+                  ;; then drop it in)
+                  (define c-id (symbol->string (gensym 'If_c)))
+                  (list* "{ " indent++
+                         ((Type-fmt-decl (Expr-type c)) c-id) ";" indent-nl
+                         ((Expr-fmt-c c) v->c (λ (v) (list c-id " = " v ";"))) indent-nl
+                         "if (" c-id ") {" indent++ indent-nl
+                         ((Expr-fmt-c t) v->c ret)
+                         indent-- "}" indent-nl "else {" indent++ indent-nl
+                         ((Expr-fmt-c f) v->c ret) indent-- "}" indent-- "}"))))
 
 (define/contract Skip Expr?
   (Expr #:type Void
@@ -394,7 +441,13 @@
         #:write-vs mt-set
         #:v->ty mt-map
         #:mem #f
-        #:rtime (iunit 0)))
+        #:rtime (iunit 0)
+        #:fmt-c (λ (v->c ret) ";")))
+
+(define/contract (Seq* . more)
+  (-> Expr? ... Expr?)
+  (for/fold ([a Skip]) ([e (in-list more)])
+    (Seq a e)))
 
 (define/contract (When c #:P [P 0.5] t)
   (->* (Expr? Expr?) (#:P real?) Expr?)
@@ -405,7 +458,6 @@
   (If c #:P P Skip f))
 
 (define/contract (Abort msg) (-> string? Expr?)
-  ;; XXX use msg
   (Expr #:type Void
         #:unsafe? #f
         #:read-vs mt-set
@@ -413,11 +465,13 @@
         #:write-vs mt-set
         #:v->ty mt-map
         #:mem #f
-        #:rtime (iunit 0)))
+        #:rtime (iunit 0)
+        #:fmt-c (λ (v->c ret) (list* "fprintf(stderr, " (~v msg) ");" indent-nl
+                                     "exit(1);"))))
 
 (define/contract (Assert ?) (-> Expr? Expr?)
   ;; XXX Annotate that it can be removed?
-  (If #:P 1.0 ? Skip (Abort "XXX assertion violation")))
+  (If #:P 1.0 ? Skip (Abort (~a "Assertion violation: " (gensym 'assert)))))
 
 (define/contract (Loop idx max-count c b
                        #:I [invariant True]
@@ -440,7 +494,8 @@
         #:rtime (ival*k
                  0 expected-count max-count
                  (ival+ (Expr-rtime c) (ival+ (Expr-rtime b) (iunit
-                                                              1))))))
+                                                              1))))
+        #:fmt-c (λ (v->c ret) "XXX Loop")))
 
 (define/contract (While max-count c b
                         #:I [invariant True]
@@ -451,28 +506,64 @@
   (Loop (gensym 'While-idx) max-count c b #:I invariant #:E
         expected-count))
 
-;; XXX maybe add max-e
-(define/contract (For idx max-count b
+(define/contract (For idx max-count max-e b
                       #:I [invariant True]
                       #:E [expected-count max-count])
-  (->* (Variable? exact-nonnegative-integer? Expr?)
+  (->* (Variable? exact-nonnegative-integer? Expr? Expr?)
        (#:I Expr? #:E exact-nonnegative-integer?)
        Expr?)
-  (Loop idx max-count True b #:I invariant #:E expected-count))
+  (Loop idx max-count (Bin 'iult (Var (nearest-IntT #f max-count) idx) max-e)
+        b #:I invariant #:E expected-count))
 
 ;; XXX Break
 ;; XXX Continue
 
-;; XXX Specification (i.e. function call spot, rather than fully-inlining everything)
+;; XXX Specification (i.e. function call spot, rather than
+;; fully-inlining everything)
+
+(define (tree-for f t)
+  (match t
+    [(cons a d) (tree-for f a) (tree-for f d)]
+    [(or '() #f (? void?)) (void)]
+    [x (f x)]))
+
+
+(define indent-nl (gensym))
+(define indent++ (gensym))
+(define indent-- (gensym))
+(define indent-level (box 0))
+(define (idisplay v)
+  (match v
+    [(== indent-nl)
+     (display "\n")
+     (for ([i (in-range (unbox indent-level))]) (display #\space))]
+    [(== indent++) (set-box! indent-level (add1 (unbox indent-level)))]
+    [(== indent--) (set-box! indent-level (sub1 (unbox indent-level)))]
+    [x (display x)]))
+
+(define (Expr-emit e)
+  (tree-for idisplay ((Expr-fmt-c e) (hasheq) (λ (v) (list "return " v ";")))))
 
 (module+ test
-  (pretty-print
-   (If (Val Bool #t)
-       (Let 'x (Val U32 6)
-            (Let 'y (Val F64 3.14)
-                 (Bin 'iadd (Var U32 'x) (Val U32 8))))
-       (Let 'z (Val U32 16)
-            (Bin 'iadd (Var U32 'z) (Val U32 9))))))
+  (Expr-emit
+   (Seq*
+    Skip
+    (When False (Assert (Bin 'ieq (Val U32 8) (Val U32 9))))
+    (Unless True (Assert (Bin 'ieq (Val U32 11) (Val U32 10))))
+    (If (Bin 'ieq (Val U32 7) (Val U32 7))
+        (Let 'x (Val U32 6)
+             (Seq
+              (Assign (Var U32 'x) (Val U32 7))
+              (Let 'y (Val F64 3.14)
+                   (Bin 'iadd (Var U32 'x) (Val U32 8)))))
+        (Let 'z (Val U32 16)
+             (Bin 'iadd (Var U32 'z) (Val U32 9))))
+    (Loop 'i 10 False
+          (Assert (Bin 'ieq (Val U32 10) (Val U32 11))))
+    (While 10 False
+           (Assert (Bin 'ieq (Val U32 10) (Val U32 11))))
+    (For 'i 10 (Val U8 8)
+         (Assert (Bin 'ieq (Var U8 'i) (Val U8 11)))))))
 
 ;; XXX
 
