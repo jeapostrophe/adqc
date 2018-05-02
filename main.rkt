@@ -69,6 +69,8 @@
 
 (define (fmt-right ty)
   (λ (v) (list* ty " " v)))
+(define (fmt-assign v-id)
+  (λ (v) (list v-id " = " v ";")))
 
 (define Void
   (Type #:size 0
@@ -240,7 +242,8 @@
    [v->ty (hash/c #:immutable #t Variable? Type?)]
    [mem (or/c #f Type?)]
    [rtime ival?]
-   [fmt-c (-> any/c (-> any/c any/c) any/c)]))
+   [fmt-c (-> (hash/c Variable? string?) (-> any/c any/c) any/c)]
+   [lval-ret (-> (hash/c Variable? string?) (-> any/c any/c))]))
 ;; XXX weakest-precondition
 ;; XXX strongest-postcondition
 
@@ -266,7 +269,12 @@
         #:v->ty (hasheq x ty)
         #:mem #f
         #:rtime (iunit 1)
-        #:fmt-c (λ (v->c ret) (ret (hash-ref v->c x)))))
+        #:fmt-c (λ (v->c ret) (ret (hash-ref v->c x)))
+        #:lval-ret (λ (v->c) (λ (v) (list* (hash-ref v->c x) " = " v ";")))))
+
+(define not-lval
+  (λ (v->c)
+    (error 'lval-ret "Not an lval")))
 
 (define/contract (Val ty v)
   (->i ([ty Type?] [v (ty) (Type-ctc ty)]) [r Expr?])
@@ -274,6 +282,7 @@
         #:unsafe? #f
         #:read-vs mt-set
         #:lval #f
+        #:lval-ret not-lval
         #:write-vs mt-set
         #:v->ty mt-map
         #:mem #f
@@ -296,6 +305,7 @@
         #:read-vs (set-union (Expr-read-vs e)
                              (set-remove (Expr-read-vs be) v))
         #:lval #f
+        #:lval-ret not-lval
         #:write-vs (set-union (Expr-write-vs e)
                               (set-remove bs-writes v))
         #:v->ty (map-union (Expr-v->ty e)
@@ -315,9 +325,9 @@
                   (define v-id (symbol->string (gensym 'Let_v)))
                   (list* "{ " indent++
                          ((Type-fmt-decl et) v-id) ";" indent-nl
-                         ((Expr-fmt-c e) v->c (λ (v) (list v-id " = " v ";"))) indent-nl
+                         ((Expr-fmt-c e) v->c (fmt-assign v-id)) indent-nl
                          ((Expr-fmt-c be) (hash-set v->c v v-id) ret)
-                         indent-- "}"))))
+                         indent-- " }"))))
 
 (define BinOperator?
   (or/c
@@ -331,6 +341,15 @@
    ;; FCmp
    'ffalse 'foeq 'fogt 'foge 'folt 'fole 'fone 'ford
    'ftrue 'fueq 'fuge 'fuge 'fult 'fule 'fune 'funo))
+
+(define bin->op
+  (hasheq 'iadd "+" 'isub "-" 'imul "*" 'iudiv "/" 'isdiv "/" 'iurem "%" 'isrem "%"
+          'ishl "<<" 'ilshr ">>" 'iashr ">>" 'iand "&" 'ior "|" 'ixor "^"
+          'fadd "+" 'fsub "-" 'fmul "*" 'fdiv "/" 'frem "%"
+          'ieq "==" 'ine "!="
+          'iugt ">" 'iuge ">=" 'iult "<" 'iule "<="
+          'isgt ">" 'isge ">=" 'islt "<" 'isle "<="
+          'foeq "==" 'fogt ">" 'foge ">=" 'folt "<" 'fole "<="))
 
 (define (Type-cmp= Type-cmp x y)
   (define cx (Type-cmp x))
@@ -360,12 +379,21 @@
         #:unsafe? (Exprs-unsafe? lhs rhs)
         #:read-vs (Exprs-read-vs lhs rhs)
         #:lval #f
+        #:lval-ret not-lval
         #:write-vs (Exprs-write-vs lhs rhs)
         #:v->ty (Exprs-v->ty lhs rhs)
         #:mem (UniT (hasheq 'lhs (Expr-mem lhs) 'rhs (Expr-mem rhs)))
-        #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit
-                                                                 1)))
-        #:fmt-c (λ (v->c ret) "XXX Bin")))
+        #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit 1)))
+        #:fmt-c (λ (v->c ret)
+                  (define lhs-id (symbol->string (gensym 'Bin_lhs)))
+                  (define rhs-id (symbol->string (gensym 'Bin_rhs)))
+                  (list* "{ " indent++
+                         ((Type-fmt-decl lhs-ty) lhs-id) ";" indent-nl
+                         ((Expr-fmt-c lhs) v->c (fmt-assign lhs-id)) indent-nl
+                         ((Type-fmt-decl rhs-ty) rhs-id) ";" indent-nl
+                         ((Expr-fmt-c rhs) v->c (fmt-assign rhs-id)) indent-nl
+                         (ret (list* lhs-id " " (hash-ref bin->op op) " " rhs-id))
+                         indent-- " }"))))
 
 ;; XXX ArrR
 ;; XXX RecR
@@ -374,29 +402,31 @@
 ;; XXX Unsafe (i.e. call C function)
 ;; XXX Cast
 
-(define Expr+LVal?
-  (and/c Expr?
-         (flat-named-contract 'Expr-LVal Expr-lval)))
-
 (define/contract (Assign lhs rhs)
-  (-> Expr+LVal? Expr? Expr?)
+  (-> (and/c Expr?
+             (flat-named-contract 'Expr-LVal Expr-lval))
+      Expr? Expr?)
   (Expr #:type Void
         #:unsafe? (Exprs-unsafe? lhs rhs)
         #:read-vs (Exprs-read-vs lhs rhs)
         #:lval #f
+        #:lval-ret not-lval
         #:write-vs (set-add (Exprs-write-vs lhs rhs) (Expr-lval lhs))
         #:v->ty (Exprs-v->ty lhs rhs)
         #:mem (UniT (hasheq 'lhs (Expr-mem lhs) 'rhs (Expr-mem rhs)))
         #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit
                                                                  1)))
-        #:fmt-c (λ (v->c ret) "XXX Assign")))
+        #:fmt-c (λ (v->c ret) ((Expr-fmt-c rhs) v->c ((Expr-lval-ret lhs) v->c)))))
 
 (define/contract (Seq f s)
-  (-> Expr? Expr? Expr?)
+  (-> (and/c Expr?
+             (flat-named-contract 'Expr-Void (λ (v) (= 0 (Type-size (Expr-type v))))))
+      Expr? Expr?)
   (Expr #:type (Expr-type s)
         #:unsafe? (Exprs-unsafe? f s)
         #:read-vs (Exprs-read-vs f s)
         #:lval #f
+        #:lval-ret not-lval
         #:write-vs (Exprs-write-vs f s)
         #:v->ty (Exprs-v->ty f s)
         #:mem (UniT (hasheq 'f (Expr-mem f) 's (Expr-mem s)))
@@ -405,15 +435,21 @@
                   (list* ((Expr-fmt-c f)
                           v->c
                           (λ (v) (error 'Seq-f "Should not return")))
-                         ";" indent-nl
+                         indent-nl
                          ((Expr-fmt-c s) v->c ret)))))
 
+(define Expr-Bool?
+  (and/c Expr?
+         (flat-named-contract 'Expr-Bool
+                              (λ (v) (Type-cmp= Type-Int Bool (Expr-type v))))))
+
 (define/contract (If c #:P [P 0.5] t f)
-  (->* (Expr? Expr? Expr?) (#:P real?) Expr?)
+  (->* (Expr-Bool? Expr? Expr?) (#:P real?) Expr?)
   (Expr #:type (Type-union (Expr-type t) (Expr-type f))
         #:unsafe? (Exprs-unsafe? c t f)
         #:read-vs (Exprs-read-vs c t f)
         #:lval #f
+        #:lval-ret not-lval
         #:write-vs (Exprs-write-vs c t f)
         #:v->ty (Exprs-v->ty c t f)
         #:mem (RecT (hasheq 'c (Expr-mem c)
@@ -427,17 +463,18 @@
                   (define c-id (symbol->string (gensym 'If_c)))
                   (list* "{ " indent++
                          ((Type-fmt-decl (Expr-type c)) c-id) ";" indent-nl
-                         ((Expr-fmt-c c) v->c (λ (v) (list c-id " = " v ";"))) indent-nl
+                         ((Expr-fmt-c c) v->c (fmt-assign c-id)) indent-nl
                          "if (" c-id ") {" indent++ indent-nl
                          ((Expr-fmt-c t) v->c ret)
-                         indent-- "}" indent-nl "else {" indent++ indent-nl
-                         ((Expr-fmt-c f) v->c ret) indent-- "}" indent-- "}"))))
+                         indent-- " }" indent-nl "else {" indent++ indent-nl
+                         ((Expr-fmt-c f) v->c ret) indent-- " }" indent-- " }"))))
 
 (define/contract Skip Expr?
   (Expr #:type Void
         #:unsafe? #f
         #:read-vs mt-set
         #:lval #f
+        #:lval-ret not-lval
         #:write-vs mt-set
         #:v->ty mt-map
         #:mem #f
@@ -462,6 +499,7 @@
         #:unsafe? #f
         #:read-vs mt-set
         #:lval #f
+        #:lval-ret not-lval
         #:write-vs mt-set
         #:v->ty mt-map
         #:mem #f
@@ -476,26 +514,42 @@
 (define/contract (Loop idx max-count c b
                        #:I [invariant True]
                        #:E [expected-count max-count])
-  (->* (Variable? exact-nonnegative-integer? Expr? Expr?)
+  (->* (Variable? exact-nonnegative-integer? Expr-Bool? Expr?)
        (#:I Expr? #:E exact-nonnegative-integer?)
        Expr?)
+  (define c-ty (Expr-type c))
   (define idx-ty (nearest-IntT #f max-count))
   (define cb-write-vs (Exprs-write-vs c b))
   (when (set-member? cb-write-vs idx)
     (error 'Loop "Cannot mutate loop index"))
-  (Expr #:type idx-ty
+  (Expr #:type Void
         #:unsafe? (Exprs-unsafe? c b)
         #:read-vs (set-remove (Exprs-read-vs c b) idx)
         #:lval #f
+        #:lval-ret not-lval
         #:write-vs cb-write-vs
         #:v->ty (hash-remove (Exprs-v->ty c b) idx)
         #:mem (RecT (hasheq 'c (Expr-mem c)
                             'b (Expr-mem b)))
         #:rtime (ival*k
                  0 expected-count max-count
-                 (ival+ (Expr-rtime c) (ival+ (Expr-rtime b) (iunit
-                                                              1))))
-        #:fmt-c (λ (v->c ret) "XXX Loop")))
+                 (ival+ (Expr-rtime c) (ival+ (Expr-rtime b) (iunit 1))))
+        #:fmt-c
+        (λ (v->c ret)
+          (define idx-id (symbol->string (gensym 'Loop_idx)))
+          (define c-id (symbol->string (gensym 'Loop_cond)))
+          (define v->c+ (hash-set v->c idx idx-id))
+          (list* "{ " indent++
+                 ((Type-fmt-decl idx-ty) idx-id) " = 0;" indent-nl
+                 ((Type-fmt-decl c-ty) c-id) " = 1;" indent-nl
+                 "while ( " idx-id " < " max-count " && " c-id " ) {" indent++ indent-nl
+                 ((Expr-fmt-c c) v->c+ (fmt-assign c-id)) indent-nl
+                 "if ( " c-id ") {" indent++ indent-nl
+                 ((Expr-fmt-c b) v->c+ ret)
+                 indent-- " }" indent-nl
+                 idx-id "++;" indent-nl
+                 indent-- "}"
+                 indent-- " }"))))
 
 (define/contract (While max-count c b
                         #:I [invariant True]
@@ -527,7 +581,6 @@
     [(or '() #f (? void?)) (void)]
     [x (f x)]))
 
-
 (define indent-nl (gensym))
 (define indent++ (gensym))
 (define indent-- (gensym))
@@ -537,12 +590,28 @@
     [(== indent-nl)
      (display "\n")
      (for ([i (in-range (unbox indent-level))]) (display #\space))]
-    [(== indent++) (set-box! indent-level (add1 (unbox indent-level)))]
-    [(== indent--) (set-box! indent-level (sub1 (unbox indent-level)))]
+    [(== indent++) (set-box! indent-level (+ (unbox indent-level) 2))]
+    [(== indent--) (set-box! indent-level (- (unbox indent-level) 2))]
     [x (display x)]))
 
 (define (Expr-emit e)
-  (tree-for idisplay ((Expr-fmt-c e) (hasheq) (λ (v) (list "return " v ";")))))
+  ;; XXX Check for no undefined variables
+  (match-define (ival rl re rh) (Expr-rtime e))
+  (tree-for idisplay
+            (list*
+             "#include <stdbool.h>" indent-nl
+             "#include <stdint.h>" indent-nl
+             "#include <stdio.h>" indent-nl
+             "#include <stdlib.h>" indent-nl
+             indent-nl
+             "int main() {" indent++ indent-nl
+             "// Pre = XXX" indent-nl
+             "// Memory = " (Type-size (Expr-mem e)) " bits" indent-nl
+             "// Runtime = ["rl","re","rh"]" indent-nl
+             ((Expr-fmt-c e) (hasheq) (λ (v) (list "return " v ";"))) indent-nl
+             "// Post = XXX" indent-nl
+             "return 0;"
+             indent-- " }")))
 
 (module+ test
   (Expr-emit
@@ -550,20 +619,22 @@
     Skip
     (When False (Assert (Bin 'ieq (Val U32 8) (Val U32 9))))
     (Unless True (Assert (Bin 'ieq (Val U32 11) (Val U32 10))))
-    (If (Bin 'ieq (Val U32 7) (Val U32 7))
-        (Let 'x (Val U32 6)
-             (Seq
-              (Assign (Var U32 'x) (Val U32 7))
-              (Let 'y (Val F64 3.14)
-                   (Bin 'iadd (Var U32 'x) (Val U32 8)))))
-        (Let 'z (Val U32 16)
-             (Bin 'iadd (Var U32 'z) (Val U32 9))))
-    (Loop 'i 10 False
-          (Assert (Bin 'ieq (Val U32 10) (Val U32 11))))
-    (While 10 False
-           (Assert (Bin 'ieq (Val U32 10) (Val U32 11))))
-    (For 'i 10 (Val U8 8)
-         (Assert (Bin 'ieq (Var U8 'i) (Val U8 11)))))))
+    (Let 'ans
+         (If (Bin 'ieq (Val U32 7) (Val U32 7))
+             (Let 'x (Val U32 6)
+                  (Seq
+                   (Assign (Var U32 'x) (Val U32 7))
+                   (Let 'y (Val F64 3.14)
+                        (Bin 'iadd (Var U32 'x) (Val U32 8)))))
+             (Let 'z (Val U32 16)
+                  (Bin 'iadd (Var U32 'z) (Val U32 9))))
+         (Seq*
+          (Loop 'i 10 False
+                (Assert (Bin 'ieq (Val U32 10) (Val U32 11))))
+          (While 10 False
+                 (Assert (Bin 'ieq (Val U32 10) (Val U32 11))))
+          (For 'i 10 (Val U8 8)
+               (Assert (Bin 'iule (Var U8 'i) (Val U8 11)))))))))
 
 ;; XXX
 
