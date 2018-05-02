@@ -214,13 +214,13 @@
    [unsafe? boolean?]
    [read-vs (set/c Variable?)]
    [write-vs (set/c Variable?)]
+   [lval (or/c #f Variable?)]
    [v->ty (hash/c #:immutable #t Variable? Type?)]
    [mem (or/c #f Type?)]
    [rtime ival?]))
 ;; XXX format (should take a mapping from variable to path)
 ;; XXX weakest-precondition
 ;; XXX strongest-postcondition
-;; XXX lval
 
 (define (Exprs-unsafe? . es)
   (for/or ([e (in-list es)])
@@ -234,11 +234,12 @@
 (define Exprs-write-vs (Exprs-*-vs set-union Expr-write-vs))
 (define Exprs-v->ty (Exprs-*-vs map-union Expr-v->ty))
 
-(define/contract (VarR ty x)
+(define/contract (Var ty x)
   (-> Type? Variable? Expr?)
   (Expr #:type ty
         #:unsafe? #f
         #:read-vs (seteq x)
+        #:lval x
         #:write-vs mt-set
         #:v->ty (hasheq x ty)
         #:mem #f
@@ -249,6 +250,7 @@
   (Expr #:type ty
         #:unsafe? #f
         #:read-vs mt-set
+        #:lval #f
         #:write-vs mt-set
         #:v->ty mt-map
         #:mem #f
@@ -265,6 +267,7 @@
         #:unsafe? (Exprs-unsafe? e be)
         #:read-vs (set-union (Expr-read-vs e)
                              (set-remove (Expr-read-vs be) v))
+        #:lval #f
         #:write-vs (set-union (Expr-write-vs e)
                               (set-remove bs-writes v))
         #:v->ty (map-union (Expr-v->ty e)
@@ -320,6 +323,7 @@
   (Expr #:type result-ty
         #:unsafe? (Exprs-unsafe? lhs rhs)
         #:read-vs (Exprs-read-vs lhs rhs)
+        #:lval #f
         #:write-vs (Exprs-write-vs lhs rhs)
         #:v->ty (Exprs-v->ty lhs rhs)
         #:mem (UniT (hasheq 'lhs (Expr-mem lhs) 'rhs (Expr-mem rhs)))
@@ -332,13 +336,27 @@
 ;; XXX Unsafe (i.e. call C function)
 ;; XXX Cast
 
-;; XXX Assign
+(define Expr+LVal?
+  (and/c Expr?
+         (flat-named-contract 'Expr-LVal Expr-lval)))
+
+(define/contract (Assign lhs rhs)
+  (-> Expr+LVal? Expr? Expr?)
+  (Expr #:type Void
+        #:unsafe? (Exprs-unsafe? lhs rhs)
+        #:read-vs (Exprs-read-vs lhs rhs)
+        #:lval #f
+        #:write-vs (set-add (Exprs-write-vs lhs rhs) (Expr-lval lhs))
+        #:v->ty (Exprs-v->ty lhs rhs)
+        #:mem (UniT (hasheq 'lhs (Expr-mem lhs) 'rhs (Expr-mem rhs)))
+        #:rtime (ival+ (Expr-rtime lhs) (ival+ (Expr-rtime rhs) (iunit 1)))))
 
 (define/contract (Seq f s)
   (-> Expr? Expr? Expr?)
   (Expr #:type (Expr-type s)
         #:unsafe? (Exprs-unsafe? f s)
         #:read-vs (Exprs-read-vs f s)
+        #:lval #f
         #:write-vs (Exprs-write-vs f s)
         #:v->ty (Exprs-v->ty f s)
         #:mem (UniT (hasheq 'f (Expr-mem f) 's (Expr-mem s)))
@@ -349,6 +367,7 @@
   (Expr #:type (Type-union (Expr-type t) (Expr-type f))
         #:unsafe? (Exprs-unsafe? c t f)
         #:read-vs (Exprs-read-vs c t f)
+        #:lval #f
         #:write-vs (Exprs-write-vs c t f)
         #:v->ty (Exprs-v->ty c t f)
         #:mem (RecT (hasheq 'c (Expr-mem c)
@@ -360,24 +379,26 @@
   (Expr #:type Void
         #:unsafe? #f
         #:read-vs mt-set
+        #:lval #f
         #:write-vs mt-set
         #:v->ty mt-map
         #:mem #f
         #:rtime (iunit 0)))
 
-(define/contract Abort Expr?
+(define/contract (Abort msg) (-> string? Expr?)
+  ;; XXX use msg
   (Expr #:type Void
         #:unsafe? #f
         #:read-vs mt-set
+        #:lval #f
         #:write-vs mt-set
         #:v->ty mt-map
         #:mem #f
         #:rtime (iunit 0)))
 
-;; XXX May be better to make this primitive so it can be more easily
-;; removed
 (define/contract (Assert ?) (-> Expr? Expr?)
-  (If ? Skip Abort))
+  ;; XXX Annotate that it can be removed?
+  (If #:P 1.0 ? Skip (Abort "XXX assertion violation")))
 
 ;; XXX Loop
 ;; XXX Break
@@ -390,9 +411,9 @@
    (If (Val Bool #t)
        (Let 'x (Val U32 6)
             (Let 'y (Val F64 3.14)
-                 (Bin 'iadd (VarR U32 'x) (Val U32 8))))
+                 (Bin 'iadd (Var U32 'x) (Val U32 8))))
        (Let 'z (Val U32 16)
-            (Bin 'iadd (VarR U32 'z) (Val U32 9))))))
+            (Bin 'iadd (Var U32 'z) (Val U32 9))))))
 
 ;; XXX
 
