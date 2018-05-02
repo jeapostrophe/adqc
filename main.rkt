@@ -636,14 +636,19 @@
           (list* "{ " indent++
                  ((Type-fmt-decl idx-ty) idx-id) " = 0;" indent-nl
                  ((Type-fmt-decl c-ty) c-id) " = 1;" indent-nl
-                 ;; XXX Need to assert that c-id is false when idx-id = max-count
+                 ;; XXX What if max-count is 0? Need to compute c first
                  "while ( " idx-id " < " max-count " && " c-id " ) {" indent++ indent-nl
                  ((Expr-fmt-c c) v->c+ (fmt-assign c-id)) indent-nl
                  "if ( " c-id ") {" indent++ indent-nl
                  ((Expr-fmt-c b) v->c+ ret)
                  indent-- " }" indent-nl
                  idx-id "++;" indent-nl
-                 indent-- "}"
+                 indent-- "}" indent-nl
+                 "if ( " c-id " ) {" indent++ indent-nl
+                 "fprintf(stderr, " (~v (~a "Loop exit, without condition false: " c-id)) ");"
+                 indent-nl
+                 "exit(1);"
+                 indent-- " }" indent-nl
                  indent-- " }"))
 
         #:wp (λ (r Q)
