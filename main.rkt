@@ -229,7 +229,6 @@
 (struct logic-var logic (v) #:prefab)
 (struct *logic-bin logic (op lhs rhs) #:prefab)
 (struct *logic-not logic (arg) #:prefab)
-(struct logic-XXX logic (where) #:prefab)
 
 (define (logic-not a)
   (match a
@@ -269,8 +268,7 @@
                 (logic-subst r x c))]
     [(*logic-not e)
      (logic-not (logic-subst e x c))]
-    [(or (? logic-const?)
-         (? logic-XXX?))
+    [(? logic-const?)
      e]))
 
 (define (logic-format l)
@@ -279,8 +277,7 @@
       [(logic-const c) c]
       [(logic-var v) v]
       [(*logic-not l) (list 'not (rec l))]
-      [(*logic-bin op l r) (list op (rec l) (rec r))]
-      [(logic-XXX where) (list 'XXX where)]))
+      [(*logic-bin op l r) (list op (rec l) (rec r))]))
   (pretty-format (rec l)))
 ;;;; / Logic
 
@@ -636,7 +633,8 @@
           (list* "{ " indent++
                  ((Type-fmt-decl idx-ty) idx-id) " = 0;" indent-nl
                  ((Type-fmt-decl c-ty) c-id) " = 1;" indent-nl
-                 ;; XXX What if max-count is 0? Need to compute c first
+                 ;; XXX What if max-count is 0? Need to compute c
+                 ;; first for after cond
                  "while ( " idx-id " < " max-count " && " c-id " ) {" indent++ indent-nl
                  ((Expr-fmt-c c) v->c+ (fmt-assign c-id)) indent-nl
                  "if ( " c-id ") {" indent++ indent-nl
@@ -645,7 +643,8 @@
                  idx-id "++;" indent-nl
                  indent-- "}" indent-nl
                  "if ( " c-id " ) {" indent++ indent-nl
-                 "fprintf(stderr, " (~v (~a "Loop exit, without condition false: " c-id)) ");"
+                 "fprintf(stderr, "
+                 (~v (~a "Loop exit, without condition false: " c-id)) ");"
                  indent-nl
                  "exit(1);"
                  indent-- " }" indent-nl
@@ -688,6 +687,10 @@
 ;; XXX Specification (i.e. function call spot, rather than
 ;; fully-inlining everything)
 
+;; XXX Separate exprs and statements?
+
+;; XXX Gather XXX comments from v1 and v2
+
 (define (tree-for f t)
   (match t
     [(cons a d) (tree-for f a) (tree-for f d)]
@@ -727,6 +730,8 @@
              indent-- " }")))
 
 ;; XXX Study what LLVM does to this program
+
+;; XXX Add racket-like syntax macro
 
 (module+ test
   (Expr-emit
