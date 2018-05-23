@@ -23,6 +23,9 @@
     [`(while ,(? expr?) ,@(? (listof step?))) #t]
     [_ #f]))
 
+(define (true? v)
+  (if v #t #f))
+
 ;; V = nat | bool
 ;; A = [X -> V] ...
 
@@ -46,8 +49,8 @@
      (and (recur L) (recur R))]
     [`(or ,L ,R)
      (or (recur L) (recur R))]
-    [`(not ,L ,R)
-     (not (recur L) (recur R))]
+    [`(not ,E)
+     (not (recur E))]
     [(? symbol?)
      (hash-ref env exp)]))
 
@@ -76,8 +79,29 @@
            [else env])]))
 
 
-;; A x P -> ?
-
+;; A x P -> ? (T/F)
+(define (check-pred env pred)
+  (match pred
+    [(? boolean?) pred]
+    [(? symbol?)
+     (hash-ref env pred)]
+    [`(= ,L ,R)
+     (= (eval-expr env L)
+        (eval-expr env R))]
+    [`(< ,L ,R)
+     (< (eval-expr env L)
+        (eval-expr env R))]
+    [`(> ,L ,R)
+     (> (eval-expr env L)
+        (eval-expr env R))]
+    [`(and ,L ,R)
+     (true? (and (eval-expr env L)
+                 (eval-expr env R)))]
+    [`(or ,L ,R)
+     (true? (or (eval-expr env L)
+                (eval-expr env R)))]
+    [`(not ,P)
+     (not (true? (eval-expr env P)))]))
 
 
 ;; S x P -> P (weakest precondition)
