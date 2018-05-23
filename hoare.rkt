@@ -57,6 +57,7 @@
   (define (recur step*)
     (apply-step env step*))
   (match step
+    ['skip env]
     [`(:= ,(? symbol? var) ,exp)
      (define new-val (eval-expr env exp))
      (hash-set env var new-val)]
@@ -96,6 +97,8 @@
   (chk #t (eval-expr (hash) '(> 1 0)))
   (chk #f (eval-expr (hash) '(> 0 1)))
   ;; apply-step
+  (chk (hash 'x 1)
+       (apply-step (hash 'x 1) 'skip))
   (chk (hash 'x 5)
        (apply-step (hash) '(:= x 5)))
   (chk (hash 'x 5 'y 6)
