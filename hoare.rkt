@@ -1,30 +1,50 @@
 #lang racket/base
-(require racket/contract/base
-         racket/match
-         racket/set)
+(require racket/match)
 
-(define (expr? v)
-  (define (op? w)
-    (set-member? '(+ - = < > and or not) w))
-  (match v
-    [(? number?) #t]
-    [(list (? op?) (? expr?) (? expr?)) #t]
-    [(? symbol?) #t]
-    [_ #f]))
+;; TODO: unsigned values in racket?
+(define bin-op-table
+  (hasheq 'iadd +
+          'isub -
+          'imul *
+          ; 'iudiv
+          'isdiv /
+          ; 'iurem
+          'isrem remainder
+          ; 'ishl - lshift
+          ; 'ilshr - logical rshift
+          ; 'iashr - arithetic rshift
+          'ior bitwise-ior
+          'iand bitwise-and
+          'ixor bitwise-xor
+          ))
 
-(define (step? v)
-  (match v
-    ['skip #t]
-    [`(:= ,(? symbol?) ,(? expr?)) #t]
-    [`(begin ,@(? (listof step?))) #t]
-    ;[`(begin (? skip? skps) ...) #t]
-    ;[`(begin ,@(list (? skip?) ..2)) #t]
-    [`(if ,(? expr?) ,(? step?) ,(? step?)) #t]
-    [`(while ,(? expr?) ,@(? (listof step?))) #t]
-    [_ #f]))
+(define cmp-table
+  (hasheq 'ieq =
+          'ine (λ (a b) (not (= a b)))
+          ; 'iugt - unsigned >
+          ; 'iuge - unsigned >=
+          ; 'iult - unsigned <
+          ; 'iule - unsigned <=
+          'isgt >
+          'isge >=
+          'islt <
+          'isle <=
+          ))
+
+(struct IBinOp (op L R) #:transparent)
+(struct ICmp (op L R) #:transparent)
+
+(define Skip (gensym 'Skip))
+(struct Begin (L-stmt R-stmt) #:transparent)
+(struct Assign (dest exp) #:transparent)
+(struct If (pred then else) #:transparent)
+(struct While (pred stmt) #:transparent)
 
 (define (true? v)
   (if v #t #f))
+
+(define (bool->c b)
+  (if b 1 0))
 
 ;; V = nat | bool
 ;; A = [X -> V] ...
@@ -34,105 +54,108 @@
   (define (recur exp*)
     (eval-expr env exp*))
   (match exp
-    [(? number?) exp]
-    [`(+ ,L ,R)
-     (+ (recur L) (recur R))]
-    [`(- ,L ,R)
-     (- (recur L) (recur R))]
-    [`(= ,L ,R)
-     (= (recur L) (recur R))]
-    [`(< ,L ,R)
-     (< (recur L) (recur R))]
-    [`(> ,L ,R)
-     (> (recur L) (recur R))]
-    [`(and ,L ,R)
-     (and (recur L) (recur R))]
-    [`(or ,L ,R)
-     (or (recur L) (recur R))]
-    [`(not ,E)
-     (not (recur E))]
+    [(? exact-integer?) exp]
     [(? symbol?)
-     (hash-ref env exp)]))
+     (hash-ref env exp)]
+    [(IBinOp op L R)
+     (define op-fn (hash-ref bin-op-table op))
+     (op-fn (recur L) (recur R))]
+    [(ICmp op L R)
+     (define op-fn (hash-ref cmp-table op))
+     (bool->c (op-fn (recur L) (recur R)))]))
 
 
 ;; A x S -> A
-(define (apply-step env step)
-  (define (recur step*)
-    (apply-step env step*))
-  (match step
-    ['skip env]
-    [`(:= ,(? symbol? var) ,exp)
+(define (eval-stmt env stmt)
+  (define (recur stmt*)
+    (eval-stmt env stmt*))
+  (match stmt
+    ;; Skip
+    [(? (λ (v) (eq? v Skip))) env]
+    ;; Assign
+    [(Assign (? symbol? dest) exp)
      (define new-val (eval-expr env exp))
-     (hash-set env var new-val)]
-    [`(begin ,steps ..1)
-     (for/fold ([out-env env])
-               ([stp steps])
-       (apply-step out-env stp))]
-    [`(if ,exp ,S ,T)
-     (if (eval-expr env exp)
-         (recur S)
-         (recur T))]
-    [`(while ,exp ,steps ..1)
-     (cond [(eval-expr env exp)
-            (define new-env (recur `(begin ,@steps)))
-            (apply-step new-env step)]
+     (hash-set env dest new-val)]
+    ;; Begin
+    [(Begin L-stmt R-stmt)
+     (define env* (recur L-stmt))
+     (eval-stmt env* R-stmt)]
+    ;; If
+    [(If pred then else)
+     (if (not (zero? (eval-expr env pred)))
+         (recur then)
+         (recur else))]
+    ;; While
+    [(While pred do-stmt)
+     (cond [(not (zero? (eval-expr env pred)))
+            (define new-env (recur do-stmt))
+            (eval-stmt new-env stmt)]
            [else env])]))
-
+     
 
 ;; A x P -> ? (T/F)
 (define (check-pred env pred)
-  (match pred
-    [(? boolean?) pred]
-    [(? symbol?)
-     (hash-ref env pred)]
-    [`(= ,L ,R)
-     (= (eval-expr env L)
-        (eval-expr env R))]
-    [`(< ,L ,R)
-     (< (eval-expr env L)
-        (eval-expr env R))]
-    [`(> ,L ,R)
-     (> (eval-expr env L)
-        (eval-expr env R))]
-    [`(and ,L ,R)
-     (true? (and (eval-expr env L)
-                 (eval-expr env R)))]
-    [`(or ,L ,R)
-     (true? (or (eval-expr env L)
-                (eval-expr env R)))]
-    [`(not ,P)
-     (not (true? (eval-expr env P)))]))
+  (not (zero? (eval-expr env pred))))
 
 
 ;; S x P -> P (weakest precondition)
 
 
-
 (module+ test
   (require chk)
   ;; eval-expr
-  (chk 5 (eval-expr (hash) 5))
-  (chk 5 (eval-expr (hash 'x 5) 'x))
-  (chk 11 (eval-expr (hash 'x 5 'y 6) '(+ x y)))
-  (chk #t (eval-expr (hash) '(= 1 1)))
-  (chk #f (eval-expr (hash) '(= 0 1)))
-  (chk #t (eval-expr (hash) '(< 0 1)))
-  (chk #f (eval-expr (hash) '(< 1 0)))
-  (chk #t (eval-expr (hash) '(> 1 0)))
-  (chk #f (eval-expr (hash) '(> 0 1)))
-  ;; apply-step
-  (chk (hash 'x 1)
-       (apply-step (hash 'x 1) 'skip))
-  (chk (hash 'x 5)
-       (apply-step (hash) '(:= x 5)))
-  (chk (hash 'x 5 'y 6)
-       (apply-step (hash) '(begin (:= x 5) (:= y 6))))
-  (chk (hash 'x 0)
-       (apply-step (hash) '(if (= 2 2) (:= x 0) (:= y 0))))
-  (chk (hash 'y 0)
-       (apply-step (hash) '(if (= 2 1) (:= x 0) (:= y 0))))
-  (chk (hash 'x 5)
-       (apply-step (hash 'x 0) '(while (< x 5) (:= x (+ x 1)))))
-  (chk (hash 'x 5 'y 10)
-       (apply-step (hash 'x 0) '(while (< x 5) (:= x (+ x 1)) (:= y (+ x x)))))
+  (chk (eval-expr (hash) 5)
+       5)
+  (chk (eval-expr (hash 'x 5) 'x)
+       5)
+  (chk (eval-expr (hash) (IBinOp 'iadd 5 6))
+       11)
+  (chk (eval-expr (hash 'x 5 'y 6) (IBinOp 'iadd 'x 'y))
+       11)
+  (chk (eval-expr (hash) (IBinOp 'isub 6 5))
+       1)
+  (chk (eval-expr (hash) (IBinOp 'imul 3 4))
+       12)
+  (chk (eval-expr (hash) (IBinOp 'isdiv 12 4))
+       3)
+  (chk (eval-expr (hash) (IBinOp 'isrem 12 5))
+       2)
+  (chk (eval-expr (hash) (IBinOp 'ior 2 1))
+       3)
+  (chk (eval-expr (hash) (IBinOp 'iand 3 1))
+       1)
+  (chk (eval-expr (hash) (IBinOp 'ixor 3 2))
+       1)
+  (chk (eval-expr (hash) (ICmp 'ieq 1 1))
+       1)
+  (chk (eval-expr (hash) (ICmp 'ieq 1 0))
+       0)
+  (chk (eval-expr (hash) (ICmp 'ine 1 1))
+       0)
+  (chk (eval-expr (hash) (ICmp 'ine 1 0))
+       1)
+  ;; TODO: Test the rest of the integer comparions.
+
+  ;; eval-stmt
+  (chk (eval-stmt (hash 'x 1) Skip)
+       (hash 'x 1))
+  (chk (eval-stmt (hash) (Assign 'x 5))
+       (hash 'x 5))
+  (chk (eval-stmt (hash) (Assign 'x (IBinOp 'iadd 5 6)))
+       (hash 'x 11))
+  (chk (eval-stmt (hash) (Begin (Assign 'x 1) (Assign 'y 2)))
+       (hash 'x 1 'y 2))
+  (chk (eval-stmt (hash) (If (ICmp 'ieq 0 0) (Assign 'x 1) (Assign 'y 2)))
+       (hash 'x 1))
+  (chk (eval-stmt (hash) (If (ICmp 'ieq 0 1) (Assign 'x 1) (Assign 'y 2)))
+       (hash 'y 2))
+  (chk (eval-stmt (hash 'x 0) (While (ICmp 'islt 'x 5)
+                                     (Assign 'x (IBinOp 'iadd 'x 1))))
+       (hash 'x 5))
+  (chk (eval-stmt (hash 'x 0) (While (ICmp 'islt 'x 5)
+                                     (Begin (Assign 'x (IBinOp 'iadd 'x 1))
+                                            (Assign 'y (IBinOp 'iadd 'x 'x)))))
+       (hash 'x 5 'y 10))
+
+  ;;TODO: Tests for check-pred.
   )
