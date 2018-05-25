@@ -1,5 +1,15 @@
 #lang racket/base
-(require racket/match)
+(require racket/contract/base
+         racket/contract/region
+         racket/match)
+
+(define/contract (arithmetic-shift-left n m)
+  (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
+  (arithmetic-shift n m))
+
+(define/contract (arithmetic-shift-right n m)
+  (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
+  (arithmetic-shift n (- m)))
 
 ;; TODO: unsigned values in racket?
 (define bin-op-table
@@ -10,9 +20,9 @@
           'isdiv (λ (a b) (floor (/ a b)))
           ; 'iurem
           'isrem remainder
-          ; 'ishl - lshift
+          'ishl arithmetic-shift-left
           ; 'ilshr - logical rshift
-          ; 'iashr - arithetic rshift
+          'iashr arithmetic-shift-right
           'ior bitwise-ior
           'iand bitwise-and
           'ixor bitwise-xor
