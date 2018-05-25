@@ -98,12 +98,12 @@
      (eval-stmt env* R-stmt)]
     ;; If
     [(If pred then else)
-     (if (not (zero? (eval-expr env pred)))
+     (if (check-pred env pred)
          (recur then)
          (recur else))]
     ;; While
     [(While pred do-stmt)
-     (cond [(not (zero? (eval-expr env pred)))
+     (cond [(check-pred env pred) 
             (define new-env (recur do-stmt))
             (eval-stmt new-env stmt)]
            [else env])]))
