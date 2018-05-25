@@ -17,7 +17,7 @@
           'isub -
           'imul *
           ; 'iudiv
-          'isdiv (λ (a b) (floor (/ a b)))
+          'isdiv quotient
           ; 'iurem
           'isrem remainder
           'ishl arithmetic-shift-left
@@ -127,6 +127,8 @@
   (chk (eval-expr (hash) (IBinOp 'imul 3 4))
        12)
   (chk (eval-expr (hash) (IBinOp 'isdiv 12 4))
+       3)
+  (chk (eval-expr (hash) (IBinOp 'isdiv 13 4))
        3)
   (chk (eval-expr (hash) (IBinOp 'isrem 12 5))
        2)
