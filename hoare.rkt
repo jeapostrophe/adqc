@@ -17,13 +17,18 @@
 ;; large or small.
 (define 2^64 (expt 2 64))
 
+(define ((unsigned-arith op) a b)
+  (modulo (op a b) 2^64))
+
 (define bin-op-table
   (hasheq 'iadd +
           'isub -
           'imul *
           ; 'iudiv
+          'iudiv (λ (a b) (modulo (quotient a b) 2^64))
           'isdiv quotient
           ; 'iurem
+          'iurem (λ (a b) (modulo (remainder a b) 2^64))
           'isrem remainder
           'ishl arithmetic-shift-left
           ; 'ilshr - logical rshift
@@ -132,10 +137,13 @@
        1)
   (chk (eval-expr (hash) (IBinOp 'imul 3 4))
        12)
+  (chk #:t (> (eval-expr (hash) (IBinOp 'iudiv 10 -2)) 0))
   (chk (eval-expr (hash) (IBinOp 'isdiv 12 4))
        3)
   (chk (eval-expr (hash) (IBinOp 'isdiv 13 4))
        3)
+  ;; TODO: What's the actual difference between signed
+  ;; and unsigned remainder?
   (chk (eval-expr (hash) (IBinOp 'isrem 12 5))
        2)
   (chk (eval-expr (hash) (IBinOp 'ishl 2 1))
