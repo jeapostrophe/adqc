@@ -7,7 +7,7 @@
           'isub -
           'imul *
           ; 'iudiv
-          'isdiv /
+          'isdiv (λ (a b) (floor (/ a b)))
           ; 'iurem
           'isrem remainder
           ; 'ishl - lshift
