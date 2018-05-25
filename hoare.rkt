@@ -11,7 +11,12 @@
   (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
   (arithmetic-shift n (- m)))
 
-;; TODO: unsigned values in racket?
+;; For now, assume 64 bits of storage for unsigned values.
+;; TODO: Should signed values also be restricted to 64-bits?
+;; Right now, they are basically BigInts and can grow very
+;; large or small.
+(define 2^64 (expt 2 64))
+
 (define bin-op-table
   (hasheq 'iadd +
           'isub -
@@ -28,13 +33,17 @@
           'ixor bitwise-xor
           ))
 
+(define ((unsigned-cmp op) a b)
+  (op (modulo a 2^64)
+      (modulo b 2^64)))
+
 (define cmp-table
   (hasheq 'ieq =
           'ine (λ (a b) (not (= a b)))
-          ; 'iugt - unsigned >
-          ; 'iuge - unsigned >=
-          ; 'iult - unsigned <
-          ; 'iule - unsigned <=
+          'iugt (unsigned-cmp >)
+          'iuge (unsigned-cmp >=)
+          'iult (unsigned-cmp <)
+          'iule (unsigned-cmp <=)
           'isgt >
           'isge >=
           'islt <
@@ -49,9 +58,6 @@
 (struct Assign (dest exp) #:transparent)
 (struct If (pred then else) #:transparent)
 (struct While (pred stmt) #:transparent)
-
-(define (true? v)
-  (if v #t #f))
 
 (define (bool->c b)
   (if b 1 0))
@@ -153,6 +159,14 @@
   (chk (eval-expr (hash) (ICmp 'ine 1 1))
        0)
   (chk (eval-expr (hash) (ICmp 'ine 1 0))
+       1)
+  (chk (eval-expr (hash) (ICmp 'iugt -1 5))
+       1)
+  (chk (eval-expr (hash) (ICmp 'iuge -1 5))
+       1)
+  (chk (eval-expr (hash) (ICmp 'iult 5 -1))
+       1)
+  (chk (eval-expr (hash) (ICmp 'iule 5 -1))
        1)
   (chk (eval-expr (hash) (ICmp 'isgt 1 0))
        1)
