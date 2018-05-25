@@ -44,10 +44,10 @@
 (struct IBinOp (op L R) #:transparent)
 (struct ICmp (op L R) #:transparent)
 
-(define Skip (gensym 'Skip))
+(struct Skip () #:transparent)
 (struct Begin (L-stmt R-stmt) #:transparent)
 (struct Assign (dest exp) #:transparent)
-(struct If (pred then else) #:transparent)
+(struct If (pred then eSlse) #:transparent)
 (struct While (pred stmt) #:transparent)
 
 (define (true? v)
@@ -81,7 +81,7 @@
     (eval-stmt env stmt*))
   (match stmt
     ;; Skip
-    [(? (λ (v) (eq? v Skip))) env]
+    [(Skip) env]
     ;; Assign
     [(Assign (? symbol? dest) exp)
      (define new-val (eval-expr env exp))
@@ -147,7 +147,7 @@
   ;; TODO: Test the rest of the integer comparions.
 
   ;; eval-stmt
-  (chk (eval-stmt (hash 'x 1) Skip)
+  (chk (eval-stmt (hash 'x 1) (Skip))
        (hash 'x 1))
   (chk (eval-stmt (hash) (Assign 'x 5))
        (hash 'x 5))
