@@ -47,7 +47,7 @@
 (struct Skip () #:transparent)
 (struct Begin (L-stmt R-stmt) #:transparent)
 (struct Assign (dest exp) #:transparent)
-(struct If (pred then eSlse) #:transparent)
+(struct If (pred then else) #:transparent)
 (struct While (pred stmt) #:transparent)
 
 (define (true? v)
