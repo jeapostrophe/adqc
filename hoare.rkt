@@ -55,6 +55,8 @@
 
 (struct IBinOp (op L R) #:transparent)
 (struct ICmp (op L R) #:transparent)
+(struct And (L R) #:transparent)
+(struct Or (L R) #:transparent)
 
 (struct Skip () #:transparent)
 (struct Begin (L-stmt R-stmt) #:transparent)
@@ -81,7 +83,13 @@
      (op-fn (recur L) (recur R))]
     [(ICmp op L R)
      (define op-fn (hash-ref cmp-table op))
-     (bool->c (op-fn (recur L) (recur R)))]))
+     (bool->c (op-fn (recur L) (recur R)))]
+    [(And L R)
+     (bool->c (and (check-pred env L)
+                   (check-pred env R)))]
+    [(Or L R)
+     (bool->c (or (check-pred env L)
+                  (check-pred env R)))]))
 
 
 ;; A x S -> A
@@ -193,6 +201,18 @@
   (chk (eval-expr (hash) (ICmp 'isle 1 1))
        1)
   (chk (eval-expr (hash) (ICmp 'isle 1 0))
+       0)
+  (chk (eval-expr (hash) (And (ICmp 'islt 2 3)
+                              (ICmp 'isge 3 3)))
+       1)
+  (chk (eval-expr (hash) (And (ICmp 'ieq 1 0)
+                              (ICmp 'ine 1 0)))
+       0)
+  (chk (eval-expr (hash) (Or (ICmp 'islt 1 0)
+                             (ICmp 'ieq 1 1)))
+       1)
+  (chk (eval-expr (hash) (Or (ICmp 'ieq 1 0)
+                             (ICmp 'islt 1 0)))
        0)
 
   ;; eval-stmt
