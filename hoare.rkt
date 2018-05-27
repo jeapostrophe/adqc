@@ -24,10 +24,8 @@
   (hasheq 'iadd +
           'isub -
           'imul *
-          ; 'iudiv
           'iudiv (λ (a b) (modulo (quotient a b) 2^64))
           'isdiv quotient
-          ; 'iurem
           'iurem (λ (a b) (modulo (remainder a b) 2^64))
           'isrem remainder
           'ishl arithmetic-shift-left
