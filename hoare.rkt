@@ -43,6 +43,15 @@
   (op (modulo a 2^64)
       (modulo b 2^64)))
 
+(define (c-and a b)
+  (if (not (zero? a))
+      (not (zero? b))
+      #f))
+
+(define (c-or a b)
+  (let ([tmp (not (zero? a))])
+    (if tmp tmp (not (zero? b)))))
+
 (define cmp-table
   (hasheq 'ieq =
           'ine (λ (a b) (not (= a b)))
@@ -54,21 +63,24 @@
           'isge >=
           'islt <
           'isle <=
+          'iand c-and
+          'ior c-or
           ))
 
 (struct IBinOp (op L R) #:transparent)
 (struct ICmp (op L R) #:transparent)
-
-;; TODO: probably want to add these to cmp-table instead
-;; of keeping them as special cases in all methods that use them
-(struct And (L R) #:transparent)
-(struct Or (L R) #:transparent)
 
 (struct Skip () #:transparent)
 (struct Begin (L-stmt R-stmt) #:transparent)
 (struct Assign (dest exp) #:transparent)
 (struct If (pred then else) #:transparent)
 (struct While (pred stmt) #:transparent)
+
+(define (And L R)
+  (ICmp 'iand L R))
+
+(define (Or L R)
+  (ICmp 'ior L R))
 
 (define (bool->c b)
   (if b 1 0))
@@ -89,13 +101,7 @@
      (op-fn (recur L) (recur R))]
     [(ICmp op L R)
      (define op-fn (hash-ref cmp-table op))
-     (bool->c (op-fn (recur L) (recur R)))]
-    [(And L R)
-     (bool->c (and (check-pred env L)
-                   (check-pred env R)))]
-    [(Or L R)
-     (bool->c (or (check-pred env L)
-                  (check-pred env R)))]))
+     (bool->c (op-fn (recur L) (recur R)))]))
 
 
 ;; A x S -> A
@@ -149,11 +155,7 @@
        [(IBinOp op L R)
         (IBinOp op (recur L) (recur R))]
        [(ICmp op L R)
-        (ICmp op (recur L) (recur R))]
-       [(And L R)
-        (And (recur L) (recur R))]
-       [(Or L R)
-        (Or (recur L) (recur R))])]
+        (ICmp op (recur L) (recur R))])]
     ;; Begin
     [(Begin L-stmt R-stmt)
      (define post-cond* (weakest-precond R-stmt post-cond))
