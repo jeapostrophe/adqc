@@ -17,16 +17,19 @@
 ;; large or small.
 (define 2^64 (expt 2 64))
 
-(define ((unsigned-arith op) a b)
-  (modulo (op a b) 2^64))
+(define (unsigned-quotient a b)
+  (modulo (quotient a b) 2^64))
+
+(define (unsigned-remainder a b)
+  (modulo (remainder a b) 2^64))
 
 (define bin-op-table
   (hasheq 'iadd +
           'isub -
           'imul *
-          'iudiv (λ (a b) (modulo (quotient a b) 2^64))
+          'iudiv unsigned-quotient
           'isdiv quotient
-          'iurem (λ (a b) (modulo (remainder a b) 2^64))
+          'iurem unsigned-remainder
           'isrem remainder
           'ishl arithmetic-shift-left
           ; 'ilshr - logical rshift
@@ -34,7 +37,7 @@
           'ior bitwise-ior
           'iand bitwise-and
           'ixor bitwise-xor
-          ))
+          ))          
 
 (define ((unsigned-cmp op) a b)
   (op (modulo a 2^64)
@@ -55,6 +58,9 @@
 
 (struct IBinOp (op L R) #:transparent)
 (struct ICmp (op L R) #:transparent)
+
+;; TODO: probably want to add these to cmp-table instead
+;; of keeping them as special cases in all methods that use them
 (struct And (L R) #:transparent)
 (struct Or (L R) #:transparent)
 
@@ -126,7 +132,41 @@
 
 
 ;; S x P -> P (weakest precondition)
-
+(define (weakest-precond stmt post-cond)
+  (define (recur post-cond*)
+    (weakest-precond stmt post-cond*))
+  (match stmt
+    ;; Skip
+    [(Skip) post-cond]
+    ;; Assign
+    [(Assign dest exp)
+     (match post-cond
+       [(? number?) post-cond]
+       [(? symbol?)
+        (if (eq? dest post-cond)
+            exp
+            post-cond)]
+       [(IBinOp op L R)
+        (IBinOp op (recur L) (recur R))]
+       [(ICmp op L R)
+        (ICmp op (recur L) (recur R))]
+       [(And L R)
+        (And (recur L) (recur R))]
+       [(Or L R)
+        (Or (recur L) (recur R))])]
+    ;; Begin
+    [(Begin L-stmt R-stmt)
+     (define post-cond* (weakest-precond R-stmt post-cond))
+     (weakest-precond L-stmt post-cond*)]
+    ;; If
+    [(If pred then else)
+     ;; p -> q  <->  (not p) or q
+     ;; TODO: Add (Not x) to grammar instead of using (= 0 x)
+     (And (Or (ICmp 'ieq 0 pred) 
+              (weakest-precond else post-cond))
+          (Or pred
+              (weakest-precond then post-cond)))]
+    ))
 
 (module+ test
   (require chk)
