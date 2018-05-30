@@ -82,6 +82,12 @@
 (define (Or L R)
   (ICmp 'ior L R))
 
+(define (Not b)
+  (ICmp 'ieq 0 b))
+
+(define (Implies a b)
+  (Or (Not a) b))
+
 (define (bool->c b)
   (if b 1 0))
 
@@ -162,12 +168,10 @@
      (weakest-precond L-stmt post-cond*)]
     ;; If
     [(If pred then else)
-     ;; p -> q  <->  (not p) or q
-     ;; TODO: Add (Not x) to grammar instead of using (= 0 x)
-     (And (Or (ICmp 'ieq 0 pred) 
-              (weakest-precond else post-cond))
-          (Or pred
-              (weakest-precond then post-cond)))]
+     (And (Implies pred
+                   (weakest-precond else post-cond))
+          (Implies (Not pred)
+                   (weakest-precond then post-cond)))]
     ))
 
 (module+ test
