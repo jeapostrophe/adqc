@@ -145,23 +145,12 @@
 
 ;; S x P -> P (weakest precondition)
 (define (weakest-precond stmt post-cond)
-  (define (recur post-cond*)
-    (weakest-precond stmt post-cond*))
   (match stmt
     ;; Skip
     [(Skip) post-cond]
     ;; Assign
     [(Assign dest exp)
-     (match post-cond
-       [(? number?) post-cond]
-       [(? symbol?)
-        (if (eq? dest post-cond)
-            exp
-            post-cond)]
-       [(IBinOp op L R)
-        (IBinOp op (recur L) (recur R))]
-       [(ICmp op L R)
-        (ICmp op (recur L) (recur R))])]
+     (subst post-cond dest exp)]
     ;; Begin
     [(Begin L-stmt R-stmt)
      (define post-cond* (weakest-precond R-stmt post-cond))
@@ -173,6 +162,20 @@
           (Implies (Not pred)
                    (weakest-precond then post-cond)))]
     ))
+
+(define (subst start-exp remv-exp subst-exp)
+  (define (recur start-exp*)
+    (subst start-exp* remv-exp subst-exp))
+  (define (eq-remv-exp? e)
+    (equal? e remv-exp))
+  (match start-exp
+    ;; Will substitute any exp that is equal? to remv-exp with subst-exp
+    [(? eq-remv-exp?) subst-exp]
+    [(? (or/c number? symbol?)) start-exp]
+    [(IBinOp op L R)
+     (IBinOp op (recur L) (recur R))]
+    [(ICmp op L R)
+     (ICmp op (recur L) (recur R))]))
 
 (module+ test
   (require chk)
