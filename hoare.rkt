@@ -74,7 +74,7 @@
 (struct Begin (L-stmt R-stmt) #:transparent)
 (struct Assign (dest exp) #:transparent)
 (struct If (pred then else) #:transparent)
-(struct While (pred stmt) #:transparent)
+(struct While (pred invar stmt) #:transparent)
 
 (define (And L R)
   (ICmp 'iand L R))
@@ -131,7 +131,7 @@
          (recur then)
          (recur else))]
     ;; While
-    [(While pred do-stmt)
+    [(While pred _ do-stmt)
      (cond [(check-pred env pred) 
             (define new-env (recur do-stmt))
             (eval-stmt new-env stmt)]
@@ -161,7 +161,13 @@
                    (weakest-precond else post-cond))
           (Implies (Not pred)
                    (weakest-precond then post-cond)))]
-    ))
+    ;; While (weakest *liberal* pre-condition)
+    [(While pred invar do-stmt)
+     (And invar
+          (And (Implies (And pred invar)
+                        (weakest-precond do-stmt invar))
+               (Implies (And (Not pred) invar)
+                        post-cond)))]))
 
 (define (subst start-exp remv-exp subst-exp)
   (define (recur start-exp*)
@@ -278,9 +284,11 @@
   (chk (eval-stmt (hash) (If (ICmp 'ieq 0 1) (Assign 'x 1) (Assign 'y 2)))
        (hash 'y 2))
   (chk (eval-stmt (hash 'x 0) (While (ICmp 'islt 'x 5)
+                                     (ICmp 'isle 'x 5)
                                      (Assign 'x (IBinOp 'iadd 'x 1))))
        (hash 'x 5))
   (chk (eval-stmt (hash 'x 0) (While (ICmp 'islt 'x 5)
+                                     (ICmp 'isle 'x 5)
                                      (Begin (Assign 'x (IBinOp 'iadd 'x 1))
                                             (Assign 'y (IBinOp 'iadd 'x 'x)))))
        (hash 'x 5 'y 10))
