@@ -84,20 +84,27 @@
 
 
 ;; Predicates for Expr and Stmt
-(define Expr? (or/c Integer? IBinOp? ICmp?))
+;; TODO: symbol? should be a struct w/ type info.
+(define Expr? (or/c symbol? Integer? IBinOp? ICmp?))
 (define Stmt? (or/c Skip? Begin? Assign? If? While?))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (provide
- ;; TODO: contracts for integer constructors.
- i64
  (contract-out
   ;; Exprs
   [struct IBinOp ([op symbol?] [L Expr?] [R Expr?])]
   [struct ICmp ([op symbol?] [L Expr?] [R Expr?])]
   [struct Integer ([signed? boolean?] [bits Integer-bit-width?] [val exact-integer?])]
+  [i8 ((integer-in -128 127) . -> . Integer?)]
+  [i16 ((integer-in (- (expt 2 15)) (sub1 (expt 2 15))) . -> . Integer?)]
+  [i32 ((integer-in (- (expt 2 31)) (sub1 (expt 2 31))) . -> . Integer?)]
+  [i64 ((integer-in (- (expt 2 63)) (sub1 (expt 2 63))) . -> . Integer?)]
+  [u8 ((integer-in 0 (sub1 (expt 2 8))) . -> . Integer?)]
+  [u16 ((integer-in 0 (sub1 (expt 2 16))) . -> . Integer?)]
+  [u32 ((integer-in 0 (sub1 (expt 2 32))) . -> . Integer?)]
+  [u64 ((integer-in 0 (sub1 (expt 2 64))) . -> . Integer?)]
   [IAdd (Expr? Expr? . -> . Expr?)]
   [ISub (Expr? Expr? . -> . Expr?)]
   [IMul (Expr? Expr? . -> . Expr?)]
