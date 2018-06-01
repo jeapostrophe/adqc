@@ -1,7 +1,9 @@
 #lang racket/base
 (require racket/contract/base
          racket/contract/region
-         racket/match)
+         racket/match
+         "grammar.rkt")
+
 
 (define/contract (arithmetic-shift-left n m)
   (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
@@ -66,27 +68,6 @@
           'iand c-and
           'ior c-or
           ))
-
-(struct IBinOp (op L R) #:transparent)
-(struct ICmp (op L R) #:transparent)
-
-(struct Skip () #:transparent)
-(struct Begin (L-stmt R-stmt) #:transparent)
-(struct Assign (dest exp) #:transparent)
-(struct If (pred then else) #:transparent)
-(struct While (pred invar stmt) #:transparent)
-
-(define (And L R)
-  (ICmp 'iand L R))
-
-(define (Or L R)
-  (ICmp 'ior L R))
-
-(define (Not b)
-  (ICmp 'ieq 0 b))
-
-(define (Implies a b)
-  (Or (Not a) b))
 
 (define (bool->c b)
   (if b 1 0))
@@ -284,11 +265,11 @@
   (chk (eval-stmt (hash) (If (ICmp 'ieq 0 1) (Assign 'x 1) (Assign 'y 2)))
        (hash 'y 2))
   (chk (eval-stmt (hash 'x 0) (While (ICmp 'islt 'x 5)
-                                     (ICmp 'isle 'x 5)
+                                     ;(ICmp 'isle 'x 5)
                                      (Assign 'x (IBinOp 'iadd 'x 1))))
        (hash 'x 5))
   (chk (eval-stmt (hash 'x 0) (While (ICmp 'islt 'x 5)
-                                     (ICmp 'isle 'x 5)
+                                     ;(ICmp 'isle 'x 5)
                                      (Begin (Assign 'x (IBinOp 'iadd 'x 1))
                                             (Assign 'y (IBinOp 'iadd 'x 'x)))))
        (hash 'x 5 'y 10))
