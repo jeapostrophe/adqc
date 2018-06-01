@@ -80,9 +80,13 @@
   (define (recur exp*)
     (eval-expr env exp*))
   (match exp
-    [(? exact-integer?) exp]
+    ;; TODO: Use struct instead of raw symbol for variable names?
+    ;;       Definitely, we're going to need type info
     [(? symbol?)
      (hash-ref env exp)]
+    ;; TODO: Should eval-expr return Racket numbers or Integer structs?
+    [(Integer signed? bits val)
+     val]
     [(IBinOp op L R)
      (define op-fn (hash-ref bin-op-table op))
      (op-fn (recur L) (recur R))]
@@ -99,7 +103,7 @@
     ;; Skip
     [(Skip) env]
     ;; Assign
-    [(Assign (? symbol? dest) exp)
+    [(Assign dest exp)
      (define new-val (eval-expr env exp))
      (hash-set env dest new-val)]
     ;; Begin
@@ -164,6 +168,33 @@
     [(ICmp op L R)
      (ICmp op (recur L) (recur R))]))
 
+(module+ test
+  (require chk)
+  ;; eval-expr
+  (chk (eval-expr (hash) (i64 5)) 5)
+  (chk (eval-expr (hash 'x 5) 'x) 5)
+  (chk (eval-expr (hash) (IAdd (i64 5) (i64 6))) 11)
+  (chk (eval-expr (hash 'x 5 'y 6) (IAdd 'x 'y)) 11)
+  (chk (eval-expr (hash) (ISub (i64 6) (i64 5))) 1)
+  (chk (eval-expr (hash) (IMul (i64 3) (i64 4))) 12)
+  (chk #:t (> (eval-expr (hash) (IUDiv (i64 10) (i64 -2))) 0))
+  (chk (eval-expr (hash) (ISDiv (i64 12) (i64 4))) 3)
+  (chk (eval-expr (hash) (ISDiv (i64 13) (i64 4))) 3)
+  ;; TODO: Unsigned remainder? What's the difference between signed/unsigned?
+  (chk (eval-expr (hash) (ISRem (i64 12) (i64 5))) 2)
+  (chk (eval-expr (hash) (IShl (i64 2) (i64 1))) 4)
+  (chk #:x (eval-expr (hash) (IShl (i64 2) (i64 -1))) exn:fail:contract?)
+  (chk (eval-expr (hash) (IAShr (i64 4) (i64 1))) 2)
+  (chk #:x (eval-expr (hash) IAShr (i64 4) (i64 -1)) exn:fail:contract?)
+  (chk (eval-expr (hash) (IOr (i64 1) (i64 2))) 3)
+  (chk (eval-expr (hash) (IAnd (i64 3) (i64 1))) 1)
+  (chk (eval-expr (hash) (IXor (i64 3) (i64 2))) 1)
+  (chk (eval-expr (hash) (IEq (i64 1) (i64 1))) 1)
+  (chk (eval-expr (hash) (INe (i64 1) (i64 1))) 1)
+  ;; TODO: retyping unit tests is expensive...
+  )
+
+#;
 (module+ test
   (require chk)
   ;; eval-expr
