@@ -190,7 +190,7 @@
   (chk (eval-expr (hash) (IAnd (i64 3) (i64 1))) 1)
   (chk (eval-expr (hash) (IXor (i64 3) (i64 2))) 1)
   (chk (eval-expr (hash) (IEq (i64 1) (i64 1))) 1)
-  (chk (eval-expr (hash) (INe (i64 1) (i64 1))) 1)
+  (chk (eval-expr (hash) (INe (i64 1) (i64 2))) 1)
   ;; TODO: retyping unit tests is expensive...
   )
 
