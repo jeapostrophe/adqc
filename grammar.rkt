@@ -60,23 +60,8 @@
   [IAShr 'iashr]
   [IOr 'ior]
   [IAnd 'iand]
-  [IXor 'ixor])
+  [IXor 'ixor]
 
-
-;; Binary cmp
-(struct ICmp (op L R) #:transparent)
-
-;; Defines constructors for integer comparisons, then provides
-;; them with appropriate contracts.
-(define-simple-macro (define-cmps [name:id op] ...)
-  (begin
-    (begin
-      (define (name L R)
-        (ICmp op L R)) ...)
-    (provide
-     (contract-out [name (Expr? Expr? . -> . Expr?)] ...))))
-
-(define-cmps
   [IEq 'ieq]
   [INe 'ine]
   [IUGt 'iugt]
@@ -115,7 +100,7 @@
 
 ;; Predicates for Expr and Stmt
 ;; TODO: symbol? should be a struct w/ type info.
-(define Expr? (or/c Variable? Integer? IBinOp? ICmp?))
+(define Expr? (or/c Variable? Integer? IBinOp?))
 (define Stmt? (or/c Skip? Begin? Assign? If? While?))
 
 
@@ -125,7 +110,6 @@
  (contract-out
   ;; Exprs
   [struct IBinOp ([op symbol?] [L Expr?] [R Expr?])]
-  [struct ICmp ([op symbol?] [L Expr?] [R Expr?])]
   [struct Integer ([signed? boolean?]
                    [bits Integer-bit-width?]
                    [val exact-integer?])]

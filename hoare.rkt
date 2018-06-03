@@ -35,88 +35,54 @@
     (error "Mismatched bit widths" a b))
   (Integer a-signed? a-bits (op a-val b-val)))
 
-(define-simple-macro (make-bin-op-table [name op] ...)
-  (make-immutable-hasheq (list (cons name (bin-op op)) ...)))
-
-;; TODO: bin-ops and cmp-ops are now pretty much the same from the interpreter's
-;; POV, so the ICmp struct should be removed and cmp ops should be considered
-;; normal binary ops. 
-(define bin-op-table
-  (make-bin-op-table
-   ['iadd +]
-   ['isub -]
-   ['imul *]
-   ['iudiv unsigned-quotient]
-   ['isdiv quotient]
-   ['iurem unsigned-remainder]
-   ['isrem remainder]
-   ['ishl arithmetic-shift-left]
-   ; 'ilshr - logical rshift
-   ['iashr arithmetic-shift-right]
-   ['ior bitwise-ior]
-   ['iand bitwise-and]
-   ['ixor bitwise-xor]))
-
 (define (bool->c b)
   (if b 1 0))
 
-(define-simple-macro (make-cmp-table [name op] ...)
+(define-simple-macro (make-bin-op-table ([arith-name arith-op] ...)
+                                        ([cmp-name cmp-op] ...))
+  ;; TODO: better way of forwarding macro args to hasheq?
   (make-immutable-hasheq
-   (list (cons name (bin-op (λ (a b) (bool->c (op a b))))) ...)))
+   (append
+    (list (cons arith-name (bin-op arith-op)) ...)
+    (list (cons cmp-name (bin-op (λ (a b) (bool->c (cmp-op a b))))) ...))))
+
+(define bin-op-table
+  (make-bin-op-table
+   ;; Binary arithmetic
+   (['iadd +]
+    ['isub -]
+    ['imul *]
+    ['iudiv unsigned-quotient]
+    ['isdiv quotient]
+    ['iurem unsigned-remainder]
+    ['isrem remainder]
+    ['ishl arithmetic-shift-left]
+    ; 'ilshr - logical rshift
+    ['iashr arithmetic-shift-right]
+    ['ior bitwise-ior]
+    ['iand bitwise-and]
+    ['ixor bitwise-xor])
+   ;; Binary comparisons
+   (['ieq =]
+    ['ine (λ (a b) (not (= a b)))]
+    ;; TODO: Should we keep separate signed and unsigned ops in the table if
+    ;; signed-ness is part of the integer type? Right now unsigned ops are
+    ;; pretty much broken since they just modulo their arguments by 2^64.
+    ;; Going forward ops should probably infer sign from arguments, then modulo
+    ;; the result depending on signed-ness of arguments to simulate
+    ;; overflow/underflow.
+    ['iugt (unsigned-cmp >)]
+    ['iuge (unsigned-cmp >=)]
+    ['iult (unsigned-cmp <)]
+    ['iule (unsigned-cmp <=)]
+    ['isgt >]
+    ['isge >=]
+    ['islt <]
+    ['isle <=])))
 
 (define ((unsigned-cmp op) a b)
   (op (modulo a 2^64)
       (modulo b 2^64)))
-
-;; TODO: Should we keep separate signed and unsigned ops in the table if
-;; signed-ness is part of the integer type? Right now unsigned ops are
-;; pretty much broken since they just modulo their arguments by 2^64.
-;; Going forward ops should probably infer sign from arguments, then modulo
-;; the result depending on signed-ness of arguments to simulate
-;; overflow/underflow.
-(define cmp-table
-  (make-cmp-table
-   ['ieq =]
-   ['ine (λ (a b) (not (= a b)))]
-   ['iugt (unsigned-cmp >)]
-   ['iuge (unsigned-cmp >=)]
-   ['iult (unsigned-cmp <)]
-   ['iule (unsigned-cmp <=)]
-   ['isgt >]
-   ['isge >=]
-   ['islt <]
-   ['isle <=]))
-
-#;
-(define bin-op-table
-  (hasheq 'iadd +
-          'isub -
-          'imul *
-          'iudiv unsigned-quotient
-          'isdiv quotient
-          'iurem unsigned-remainder
-          'isrem remainder
-          'ishl arithmetic-shift-left
-          ; 'ilshr - logical rshift
-          'iashr arithmetic-shift-right
-          'ior bitwise-ior
-          'iand bitwise-and
-          'ixor bitwise-xor
-          ))
-
-#;
-(define cmp-table
-  (hasheq 'ieq =
-          'ine (λ (a b) (not (= a b)))
-          'iugt (unsigned-cmp >)
-          'iuge (unsigned-cmp >=)
-          'iult (unsigned-cmp <)
-          'iule (unsigned-cmp <=)
-          'isgt >
-          'isge >=
-          'islt <
-          'isle <=
-          ))
 
 
 ;; V = nat | bool
@@ -133,11 +99,6 @@
      exp]
     [(IBinOp op L R)
      (define op-fn (hash-ref bin-op-table op))
-     (op-fn (recur L) (recur R))]
-    [(ICmp op L R)
-     ;; TODO: Should binary cmps always return i8 or u8?
-     ;; Right now returns same bit width as arguments.
-     (define op-fn (hash-ref cmp-table op))
      (op-fn (recur L) (recur R))]))
 
 
@@ -171,7 +132,7 @@
 
 ;; A x P -> ? (T/F)
 (define (check-pred env pred)
-  (not (zero? (eval-expr env pred))))
+  (not (zero? (Integer-val (eval-expr env pred)))))
 
 
 ;; S x P -> P (weakest precondition)
@@ -210,9 +171,12 @@
     [(? eq-remv-exp?) subst-exp]
     [(? (or/c number? symbol?)) start-exp]
     [(IBinOp op L R)
-     (IBinOp op (recur L) (recur R))]
-    [(ICmp op L R)
-     (ICmp op (recur L) (recur R))]))
+     (IBinOp op (recur L) (recur R))]))
+
+(provide
+ (contract-out
+  [eval-expr (hash? Expr? . -> . hash?)]
+  [eval-stmt (hash? Stmt? . -> . hash?)]))
 
 (module+ test
   (require chk)
