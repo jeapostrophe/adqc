@@ -31,6 +31,10 @@
   [u64 #f 64])
 
 
+;; Variable
+(struct Variable (name) #:transparent)
+
+
 ;; Binary ops
 (struct IBinOp (op L R) #:transparent)
 
@@ -111,7 +115,7 @@
 
 ;; Predicates for Expr and Stmt
 ;; TODO: symbol? should be a struct w/ type info.
-(define Expr? (or/c symbol? Integer? IBinOp? ICmp?))
+(define Expr? (or/c Variable? Integer? IBinOp? ICmp?))
 (define Stmt? (or/c Skip? Begin? Assign? If? While?))
 
 
@@ -125,6 +129,7 @@
   [struct Integer ([signed? boolean?]
                    [bits Integer-bit-width?]
                    [val exact-integer?])]
+  [struct Variable ([name symbol?])]
   [And (Expr? Expr? . -> . Expr?)]
   [Or (Expr? Expr? . -> . Expr?)]
   [Not (Expr? . -> . Expr?)]

@@ -2,6 +2,7 @@
 (require racket/contract/base
          racket/contract/region
          racket/match
+         syntax/parse/define
          "grammar.rkt")
 
 
@@ -25,6 +26,68 @@
 (define (unsigned-remainder a b)
   (modulo (remainder a b) 2^64))
 
+(define ((bin-op op) a b)
+  (match-define (Integer a-signed? a-bits a-val) a)
+  (match-define (Integer b-signed? b-bits b-val) b)
+  (unless (equal? a-signed? b-signed?)
+    (error "Mismatched signs" a b))
+  (unless (= a-bits b-bits)
+    (error "Mismatched bit widths" a b))
+  (Integer a-signed? a-bits (op a-val b-val)))
+
+(define-simple-macro (make-bin-op-table [name op] ...)
+  (make-immutable-hasheq (list (cons name (bin-op op)) ...)))
+
+;; TODO: bin-ops and cmp-ops are now pretty much the same from the interpreter's
+;; POV, so the ICmp struct should be removed and cmp ops should be considered
+;; normal binary ops. 
+(define bin-op-table
+  (make-bin-op-table
+   ['iadd +]
+   ['isub -]
+   ['imul *]
+   ['iudiv unsigned-quotient]
+   ['isdiv quotient]
+   ['iurem unsigned-remainder]
+   ['isrem remainder]
+   ['ishl arithmetic-shift-left]
+   ; 'ilshr - logical rshift
+   ['iashr arithmetic-shift-right]
+   ['ior bitwise-ior]
+   ['iand bitwise-and]
+   ['ixor bitwise-xor]))
+
+(define (bool->c b)
+  (if b 1 0))
+
+(define-simple-macro (make-cmp-table [name op] ...)
+  (make-immutable-hasheq
+   (list (cons name (bin-op (λ (a b) (bool->c (op a b))))) ...)))
+
+(define ((unsigned-cmp op) a b)
+  (op (modulo a 2^64)
+      (modulo b 2^64)))
+
+;; TODO: Should we keep separate signed and unsigned ops in the table if
+;; signed-ness is part of the integer type? Right now unsigned ops are
+;; pretty much broken since they just modulo their arguments by 2^64.
+;; Going forward ops should probably infer sign from arguments, then modulo
+;; the result depending on signed-ness of arguments to simulate
+;; overflow/underflow.
+(define cmp-table
+  (make-cmp-table
+   ['ieq =]
+   ['ine (λ (a b) (not (= a b)))]
+   ['iugt (unsigned-cmp >)]
+   ['iuge (unsigned-cmp >=)]
+   ['iult (unsigned-cmp <)]
+   ['iule (unsigned-cmp <=)]
+   ['isgt >]
+   ['isge >=]
+   ['islt <]
+   ['isle <=]))
+
+#;
 (define bin-op-table
   (hasheq 'iadd +
           'isub -
@@ -39,21 +102,9 @@
           'ior bitwise-ior
           'iand bitwise-and
           'ixor bitwise-xor
-          ))          
+          ))
 
-(define ((unsigned-cmp op) a b)
-  (op (modulo a 2^64)
-      (modulo b 2^64)))
-
-(define (c-and a b)
-  (if (not (zero? a))
-      (not (zero? b))
-      #f))
-
-(define (c-or a b)
-  (let ([tmp (not (zero? a))])
-    (if tmp tmp (not (zero? b)))))
-
+#;
 (define cmp-table
   (hasheq 'ieq =
           'ine (λ (a b) (not (= a b)))
@@ -65,12 +116,8 @@
           'isge >=
           'islt <
           'isle <=
-          'iand c-and
-          'ior c-or
           ))
 
-(define (bool->c b)
-  (if b 1 0))
 
 ;; V = nat | bool
 ;; A = [X -> V] ...
@@ -80,19 +127,18 @@
   (define (recur exp*)
     (eval-expr env exp*))
   (match exp
-    ;; TODO: Use struct instead of raw symbol for variable names?
-    ;;       Definitely, we're going to need type info
-    [(? symbol?)
-     (hash-ref env exp)]
-    ;; TODO: Should eval-expr return Racket numbers or Integer structs?
+    [(Variable name)
+     (hash-ref env name)]
     [(Integer signed? bits val)
-     val]
+     exp]
     [(IBinOp op L R)
      (define op-fn (hash-ref bin-op-table op))
      (op-fn (recur L) (recur R))]
     [(ICmp op L R)
+     ;; TODO: Should binary cmps always return i8 or u8?
+     ;; Right now returns same bit width as arguments.
      (define op-fn (hash-ref cmp-table op))
-     (bool->c (op-fn (recur L) (recur R)))]))
+     (op-fn (recur L) (recur R))]))
 
 
 ;; A x S -> A
