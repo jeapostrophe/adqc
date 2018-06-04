@@ -48,7 +48,9 @@
     [(Let/ec l b)
      (define cl (~a (gensym 'label)))
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
-            cl ":" ind-nl)]))
+            cl ":" ind-nl)]
+    [(Assert must-be-static? p msg)
+     (list* "/* ASSERT " msg ": " (compile-expr ρ p) " */")]))
 
 (define (compile-stmt* ρ s)
   (compile-stmt (hasheq) ρ s))
@@ -85,6 +87,7 @@
                (Skip)
                (Let/ec 'end
                        (Begin*
+                         (Assert #f (IULt (S32 0) (Var 'y)) "y is positive")
                          (If (IEq (S32 5) (S32 6))
                              (Assign (Var 'x) (S32 1))
                              (Assign (Var 'y) (S32 2)))

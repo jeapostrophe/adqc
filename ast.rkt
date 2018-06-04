@@ -98,6 +98,7 @@
 (struct While Stmt (p I body) #:transparent)
 (struct Return Stmt (label) #:transparent)
 (struct Let/ec Stmt (label body) #:transparent)
+(struct Assert Stmt (must-be-static? p msg) #:transparent)
 
 (define (Begin* . exps)
   (if (empty? exps)
@@ -133,6 +134,7 @@
   [struct While ([p Expr?] [I Expr?] [body Stmt?])]
   [struct Return ([label symbol?])]
   [struct Let/ec ([label symbol?] [body Stmt?])]
+  [struct Assert ([must-be-static? boolean?] [p Expr?] [msg string?])]
   [Begin* (-> Stmt? ... Stmt?)]
   [When (-> Expr? Stmt? Stmt?)]
   [Unless (-> Expr? Stmt? Stmt?)]))

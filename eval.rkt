@@ -114,7 +114,10 @@
      ((hash-ref γ l) σ)]
     [(Let/ec l b)
      (let/ec this-return
-       (eval-stmt (hash-set γ l this-return) σ b))]))
+       (eval-stmt (hash-set γ l this-return) σ b))]
+    [(Assert _ p msg)
+     (or (and (eval-expr-pred σ p) σ)
+         (error 'Assert "Failed assertion: ~e" msg))]))
 
 (define (eval-stmt* s)
   (eval-stmt (hasheq) (hasheq) s))
@@ -122,7 +125,7 @@
 (define (weakest-precond stmt post-cond)
   (match stmt
     [(Skip) post-cond]
-    [(Assign x e)
+    [(Assign (Var x) e)
      (subst x e post-cond)]
     [(Begin L-stmt R-stmt)
      (define post-cond* (weakest-precond R-stmt post-cond))
@@ -141,12 +144,14 @@
     [(Return label)
      (Var label)]
     [(Let/ec label stmt)
-     (subst label post-cond (weakest-precond stmt post-cond))]))
+     (subst label post-cond (weakest-precond stmt post-cond))]
+    [(Assert _ p _)
+     (And p post-cond)]))
 
 (define (subst x v e)
   (define (rec e) (subst x v e))
   (match e
-    [(== x) v]
+    [(Var (== x)) v]
     [(? (or/c Var? Integer?)) e]
     [(IBinOp op L R)
      (IBinOp op (rec L) (rec R))]))
