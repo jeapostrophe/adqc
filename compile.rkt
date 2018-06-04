@@ -26,8 +26,20 @@
      (list* "(" (rec L) " " op-str " " (rec R) ")")]))
 
 (define (compile-stmt γ ρ s)
+  ;; XXX This should consult the verifier. But, how?
+  ;;
+  ;; As we are compiling, we could compute the strongest
+  ;; post-condition (SP) of the code that came before this point and
+  ;; then check the theorem (not (SP => P)) for UNSAT. If it is SAT,
+  ;; then the condition is not verified (#f), if it is UNSAT, then the
+  ;; condition is checked.
+  ;;
+  ;; It is awkard to have the compiler interact with the theorem
+  ;; prover this way though, particularly having to compute the SP. So
+  ;; another idea is to have the verifier run first and return a weak
+  ;; hash-table mapping each precondition to whether it can be SAT or
+  ;; NOT in this way, then compiler can consult the table.
   (define (verify! p)
-    ;; XXX
     #f)
   (define (rec s) (compile-stmt γ ρ s))
   (match s
