@@ -77,15 +77,15 @@
 
 ;; Expr Macros
 (define (And L R)
-  (IAnd (INe 0 L)
-        (INe 0 R)))
+  (IAnd (INe (U32 0) L)
+        (INe (U32 0) R)))
 
 (define (Or L R)
-  (IOr (INe 0 L)
-       (INe 0 R)))
+  (IOr (INe (U32 0) L)
+       (INe (U32 0) R)))
 
 (define (Not e)
-  (IEq 0 e))
+  (IEq (U32 0) e))
 
 (define (Implies a b)
   (Or (Not a) b))
@@ -93,6 +93,7 @@
 ;; Statements
 (struct Stmt () #:transparent)
 (struct Skip Stmt () #:transparent)
+(struct Fail Stmt (msg) #:transparent)
 (struct Begin Stmt (f s) #:transparent)
 (struct Assign Stmt (x e) #:transparent)
 (struct If Stmt (p t f) #:transparent)
@@ -129,6 +130,7 @@
 
   [struct Stmt ()]
   [struct Skip ()]
+  [struct Fail ([msg string?])]
   [struct Begin ([f Stmt?] [s Stmt?])]
   [struct Assign ([x Var?] [e Expr?])]
   [struct If ([p Expr?] [t Stmt?] [f Stmt?])]

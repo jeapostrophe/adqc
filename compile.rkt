@@ -26,9 +26,15 @@
      (list* "(" (rec L) " " op-str " " (rec R) ")")]))
 
 (define (compile-stmt γ ρ s)
+  (define (verify! p)
+    ;; XXX
+    #f)
   (define (rec s) (compile-stmt γ ρ s))
   (match s
     [(Skip) '()]
+    [(Fail m)
+     (list* "fprintf(stderr, " (~v m) ");" ind-nl
+            "exit(1);")]
     [(Assign (Var x) e)
      (list* (hash-ref ρ x) " = " (compile-expr ρ e) ";")]
     [(Begin f s)
@@ -50,7 +56,14 @@
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
             cl ":")]
     [(Assert must-be-static? p msg)
-     (list* "/* ASSERT " msg ": " (compile-expr ρ p) " */")]))
+     (list* "/* ASSERT " msg ": " (compile-expr ρ p) " */" ind-nl
+            (cond
+              [(verify! p)
+               "/* Statically verified! */"]
+              [(not must-be-static?)
+               (compile-stmt γ ρ (If p (Skip) (Fail (~a "Assertion failed: " msg))))]
+              [else
+               (error 'compile "Assertion not verifiable statically: ~a" msg)]))]))
 
 (define (compile-stmt* ρ s)
   (compile-stmt (hasheq) ρ s))
@@ -85,6 +98,8 @@
              (Begin*
                (Assign (Var 'x) (S32 0))
                (Skip)
+               (Unless (IEq (Var 'x) (S32 0))
+                       (Fail "The world is upside-down!"))
                (Let/ec 'end
                        (Begin*
                          (Assert #f (IULt (S32 0) (Var 'y)) "y is positive")

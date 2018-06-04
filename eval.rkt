@@ -100,6 +100,7 @@
 (define (eval-stmt γ σ s)
   (match s
     [(Skip) σ]
+    [(Fail m) (error 'Fail m)]
     [(Assign x e)
      (hash-set σ x (eval-expr σ e))]
     [(Begin f s)
@@ -125,6 +126,7 @@
 (define (weakest-precond stmt post-cond)
   (match stmt
     [(Skip) post-cond]
+    [(Fail _) (U32 0)]
     [(Assign (Var x) e)
      (subst x e post-cond)]
     [(Begin L-stmt R-stmt)
