@@ -12,37 +12,46 @@
           'isub "-"
           'imul "*"
           'ieq "=="
-          ))
+          'iult "<"))
 
-(define (compile-expr exp)
-  (match exp
+(define (compile-expr ρ e)
+  (define (rec e) (compile-expr ρ e))
+  (match e
     [(Integer signed? bits val)
      (list* "(" (bit-width->cast signed? bits) (~a val) ")")]
-    [(Var name)
-     ;; XXX something to translate
-     (~a name)]
+    [(Var x)
+     (hash-ref ρ x)]
     [(IBinOp op L R)
      (define op-str (hash-ref bin-op-table op))
-     (define L-str (compile-expr L))
-     (define R-str (compile-expr R))
-     (list* L-str " " op-str " " R-str)]))
+     (list* "(" (rec L) " " op-str " " (rec R) ")")]))
 
-(define (compile-stmt stmt)
-  (match stmt
-    [(Skip)
-     empty]
-    [(Assign dest exp)
-     (list* dest " = " (compile-expr exp) ";")]
-    [(Begin L-stmt R-stmt)
-     (list* (compile-stmt L-stmt) ind-nl (compile-stmt R-stmt))]
-    [(If pred then else)
-     (list* "if " (compile-expr pred) " {" ind++ ind-nl
-            (compile-stmt then)
+(define (compile-stmt γ ρ s)
+  (define (rec s) (compile-stmt γ ρ s))
+  (match s
+    [(Skip) '()]
+    [(Assign (Var x) e)
+     (list* (hash-ref ρ x) " = " (compile-expr ρ e) ";")]
+    [(Begin f s)
+     (list* (rec f) ind-nl (rec s))]
+    [(If p t f)
+     (list* "if " (compile-expr ρ p) " {" ind++ ind-nl
+            (rec t)
             ind-- ind-nl "} else {" ind++ ind-nl
-            (compile-stmt else)
+            (rec f)
             ind-- ind-nl "}")]
-    [(While pred invar do-stmt)
-     (error "TODO: While stmt")]))
+    [(While p _ b)
+     (list* "while " (compile-expr ρ p) " {" ind++ ind-nl
+            (rec b)
+            ind-- ind-nl "}")]
+    [(Return l)
+     (list* "goto " (hash-ref γ l) ";")]
+    [(Let/ec l b)
+     (define cl (~a (gensym 'label)))
+     (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
+            cl ":" ind-nl)]))
+
+(define (compile-stmt* ρ s)
+  (compile-stmt (hasheq) ρ s))
 
 (define ind-nl (gensym))
 (define ind++ (gensym))
@@ -69,6 +78,19 @@
 
 (module+ test
   (tree-for idisplay
-            (compile-stmt (If (IEq (S32 5) (S32 6))
-                              (Assign 'x (S32 1))
-                              (Assign 'y (S32 2))))))
+            (compile-stmt*
+             (hasheq 'x "ecks" 'y "why")
+             (Begin*
+               (Assign (Var 'x) (S32 0))
+               (Skip)
+               (Let/ec 'end
+                       (Begin*
+                         (If (IEq (S32 5) (S32 6))
+                             (Assign (Var 'x) (S32 1))
+                             (Assign (Var 'y) (S32 2)))
+                         (When (IEq (Var 'y) (S32 2))
+                               (Begin (Assign (Var 'x) (S32 1))
+                                      (Return 'end)))
+                         (While (IULt (Var 'x) (S32 6)) (S32 1)
+                                (Assign (Var 'x) (IAdd (Var 'x) (S32 1))))))
+               (Assign (Var 'y) (S32 42))))))

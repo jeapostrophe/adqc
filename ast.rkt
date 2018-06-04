@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/contract/base
+         racket/list
          syntax/parse/define)
 
 ;; Expressions
@@ -98,6 +99,16 @@
 (struct Return Stmt (label) #:transparent)
 (struct Let/ec Stmt (label body) #:transparent)
 
+(define (Begin* . exps)
+  (if (empty? exps)
+      (Skip)
+      (Begin (first exps)
+             (apply Begin* (rest exps)))))
+(define (When p t)
+  (If p t (Skip)))
+(define (Unless p f)
+  (If p (Skip) f))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (provide
@@ -117,8 +128,11 @@
   [struct Stmt ()]
   [struct Skip ()]
   [struct Begin ([f Stmt?] [s Stmt?])]
-  [struct Assign ([x symbol?] [e Expr?])]
+  [struct Assign ([x Var?] [e Expr?])]
   [struct If ([p Expr?] [t Stmt?] [f Stmt?])]
   [struct While ([p Expr?] [I Expr?] [body Stmt?])]
   [struct Return ([label symbol?])]
-  [struct Let/ec ([label symbol?] [body Stmt?])]))
+  [struct Let/ec ([label symbol?] [body Stmt?])]
+  [Begin* (-> Stmt? ... Stmt?)]
+  [When (-> Expr? Stmt? Stmt?)]
+  [Unless (-> Expr? Stmt? Stmt?)]))

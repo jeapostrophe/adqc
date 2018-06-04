@@ -2,12 +2,6 @@
 (require racket/list
          adqc)
 
-(define (Begin* . exps)
-  (if (empty? exps)
-      (Skip)
-      (Begin (first exps)
-             (apply Begin* (rest exps)))))
-
 ;; Assumes env with variable 'n set to (S64 arg)
 ;; Stores result in 'return variable
 (define fib
