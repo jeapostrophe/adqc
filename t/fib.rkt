@@ -1,8 +1,6 @@
 #lang racket/base
 (require racket/list
-         "grammar.rkt"
-         "hoare.rkt")
-
+         adqc)
 
 (define (Begin* . exps)
   (if (empty? exps)
