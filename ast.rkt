@@ -1,14 +1,20 @@
 #lang racket/base
 (require racket/contract/base)
 
+(define float-bit-widths '(32 64))
+(define integer-bit-widths '(8 16 32 64))
+
+;; Types
+(struct Type () #:transparent)
+(struct IntT Type (signed? bits) #:transparent)
+(struct FloT Type (bits) #:transparent)
+
 ;; Expressions
 (struct Expr () #:transparent)
-
-(define Integer-bit-width? (or/c 8 16 32 64))
-(struct Integer Expr (signed? bits val) #:transparent)
-;; TODO needs type info
-(struct Var Expr (name) #:transparent)
-(struct IBinOp Expr (op L R) #:transparent)
+(struct Var Expr (name ty) #:transparent)
+(struct Int Expr (signed? bits val) #:transparent)
+(struct Flo Expr (bits val) #:transparent)
+(struct BinOp Expr (op L R) #:transparent)
 
 ;; Statements
 (struct Stmt () #:transparent)
@@ -26,12 +32,20 @@
 
 (provide
  (contract-out
+  [struct Type ()]
+  [struct IntT ([signed? boolean?]
+                [bits (apply or/c integer-bit-widths)])]
+  [struct FloT ([bits (apply or/c float-bit-widths)])]
+
   [struct Expr ()]
-  [struct IBinOp ([op symbol?] [L Expr?] [R Expr?])]
-  [struct Integer ([signed? boolean?]
-                   [bits Integer-bit-width?]
-                   [val exact-integer?])]
-  [struct Var ([name symbol?])]
+  [struct Var ([name symbol?] [ty Type?])]
+  [struct BinOp ([op symbol?] [L Expr?] [R Expr?])]
+  [struct Int ([signed? boolean?]
+               [bits (apply or/c integer-bit-widths)]
+               [val exact-integer?])]
+  [struct Flo ([bits (apply or/c float-bit-widths)]
+               ;; XXX should for Flo32 to be single-flonum?
+               [val flonum?])]
 
   [struct Stmt ()]
   [struct Skip ()]

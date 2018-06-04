@@ -8,7 +8,7 @@
   (match stmt
     [(Skip) post-cond]
     [(Fail _) (U32 0)]
-    [(Assign (Var x) e)
+    [(Assign (Var x _) e)
      (subst x e post-cond)]
     [(Begin L-stmt R-stmt)
      (define post-cond* (weakest-precond R-stmt post-cond))
@@ -34,8 +34,8 @@
 (define (subst x v e)
   (define (rec e) (subst x v e))
   (match e
-    [(Var (== x)) v]
-    [(or (? Var?) (? Integer?)) e]
-    [(IBinOp op L R)
-     (IBinOp op (rec L) (rec R))]))
+    [(Var (== x) _) v]
+    [(or (? Var?) (? Int?) (? Flo?)) e]
+    [(BinOp op L R)
+     (BinOp op (rec L) (rec R))]))
 

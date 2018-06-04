@@ -26,13 +26,13 @@
   (modulo (remainder a b) 2^64))
 
 (define ((bin-op op) a b)
-  (match-define (Integer a-signed? a-bits a-val) a)
-  (match-define (Integer b-signed? b-bits b-val) b)
+  (match-define (Int a-signed? a-bits a-val) a)
+  (match-define (Int b-signed? b-bits b-val) b)
   (unless (equal? a-signed? b-signed?)
     (error "Mismatched signs" a b))
   (unless (= a-bits b-bits)
     (error "Mismatched bit widths" a b))
-  (Integer a-signed? a-bits (op a-val b-val)))
+  (Int a-signed? a-bits (op a-val b-val)))
 
 (define (bool->c b)
   (if b 1 0))
@@ -86,22 +86,22 @@
 (define (eval-expr σ e)
   (define (rec e) (eval-expr σ e))
   (match e
-    [(Var x)
+    [(Var x _)
      (hash-ref σ x)]
-    [(Integer signed? bits val)
+    [(or (? Int?) (? Flo?))
      e]
-    [(IBinOp op L R)
+    [(BinOp op L R)
      ((hash-ref bin-op-table op)
       (rec L) (rec R))]))
 
 (define (eval-expr-pred σ pred)
-  (not (zero? (Integer-val (eval-expr σ pred)))))
+  (not (zero? (Int-val (eval-expr σ pred)))))
 
 (define (eval-stmt γ σ s)
   (match s
     [(Skip) σ]
     [(Fail m) (error 'Fail m)]
-    [(Assign (Var x) e)
+    [(Assign (Var x _) e)
      (hash-set σ x (eval-expr σ e))]
     [(Begin f s)
      (eval-stmt γ (eval-stmt γ σ f) s)]

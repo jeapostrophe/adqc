@@ -4,8 +4,12 @@
          racket/match
          "ast.rkt")
 
-(define (bit-width->cast signed? bw)
+(define (int-cast signed? bw)
   (list* "(" (if signed? "" "u") "int" (~a bw) "_t)"))
+(define (flo-cast bw)
+  (match bw
+    [32 "float"]
+    [64 "double"]))
 
 (define bin-op-table
   (hasheq 'iadd "+"
@@ -17,11 +21,13 @@
 (define (compile-expr ρ e)
   (define (rec e) (compile-expr ρ e))
   (match e
-    [(Integer signed? bits val)
-     (list* "(" (bit-width->cast signed? bits) (~a val) ")")]
-    [(Var x)
+    [(Int signed? bits val)
+     (list* "(" (int-cast signed? bits) (~a val) ")")]
+    [(Flo bits val)
+     (list* "(" (flo-cast bits) (~a val) ")")]
+    [(Var x _)
      (hash-ref ρ x)]
-    [(IBinOp op L R)
+    [(BinOp op L R)
      (define op-str (hash-ref bin-op-table op))
      (list* "(" (rec L) " " op-str " " (rec R) ")")]))
 
@@ -47,7 +53,7 @@
     [(Fail m)
      (list* "fprintf(stderr, " (~v m) ");" ind-nl
             "exit(1);")]
-    [(Assign (Var x) e)
+    [(Assign (Var x _) e)
      (list* (hash-ref ρ x) " = " (compile-expr ρ e) ";")]
     [(Begin f s)
      (list* (rec f) ind-nl (rec s))]

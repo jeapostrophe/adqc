@@ -7,25 +7,28 @@
 
 ;; Defines constructors for standard integer types, then provides
 ;; them with appropriate contracts.
-(define-simple-macro (define-int-types [name:id signed? bits] ...)
+(define-simple-macro (define-int-stx [tyname:id name:id signed? bits] ...)
   (begin
     (begin
-      (define (name n) (Integer signed? bits n)) ...)
-    (provide
-     (contract-out
-      [name (-> (integer-in (- (expt 2 (sub1 bits)))
-                            (sub1 (expt 2 (sub1 bits))))
-                Integer?)] ...))))
+      (define tyname (IntT signed? bits))
+      (define (name v) (Int signed? bits v))
+      (provide
+       (contract-out
+        [tyname Type?]
+        [name (-> (integer-in (- (expt 2 (sub1 bits)))
+                              (sub1 (expt 2 (sub1 bits))))
+                  Expr?)])))
+    ...))
 
-(define-int-types
-  [S8  #t  8]
-  [S16 #t 16]
-  [S32 #t 32]
-  [S64 #t 64]
-  [U8  #f  8]
-  [U16 #f 16]
-  [U32 #f 32]
-  [U64 #f 64])
+(define-int-stx
+  [S8T  S8  #t  8]
+  [S16T S16 #t 16]
+  [S32T S32 #t 32]
+  [S64T S64 #t 64]
+  [U8T  U8  #f  8]
+  [U16T U16 #f 16]
+  [U32T U32 #f 32]
+  [U64T U64 #f 64])
 
 ;; Defines constructors for binary ops, then provides
 ;; them with appropriate contracts
@@ -33,7 +36,7 @@
   (begin
     (begin
       (define (name L R)
-        (IBinOp op L R)) ...)
+        (BinOp op L R)) ...)
     (provide
      (contract-out [name (Expr? Expr? . -> . Expr?)] ...))))
 
