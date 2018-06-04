@@ -1,0 +1,2 @@
+all:
+	raco test .
