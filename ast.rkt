@@ -34,7 +34,7 @@
 
 ;; Variable
 ;; TODO: symbol? should be a struct w/ type info.
-(struct Variable Expr (name) #:transparent)
+(struct Var Expr (name) #:transparent)
 
 ;; Binary ops
 (struct IBinOp Expr (op L R) #:transparent)
@@ -109,7 +109,7 @@
   [struct Integer ([signed? boolean?]
                    [bits Integer-bit-width?]
                    [val exact-integer?])]
-  [struct Variable ([name symbol?])]
+  [struct Var ([name symbol?])]
   [And (-> Expr? Expr? Expr?)]
   [Or (-> Expr? Expr? Expr?)]
   [Not (-> Expr? Expr?)]

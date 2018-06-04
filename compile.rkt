@@ -18,7 +18,7 @@
   (match exp
     [(Integer signed? bits val)
      (list* "(" (bit-width->cast signed? bits) (~a val) ")")]
-    [(Variable name)
+    [(Var name)
      ;; XXX something to translate
      (~a name)]
     [(IBinOp op L R)

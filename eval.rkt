@@ -83,7 +83,6 @@
   (op (modulo a 2^64)
       (modulo b 2^64)))
 
-
 ;; V = nat | bool
 ;; A = [X -> V] ...
 
@@ -92,7 +91,7 @@
   (define (recur exp*)
     (eval-expr env exp*))
   (match exp
-    [(Variable name)
+    [(Var name)
      (hash-ref env name)]
     [(Integer signed? bits val)
      exp]
@@ -174,32 +173,32 @@
 
 (provide
  (contract-out
-  [eval-expr (hash? Expr? . -> . hash?)]
-  [eval-stmt (hash? Stmt? . -> . hash?)]))
+  [eval-expr (-> hash? Expr? hash?)]
+  [eval-stmt (-> hash? Stmt? hash?)]))
 
 (module+ test
   (require chk)
   ;; eval-expr
-  (chk (eval-expr (hash) (S64 5)) 5)
-  (chk (eval-expr (hash 'x 5) 'x) 5)
-  (chk (eval-expr (hash) (IAdd (S64 5) (S64 6))) 11)
-  (chk (eval-expr (hash 'x 5 'y 6) (IAdd 'x 'y)) 11)
-  (chk (eval-expr (hash) (ISub (S64 6) (S64 5))) 1)
-  (chk (eval-expr (hash) (IMul (S64 3) (S64 4))) 12)
-  (chk #:t (> (eval-expr (hash) (IUDiv (S64 10) (S64 -2))) 0))
-  (chk (eval-expr (hash) (ISDiv (S64 12) (S64 4))) 3)
-  (chk (eval-expr (hash) (ISDiv (S64 13) (S64 4))) 3)
+  (chk (eval-expr (hash) (S64 5)) (S64 5))
+  (chk (eval-expr (hash 'x (S64 5)) (Var 'x)) (S64 5))
+  (chk (eval-expr (hash) (IAdd (S64 5) (S64 6))) (S64 11))
+  (chk (eval-expr (hash 'x (S64 5) 'y (S64 6)) (IAdd (Var 'x) (Var 'y))) (S64 11))
+  (chk (eval-expr (hash) (ISub (S64 6) (S64 5))) (S64 1))
+  (chk (eval-expr (hash) (IMul (S64 3) (S64 4))) (S64 12))
+  (chk #:t (> (Integer-val (eval-expr (hash) (IUDiv (S64 10) (S64 -2)))) 0))
+  (chk (eval-expr (hash) (ISDiv (S64 12) (S64 4))) (S64 3))
+  (chk (eval-expr (hash) (ISDiv (S64 13) (S64 4))) (S64 3))
   ;; TODO: Unsigned remainder? What's the difference between signed/unsigned?
-  (chk (eval-expr (hash) (ISRem (S64 12) (S64 5))) 2)
-  (chk (eval-expr (hash) (IShl (S64 2) (S64 1))) 4)
+  (chk (eval-expr (hash) (ISRem (S64 12) (S64 5))) (S64 2))
+  (chk (eval-expr (hash) (IShl (S64 2) (S64 1))) (S64 4))
   (chk #:x (eval-expr (hash) (IShl (S64 2) (S64 -1))) exn:fail:contract?)
-  (chk (eval-expr (hash) (IAShr (S64 4) (S64 1))) 2)
+  (chk (eval-expr (hash) (IAShr (S64 4) (S64 1))) (S64 2))
   (chk #:x (eval-expr (hash) IAShr (S64 4) (S64 -1)) exn:fail:contract?)
-  (chk (eval-expr (hash) (IOr (S64 1) (S64 2))) 3)
-  (chk (eval-expr (hash) (IAnd (S64 3) (S64 1))) 1)
-  (chk (eval-expr (hash) (IXor (S64 3) (S64 2))) 1)
-  (chk (eval-expr (hash) (IEq (S64 1) (S64 1))) 1)
-  (chk (eval-expr (hash) (INe (S64 1) (S64 2))) 1)
+  (chk (eval-expr (hash) (IOr (S64 1) (S64 2))) (S64 3))
+  (chk (eval-expr (hash) (IAnd (S64 3) (S64 1))) (S64 1))
+  (chk (eval-expr (hash) (IXor (S64 3) (S64 2))) (S64 1))
+  (chk (eval-expr (hash) (IEq (S64 1) (S64 1))) (S64 1))
+  (chk (eval-expr (hash) (INe (S64 1) (S64 2))) (S64 1))
   ;; TODO: retyping unit tests is expensive...
   )
 
