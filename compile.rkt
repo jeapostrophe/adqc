@@ -2,7 +2,7 @@
 (require racket/format
          racket/list
          racket/match
-         "grammar.rkt")
+         "ast.rkt")
 
 (define (bit-width->cast signed? bw)
   (list* "(" (if signed? "" "u") "int" (~a bw) "_t)"))
