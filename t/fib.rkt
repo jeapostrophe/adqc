@@ -5,32 +5,30 @@
 ;; Assumes env with variable 'n set to (S64 arg)
 ;; Stores result in 'return variable
 (define fib
-  (If (ISLe (Variable 'n) (S64 1))
-      (Assign 'return (Variable 'n))
-      (Begin* (Assign 'fib (S64 1))
-              (Assign 'prev (S64 1))
-              (Assign 'i (S64 2))
-              (While (ISLt (Variable 'i) (Variable 'n))
-                     (ISLe (Variable 'i) (Variable 'n))
-                     (Begin* (Assign 'tmp (Variable 'fib))
-                             (Assign 'fib (IAdd (Variable 'fib)
-                                                (Variable 'prev)))
-                             (Assign 'prev (Variable 'tmp))
-                             (Assign 'i (IAdd (Variable 'i) (S64 1)))))
-              (Assign 'return (Variable 'fib)))))
+  (If (ISLe (Var 'n) (S64 1))
+      (Assign (Var 'return) (Var 'n))
+      (Begin* (Assign (Var 'fib) (S64 1))
+              (Assign (Var 'prev) (S64 1))
+              (Assign (Var 'i) (S64 2))
+              (While (ISLt (Var 'i) (Var 'n))
+                     (ISLe (Var 'i) (Var 'n))
+                     (Begin* (Assign (Var 'tmp) (Var 'fib))
+                             (Assign (Var 'fib) (IAdd (Var 'fib)
+                                                (Var 'prev)))
+                             (Assign (Var 'prev) (Var 'tmp))
+                             (Assign (Var 'i) (IAdd (Var 'i) (S64 1)))))
+              (Assign (Var 'return) (Var 'fib)))))
 
 (define (run-fib n)
-  (define result-env (eval-stmt (hasheq 'n (S64 n)) fib))
+  (define result-env (eval-stmt (hasheq) (hasheq 'n (S64 n)) fib))
   (Integer-val (hash-ref result-env 'return)))
+
+(define (rfib n)
+  (for/fold ([a 0] [b 1] #:result a)
+            ([i (in-range n)])
+    (values b (+ a b))))
 
 (module+ test
   (require chk)
-  (chk (run-fib 1) 1
-       (run-fib 2) 1
-       (run-fib 3) 2
-       (run-fib 4) 3
-       (run-fib 5) 5
-       (run-fib 6) 8
-       (run-fib 7) 13
-       (run-fib 8) 21
-       (run-fib 9) 34))
+  (for ([i (in-range 10)])
+    (chk (run-fib i) (rfib i))))
