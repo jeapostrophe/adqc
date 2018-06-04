@@ -49,18 +49,15 @@
 (define ind-- (gensym))
 (define ind-lvl (box 0))
 
-(define ((== a) b)
-  (equal? a b))
-
 (define (idisplay v)
   (match v
-    [(? (== ind-nl))
+    [(== ind-nl)
      (newline)
      (for ([i (in-range (unbox ind-lvl))])
        (display #\space))]
-    [(? (== ind++))
+    [(== ind++)
      (set-box! ind-lvl (+ (unbox ind-lvl) 2))]
-    [(? (== ind--))
+    [(== ind--)
      (set-box! ind-lvl (- (unbox ind-lvl) 2))]
     [_ (display v)]))
 
