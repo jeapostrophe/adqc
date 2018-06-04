@@ -97,6 +97,8 @@
 (struct If (pred then else) #:transparent)
 (struct While (pred invar do-stmt) #:transparent)
 
+;; wp(Goto ℓ, P) = ℓ
+;; wp(LabelAfter ℓ S, P) = wp(S,P)[ℓ <- P]
 
 ;; Predicates for Expr and Stmt
 ;; TODO: symbol? should be a struct w/ type info.
