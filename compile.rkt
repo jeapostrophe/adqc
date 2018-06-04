@@ -69,6 +69,6 @@
 
 (module+ test
   (tree-for idisplay
-            (compile-stmt (If (IEq (i32 5) (i32 6))
-                              (Assign 'x (i32 1))
-                              (Assign 'y (i32 2))))))
+            (compile-stmt (If (IEq (S32 5) (S32 6))
+                              (Assign 'x (S32 1))
+                              (Assign 'y (S32 2))))))

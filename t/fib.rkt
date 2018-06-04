@@ -8,25 +8,25 @@
       (Begin (first exps)
              (apply Begin* (rest exps)))))
 
-;; Assumes env with variable 'n set to (i64 arg)
+;; Assumes env with variable 'n set to (S64 arg)
 ;; Stores result in 'return variable
 (define fib
-  (If (ISLe (Variable 'n) (i64 1))
+  (If (ISLe (Variable 'n) (S64 1))
       (Assign 'return (Variable 'n))
-      (Begin* (Assign 'fib (i64 1))
-              (Assign 'prev (i64 1))
-              (Assign 'i (i64 2))
+      (Begin* (Assign 'fib (S64 1))
+              (Assign 'prev (S64 1))
+              (Assign 'i (S64 2))
               (While (ISLt (Variable 'i) (Variable 'n))
                      (ISLe (Variable 'i) (Variable 'n))
                      (Begin* (Assign 'tmp (Variable 'fib))
                              (Assign 'fib (IAdd (Variable 'fib)
                                                 (Variable 'prev)))
                              (Assign 'prev (Variable 'tmp))
-                             (Assign 'i (IAdd (Variable 'i) (i64 1)))))
+                             (Assign 'i (IAdd (Variable 'i) (S64 1)))))
               (Assign 'return (Variable 'fib)))))
 
 (define (run-fib n)
-  (define result-env (eval-stmt (hasheq 'n (i64 n)) fib))
+  (define result-env (eval-stmt (hasheq 'n (S64 n)) fib))
   (Integer-val (hash-ref result-env 'return)))
 
 (module+ test
