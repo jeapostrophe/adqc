@@ -91,13 +91,12 @@
 ;; Statements
 (struct Stmt () #:transparent)
 (struct Skip Stmt () #:transparent)
-(struct Begin Stmt (L-stmt R-stmt) #:transparent)
-(struct Assign Stmt (dest exp) #:transparent)
-(struct If Stmt (pred then else) #:transparent)
-(struct While Stmt (pred invar do-stmt) #:transparent)
-
-;; wp(Goto ℓ, P) = ℓ
-;; wp(LabelAfter ℓ S, P) = wp(S,P)[ℓ <- P]
+(struct Begin Stmt (f s) #:transparent)
+(struct Assign Stmt (x e) #:transparent)
+(struct If Stmt (p t f) #:transparent)
+(struct While Stmt (p I body) #:transparent)
+(struct Return Stmt (label) #:transparent)
+(struct Let/ec Stmt (label body) #:transparent)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -114,10 +113,12 @@
   [Or (-> Expr? Expr? Expr?)]
   [Not (-> Expr? Expr?)]
   [Implies (-> Expr? Expr? Expr?)]
-  ;; Stmts
+
   [struct Stmt ()]
   [struct Skip ()]
-  [struct Begin ([L-stmt Stmt?] [R-stmt Stmt?])]
-  [struct Assign ([dest symbol?] [exp Expr?])]
-  [struct If ([pred Expr?] [then Stmt?] [else Stmt?])]
-  [struct While ([pred Expr?] [invar Expr?] [do-stmt Stmt?])]))
+  [struct Begin ([f Stmt?] [s Stmt?])]
+  [struct Assign ([x symbol?] [e Expr?])]
+  [struct If ([p Expr?] [t Stmt?] [f Stmt?])]
+  [struct While ([p Expr?] [I Expr?] [body Stmt?])]
+  [struct Return ([label symbol?])]
+  [struct Let/ec ([label symbol?] [body Stmt?])]))

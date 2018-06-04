@@ -83,98 +83,73 @@
   (op (modulo a 2^64)
       (modulo b 2^64)))
 
-;; V = nat | bool
-;; A = [X -> V] ...
-
-;; A x E -> V
-(define (eval-expr env exp)
-  (define (recur exp*)
-    (eval-expr env exp*))
-  (match exp
-    [(Var name)
-     (hash-ref env name)]
+(define (eval-expr σ e)
+  (define (rec e) (eval-expr σ e))
+  (match e
+    [(Var x)
+     (hash-ref σ x)]
     [(Integer signed? bits val)
-     exp]
+     e]
     [(IBinOp op L R)
-     (define op-fn (hash-ref bin-op-table op))
-     (op-fn (recur L) (recur R))]))
+     ((hash-ref bin-op-table op)
+      (rec L) (rec R))]))
 
+(define (eval-expr-pred σ pred)
+  (not (zero? (Integer-val (eval-expr σ pred)))))
 
-;; A x S -> A
-(define (eval-stmt env stmt)
-  (define (recur stmt*)
-    (eval-stmt env stmt*))
-  (match stmt
-    ;; Skip
-    [(Skip) env]
-    ;; Assign
-    [(Assign dest exp)
-     (define new-val (eval-expr env exp))
-     (hash-set env dest new-val)]
-    ;; Begin
-    [(Begin L-stmt R-stmt)
-     (define env* (recur L-stmt))
-     (eval-stmt env* R-stmt)]
-    ;; If
-    [(If pred then else)
-     (if (check-pred env pred)
-         (recur then)
-         (recur else))]
-    ;; While
-    [(While pred _ do-stmt)
-     (cond [(check-pred env pred) 
-            (define new-env (recur do-stmt))
-            (eval-stmt new-env stmt)]
-           [else env])]))
-     
+(define (eval-stmt γ σ s)
+  (match s
+    [(Skip) σ]
+    [(Assign x e)
+     (hash-set σ x (eval-expr σ e))]
+    [(Begin f s)
+     (eval-stmt γ (eval-stmt γ σ f) s)]
+    [(If p t f)
+     (eval-stmt γ σ (if (eval-expr-pred σ p) t f))]
+    [(While p _ b)
+     (cond [(eval-expr-pred σ p)
+            (eval-stmt γ (eval-stmt γ σ b) s)]
+           [else σ])]
+    [(Return l)
+     ((hash-ref γ l) σ)]
+    [(Let/ec l b)
+     (let/ec this-return
+       (eval-stmt (hash-set γ l this-return) σ b))]))
 
-;; A x P -> ? (T/F)
-(define (check-pred env pred)
-  (not (zero? (Integer-val (eval-expr env pred)))))
+(define (eval-stmt* s)
+  (eval-stmt (hasheq) (hasheq) s))
 
-
-;; S x P -> P (weakest precondition)
 (define (weakest-precond stmt post-cond)
   (match stmt
-    ;; Skip
     [(Skip) post-cond]
-    ;; Assign
-    [(Assign dest exp)
-     (subst post-cond dest exp)]
-    ;; Begin
+    [(Assign x e)
+     (subst x e post-cond)]
     [(Begin L-stmt R-stmt)
      (define post-cond* (weakest-precond R-stmt post-cond))
      (weakest-precond L-stmt post-cond*)]
-    ;; If
     [(If pred then else)
      (And (Implies pred
                    (weakest-precond else post-cond))
           (Implies (Not pred)
                    (weakest-precond then post-cond)))]
-    ;; While (weakest *liberal* pre-condition)
     [(While pred invar do-stmt)
      (And invar
           (And (Implies (And pred invar)
                         (weakest-precond do-stmt invar))
                (Implies (And (Not pred) invar)
-                        post-cond)))]))
+                        post-cond)))]
+    [(Return label)
+     (Var label)]
+    [(Let/ec label stmt)
+     (subst label post-cond (weakest-precond stmt post-cond))]))
 
-(define (subst start-exp remv-exp subst-exp)
-  (define (recur start-exp*)
-    (subst start-exp* remv-exp subst-exp))
-  (define (eq-remv-exp? e)
-    (equal? e remv-exp))
-  (match start-exp
-    ;; Will substitute any exp that is equal? to remv-exp with subst-exp
-    [(? eq-remv-exp?) subst-exp]
-    [(? (or/c number? symbol?)) start-exp]
+(define (subst x v e)
+  (define (rec e) (subst x v e))
+  (match e
+    [(== x) v]
+    [(? (or/c Var? Integer?)) e]
     [(IBinOp op L R)
-     (IBinOp op (recur L) (recur R))]))
-
-(provide
- (contract-out
-  [eval-expr (-> hash? Expr? hash?)]
-  [eval-stmt (-> hash? Stmt? hash?)]))
+     (IBinOp op (rec L) (rec R))]))
 
 (module+ test
   (require chk)
