@@ -39,3 +39,10 @@
     [(BinOp op L R)
      (BinOp op (rec L) (rec R))]))
 
+;; XXX strongest postcondition
+;;
+;; How to deal with Return? I think you compute the post-condition as
+;; you go and the recursive call gives you the main post-cond, plus a
+;; list of post-conds for each label and you OR them together.
+
+;; XXX verify! function that compiler needs

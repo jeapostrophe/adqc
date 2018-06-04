@@ -5,6 +5,9 @@
          syntax/parse/define
          "ast.rkt")
 
+;; XXX float operations
+;; XXX correct int operations
+
 (define/contract (arithmetic-shift-left n m)
   (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
   (arithmetic-shift n m))
@@ -120,8 +123,10 @@
      (or (and (eval-expr-pred σ p) σ)
          (error 'Assert "Failed assertion: ~e" msg))]))
 
+;; XXX better interface
 (define (eval-stmt* s)
   (eval-stmt (hasheq) (hasheq) s))
 
 (provide eval-expr
-         eval-stmt)
+         eval-stmt
+         eval-stmt*)

@@ -8,25 +8,49 @@
 (struct Type () #:transparent)
 (struct IntT Type (signed? bits) #:transparent)
 (struct FloT Type (bits) #:transparent)
+;; XXX Array
+;; XXX Struct
+;; XXX Union
+;; XXX Opaque (from C)
+
+;; Path
+;; XXX Var
+;; XXX Array
+;; XXX Struct
+;; XXX Union
+;; XXX CVar
 
 ;; Expressions
 (struct Expr () #:transparent)
+;; XXX Change Var Expr to Read Expr and take a Path
 (struct Var Expr (name ty) #:transparent)
 (struct Int Expr (signed? bits val) #:transparent)
 (struct Flo Expr (bits val) #:transparent)
 (struct BinOp Expr (op L R) #:transparent)
+;; XXX Let (pure substitution)
+;; XXX If (ternary operator)
 
 ;; Statements
 (struct Stmt () #:transparent)
 (struct Skip Stmt () #:transparent)
 (struct Fail Stmt (msg) #:transparent)
 (struct Begin Stmt (f s) #:transparent)
+;; XXX Change x to a path
 (struct Assign Stmt (x e) #:transparent)
 (struct If Stmt (p t f) #:transparent)
 (struct While Stmt (p I body) #:transparent)
 (struct Return Stmt (label) #:transparent)
 (struct Let/ec Stmt (label body) #:transparent)
 (struct Assert Stmt (must-be-static? p msg) #:transparent)
+;; XXX Let
+;; XXX CCall
+;; XXX Specif (insert a particular pre/post condition pair that obscures the body?)
+
+;; Program
+;; XXX May add a constructor for a program that records what the open
+;; variable's types are, how to get arguments (copy vs reference), and
+;; how to return the result? Perhaps it can set up an initial Return
+;; label
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

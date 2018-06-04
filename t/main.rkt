@@ -4,6 +4,10 @@
   (require chk
            (submod adqc/compile test)))
 
+;; XXX write a general `te/ts/tp` function that takes an
+;; expr/stmt/program and tries to do all the things to it that make
+;; sense.
+
 (module+ test
   ;; eval-expr
   (chk (eval-expr (hash) (S64 5)) (S64 5))

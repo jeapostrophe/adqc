@@ -5,6 +5,8 @@
          syntax/parse/define
          "ast.rkt")
 
+;; XXX float stx
+
 ;; Defines constructors for standard integer types, then provides
 ;; them with appropriate contracts.
 (define-simple-macro (define-int-stx [tyname:id name:id signed? bits] ...)
@@ -98,3 +100,5 @@
   [Begin* (-> Stmt? ... Stmt?)]
   [When (-> Expr? Stmt? Stmt?)]
   [Unless (-> Expr? Stmt? Stmt?)]))
+
+;; XXX beautiful macro to make writing nice

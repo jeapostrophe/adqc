@@ -11,6 +11,7 @@
     [32 "float"]
     [64 "double"]))
 
+;; XXX fill this in
 (define bin-op-table
   (hasheq 'iadd "+"
           'isub "-"
@@ -24,6 +25,7 @@
     [(Int signed? bits val)
      (list* "(" (int-cast signed? bits) (~a val) ")")]
     [(Flo bits val)
+     ;; XXX perhaps use the fast way to read floats in C as the raw bits
      (list* "(" (flo-cast bits) (~a val) ")")]
     [(Var x _)
      (hash-ref ρ x)]
@@ -110,6 +112,7 @@
     [x (f x)]))
 
 (module+ test
+  ;; XXX better interface
   (define (compile&emit ρ s)
     (tree-for idisplay (compile-stmt* ρ s)))
   (provide compile&emit))
