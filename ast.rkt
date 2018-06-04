@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/contract/base
          racket/list
+         racket/match
          syntax/parse/define)
 
 ;; Expressions
@@ -100,11 +101,11 @@
 (struct Let/ec Stmt (label body) #:transparent)
 (struct Assert Stmt (must-be-static? p msg) #:transparent)
 
-(define (Begin* . exps)
-  (if (empty? exps)
-      (Skip)
-      (Begin (first exps)
-             (apply Begin* (rest exps)))))
+(define (Begin* . ss)
+  (match ss
+    [(list) (Skip)]
+    [(list s) s]
+    [(cons s ss) (Begin s (apply Begin* ss))]))
 (define (When p t)
   (If p t (Skip)))
 (define (Unless p f)

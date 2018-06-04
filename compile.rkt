@@ -48,7 +48,7 @@
     [(Let/ec l b)
      (define cl (~a (gensym 'label)))
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
-            cl ":" ind-nl)]
+            cl ":")]
     [(Assert must-be-static? p msg)
      (list* "/* ASSERT " msg ": " (compile-expr ρ p) " */")]))
 
