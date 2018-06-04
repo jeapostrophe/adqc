@@ -104,23 +104,6 @@
     [x (f x)]))
 
 (module+ test
-  (tree-for idisplay
-            (compile-stmt*
-             (hasheq 'x "ecks" 'y "why")
-             (Begin*
-               (Assign (Var 'x) (S32 0))
-               (Skip)
-               (Unless (IEq (Var 'x) (S32 0))
-                       (Fail "The world is upside-down!"))
-               (Let/ec 'end
-                       (Begin*
-                         (Assert #f (IULt (S32 0) (Var 'y)) "y is positive")
-                         (If (IEq (S32 5) (S32 6))
-                             (Assign (Var 'x) (S32 1))
-                             (Assign (Var 'y) (S32 2)))
-                         (When (IEq (Var 'y) (S32 2))
-                               (Begin (Assign (Var 'x) (S32 1))
-                                      (Return 'end)))
-                         (While (IULt (Var 'x) (S32 6)) (S32 1)
-                                (Assign (Var 'x) (IAdd (Var 'x) (S32 1))))))
-               (Assign (Var 'y) (S32 42))))))
+  (define (compile&emit ρ s)
+    (tree-for idisplay (compile-stmt* ρ s)))
+  (provide compile&emit))
