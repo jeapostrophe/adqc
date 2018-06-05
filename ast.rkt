@@ -37,19 +37,19 @@
 ;; Path
 (struct Path () #:transparent)
 (struct Var Path (x ty) #:transparent)
-(struct Select Path (ae ie) #:transparent)
-(struct Field Path (se f) #:transparent)
-(struct Mode Path (ue m) #:transparent)
-(struct ExtVar Path (src name) #:transparent)
+(struct Select Path (p ie) #:transparent)
+(struct Field Path (p f) #:transparent)
+(struct Mode Path (p m) #:transparent)
+(struct ExtVar Path (src name ty) #:transparent)
 
 (provide
  (contract-out
   [struct Path ()]
   [struct Var ([x symbol?] [ty Type?])]
-  [struct Select ([ae Expr?] [ie Expr?])]
-  [struct Field ([se Expr?] [f symbol?])]
-  [struct Mode ([ue Expr?] [m symbol?])]
-  [struct ExtVar ([src ExternSrc?] [name string?])]))
+  [struct Select ([p Path?] [ie Expr?])]
+  [struct Field ([p Path?] [f symbol?])]
+  [struct Mode ([p Path?] [m symbol?])]
+  [struct ExtVar ([src ExternSrc?] [name string?] [ty Type?])]))
 
 ;; Expressions
 (struct Expr () #:transparent)
