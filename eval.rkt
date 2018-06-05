@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/contract/base
          racket/contract/region
+         racket/undefined
          racket/match
          threading
          "ast.rkt")
@@ -139,25 +140,39 @@
 (define (eval-expr σ e)
   (define (rec e) (eval-expr σ e))
   (match e
-    [(Read (Var x _))
-     (hash-ref σ x)]
     [(or (? Int?) (? Flo?))
      e]
+    ;; XXX Cast
+    ;; XXX use P
+    [(Read (Var x _))
+     (hash-ref σ x)]
     [(BinOp op L R)
      ((hash-ref bin-op-table op)
-      (rec L) (rec R))]))
+      (rec L) (rec R))]
+    [(LetE x xe be)
+     (eval-expr (hash-set σ x (eval-expr σ xe)) be)]
+    [(IfE ce te fe)
+     (eval-expr σ (if (eval-expr-pred σ ce) te fe))]
+    [(Static e)
+     (eval-expr σ e)]))
 
 (define (eval-expr-pred σ pred)
   (not (zero? (Int-val (eval-expr σ pred)))))
+
+(define (eval-init σ ty i)
+  (match i
+    [(Undef) undefined]
+    [(ConI e) (eval-expr σ e)]))
 
 (define (eval-stmt γ σ s)
   (match s
     [(Skip _) σ]
     [(Fail m) (error 'Fail m)]
-    [(Assign (Var x _) e)
-     (hash-set σ x (eval-expr σ e))]
     [(Begin f s)
      (eval-stmt γ (eval-stmt γ σ f) s)]
+    ;; XXX use P
+    [(Assign (Var x _) e)
+     (hash-set σ x (eval-expr σ e))]
     [(If p t f)
      (eval-stmt γ σ (if (eval-expr-pred σ p) t f))]
     [(While p _ b)
@@ -168,7 +183,9 @@
      ((hash-ref γ l) σ)]
     [(Let/ec l b)
      (let/ec this-return
-       (eval-stmt (hash-set γ l this-return) σ b))]))
+       (eval-stmt (hash-set γ l this-return) σ b))]
+    [(Let x ty xi bs)
+     (eval-stmt γ (hash-set σ x (eval-init σ ty xi)) bs)]))
 
 ;; XXX better interface
 (define (eval-stmt* s)

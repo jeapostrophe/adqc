@@ -108,8 +108,9 @@
 (struct While Stmt (p I body) #:transparent)
 (struct Jump Stmt (label) #:transparent)
 (struct Let/ec Stmt (label body) #:transparent)
-(struct Let (x ty xi bs) #:transparent)
-(struct ReadOnly (x ty bs) #:transparent)
+(struct Let Stmt (x ty xi bs) #:transparent)
+;; XXX Replace with a general Meta thing?
+(struct ReadOnly Stmt (x ty bs) #:transparent)
 ;; DESIGN NOTE: `f` could be an `IntFun`, which includes `Stmt`, so
 ;; this is a mutually recursive definition. Alternatively, we could
 ;; treat functions like variables and have a name plus an environment

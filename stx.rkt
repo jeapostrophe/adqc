@@ -105,13 +105,28 @@
   [Not (-> Expr? Expr?)]
   [Implies (-> Expr? Expr? Expr?)]))
 
-;; XXX beautiful macro to make writing nice
-
 (require (for-syntax racket/base
                      syntax/parse
                      racket/dict
                      syntax/id-table))
 
+(define-syntax-rule (define-expanders&macros
+                      S-free-macros define-S-free-syntax
+                      S-expander define-S-expander)
+  (begin
+    (begin-for-syntax
+      (define S-free-macros (make-free-id-table))
+      (struct S-expander (impl)
+        #:property prop:procedure (struct-field-index impl)))
+    (define-simple-macro (define-S-free-syntax id impl)
+      (begin-for-syntax (dict-set! S-free-macros #'id impl)))
+    (define-simple-macro (define-S-expander id impl)
+      (define-syntax id (S-expander impl)))))
+
+;; XXX implement T
+(define-syntax (T stx)
+  (syntax-parse stx
+    [(_ x) #'x]))
 
 ;; XXX implement E
 (define-syntax (E stx)
@@ -119,32 +134,34 @@
     [(_ x) #'x]))
 
 ;; XXX implement P
+(define-expanders&macros
+  P-free-macros define-P-free-syntax
+  P-expander define-P-expander)
 (define-syntax (P stx)
   (syntax-parse stx
     [(_ x) #'x]))
 
 ;; XXX implement I
+(define-syntax (I stx)
+  (syntax-parse stx
+    [(_ x) #'x]))
 
-(begin-for-syntax
-  (define S-free-macros (make-free-id-table))
-  (struct S-expander (impl)
-    #:property prop:procedure (λ (se stx) ((S-expander-impl se) stx))))
-(define-simple-macro (define-S-free-syntax id impl)
-  (begin-for-syntax (dict-set! S-free-macros #'id impl)))
-(define-simple-macro (define-S-expander id impl)
-  (define-syntax id (S-expander impl)))
+(define-expanders&macros
+  S-free-macros define-S-free-syntax
+  S-expander define-S-expander)
 
 (define-syntax (while stx) (raise-syntax-error 'while "Illegal outside S" stx))
 (define-syntax (S stx)
   (syntax-parse stx
-    #:literals (void error begin set! if let/ec while unsyntax)
+    #:literals (void error begin define set! if let/ec while let unsyntax)
     [(_ (void)) (syntax/loc stx (Skip #f))]
     [(_ (void m)) (syntax/loc stx (Skip m))]
     [(_ (error m)) (syntax/loc stx (Fail m))]
     [(_ (begin)) (syntax/loc stx (S (void)))]
-    [(_ (begin s)) (syntax/loc stx (S s))]
-    [(_ (begin a . d)) (syntax/loc stx (Begin (S a) (S (begin . d))))]
-    [(_ (set! x e)) (syntax/loc stx (Assign (P x) (E e)))]
+    [(_ (begin (define . d) . b)) (syntax/loc stx (S (let (d) . b)))]
+    [(_ (begin s)) (syntax/loc stx (S s))]    
+    [(_ (begin a . d)) (syntax/loc stx (Begin (S a) (S (begin . d))))]    
+    [(_ (set! p e)) (syntax/loc stx (Assign (P p) (E e)))]
     [(_ (if p t f)) (syntax/loc stx (If (E p) (S t) (S f)))]
     [(_ (let/ec k:id . b))
      (syntax/loc stx
@@ -152,11 +169,23 @@
          (Let/ec k-id
                  (let ([the-ret (Jump k-id)])
                    (let-syntax ([k (S-expander
-                                    (λ (stx) (syntax-case stx () [(_) #'the-ret])))])
+                                    (syntax-parser [(_) #'the-ret]))])
                      (S (begin . b)))))))]
-    [(_ (while p . b))
-     ;; XXX Add I keyword
-     (syntax/loc stx (While (E p) (U32 1) (S (begin . b))))]
+    [(_ (while (~optional (~seq #:I I)
+                          #:defaults ([I #'(U32 1)]))
+          p . b))
+     (syntax/loc stx (While (E p) (E I) (S (begin . b))))]
+    [(_ (let ([x:id (~datum :) ty (~datum :=) xi]) . b))
+     (syntax/loc stx
+       (let ([x-id (gensym 'x)]
+             [the-ty (T ty)])
+         (Let x-id the-ty (I xi)
+              (let ([the-x-ref (Var x-id the-ty)])
+                (let-syntax ([x (P-expander
+                                 (syntax-parser [_:id #'the-x-ref]))])
+                  (S (begin . b)))))))]
+    ;; XXX ReadOnly
+    ;; XXX Call
     [(_ (~and macro-use (macro-id . _)))
      #:when (dict-has-key? S-free-macros #'macro-id)
      ((dict-ref S-free-macros #'macro-id) #'macro-use)]
@@ -168,57 +197,51 @@
     [(_ (unsyntax e)) #'e]))
 
 (define-S-free-syntax cond
-  (λ (stx)
-    (syntax-parse stx
-      #:literals (else)
-      [(_) (syntax/loc stx (S (void)))]
-      [(_ [else . b]) (syntax/loc stx (S (begin . b)))]
-      [(_ [q . a] . more)
-       (syntax/loc stx (S (if q (begin . a) (cond . more))))])))
+  (syntax-parser
+    #:literals (else)
+    [(_) (syntax/loc this-syntax (S (void)))]
+    [(_ [else . b]) (syntax/loc this-syntax (S (begin . b)))]
+    [(_ [q . a] . more)
+     (syntax/loc this-syntax (S (if q (begin . a) (cond . more))))]))
 (define-S-free-syntax when
-  (λ (stx)
-    (syntax-parse stx
-      [(_ p . t) (syntax/loc stx (S (if p (begin . t) (void))))])))
+  (syntax-parser
+    [(_ p . t)
+     (syntax/loc this-syntax
+       (S (if p (begin . t) (void))))]))
 (define-S-free-syntax unless
-  (λ (stx)
-    (syntax-parse stx
-      [(_ p . f) (syntax/loc stx (S (if p (void) (begin . f))))])))
+  (syntax-parser
+    [(_ p . f)
+     (syntax/loc this-syntax
+       (S (if p (void) (begin . f))))]))
+(define-S-free-syntax let*
+  (syntax-parser
+    #:literals ()
+    [(_ () . b) (syntax/loc this-syntax (S (begin . b)))]
+    [(_ (a . d) . b) (syntax/loc this-syntax (S (let (a) (let* d . b))))]))
 
 (define-S-expander assert!
-  (λ (stx)
-    (syntax-parse stx
-      [(_
-        (~optional (~and #:dyn (~bind [must-be-static? #f]))
-                   #:defaults ([must-be-static? #t]))
-        (~optional (~seq #:msg p-msg-expr)
-                   #:defaults ([p-msg-expr #'#f]))
-        p)
-       #:with p-e (if (attribute must-be-static?)
-                    (syntax/loc #'p (Static p))
-                    #'p)
-       (syntax/loc stx
-         (let ([p-msg (or p-msg-expr (format "Static Assertion: ~a" 'p))])
-           (S (if p-e
-                (void p-msg)
-                (error p-msg)))))])))
+  (syntax-parser
+    [(_
+      (~optional (~and #:dyn (~bind [must-be-static? #f]))
+                 #:defaults ([must-be-static? #t]))
+      (~optional (~seq #:msg p-msg-expr)
+                 #:defaults ([p-msg-expr #'#f]))
+      p)
+     #:with p-e (if (attribute must-be-static?)
+                  (syntax/loc #'p (Static p))
+                  #'p)
+     (syntax/loc this-syntax
+       (let ([p-msg (or p-msg-expr (format "~a" 'p))])
+         (S (if p-e
+              (void (format "Checked: ~a" p-msg))
+              (error (format "Failed! ~a" p-msg))))))]))
 
 ;; XXX implement F
 
-;; XXX implement P
+;; XXX implement Prog
 
-(provide E P
+(provide T P E I
          while assert! S
          define-S-free-syntax define-S-expander)
 
 ;; XXX Array Slice
-;; XXX Modules/Units/Components/Type Classes like thing
-
-#;(interface addy
-    )
-
-#;(component add addy
-             (define (f [S8 x] [U32 y] [S64 z] -> [S8 a] [U8 b])
-               #:pre (> x 0) (> y x) (> z (+ x y))
-               #:post (= (+ a b) (+ z x))
-
-               ))
