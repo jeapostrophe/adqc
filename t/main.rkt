@@ -11,9 +11,9 @@
 (module+ test
   ;; eval-expr
   (chk (eval-expr (hash) (S64 5)) (S64 5))
-  (chk (eval-expr (hash 'x (S64 5)) (Var 'x S64T)) (S64 5))
+  (chk (eval-expr (hash 'x (S64 5)) (Read (Var 'x S64T))) (S64 5))
   (chk (eval-expr (hash) (IAdd (S64 5) (S64 6))) (S64 11))
-  (chk (eval-expr (hash 'x (S64 5) 'y (S64 6)) (IAdd (Var 'x S64T) (Var 'y S64T))) (S64 11))
+  (chk (eval-expr (hash 'x (S64 5) 'y (S64 6)) (IAdd (Read (Var 'x S64T)) (Read (Var 'y S64T)))) (S64 11))
   (chk (eval-expr (hash) (ISub (S64 6) (S64 5))) (S64 1))
   (chk (eval-expr (hash) (IMul (S64 3) (S64 4))) (S64 12))
   (chk #:t (> (Int-val (eval-expr (hash) (IUDiv (S64 10) (S64 -2)))) 0))
@@ -154,16 +154,17 @@
     (begin
       (set! (Var 'x S32T) (S32 0))
       (void)
-      (unless (IEq (Var 'x S32T) (S32 0))
+      (unless (IEq (Read (Var 'x S32T)) (S32 0))
         (error "The world is upside-down!"))
       (let/ec end
-        #,(Assert #f (IULt (S32 0) (Var 'y S32T)) "y is positive")
+        (assert! #:dyn #:msg "y is positive"
+                 (IULt (S32 0) (Read (Var 'y S32T))))
         (if (IEq (S32 5) (S32 6))
           (set! (Var 'x S32T) (S32 1))
           (set! (Var 'y S32T) (S32 2)))
-        (when (IEq (Var 'y S32T) (S32 2))
+        (when (IEq (Read (Var 'y S32T)) (S32 2))
           (set! (Var 'x S32T) (S32 1))
           (end))
-        (while (IULt (Var 'x S32T) (S32 6))
-               (set! (Var 'x S32T) (IAdd (Var 'x S32T) (S32 1)))))
+        (while (IULt (Read (Var 'x S32T)) (S32 6))
+          (set! (Var 'x S32T) (IAdd (Read (Var 'x S32T)) (S32 1)))))
       (set! (Var 'y S32T) (S32 42))))))

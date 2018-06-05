@@ -7,19 +7,19 @@
 (define fib
   (S
    (cond
-     [(ISLe (Var 'n S64T) (S64 1))
-      (set! (Var 'return S64T) (Var 'n S64T))]
+     [(ISLe (Read (Var 'n S64T)) (S64 1))
+      (set! (Var 'return S64T) (Read (Var 'n S64T)))]
      [else
       (set! (Var 'fib S64T) (S64 1))
       (set! (Var 'prev S64T) (S64 1))
       (set! (Var 'i S64T) (S64 2))
-      (while (ISLt (Var 'i S64T) (Var 'n S64T))
-        (set! (Var 'tmp S64T) (Var 'fib S64T))
+      (while (ISLt (Read (Var 'i S64T)) (Read (Var 'n S64T)))
+        (set! (Var 'tmp S64T) (Read (Var 'fib S64T)))
         (set! (Var 'fib S64T)
-              (IAdd (Var 'fib S64T) (Var 'prev S64T)))
-        (set! (Var 'prev S64T) (Var 'tmp S64T))
-        (set! (Var 'i S64T) (IAdd (Var 'i S64T) (S64 1))))
-      (set! (Var 'return S64T) (Var 'fib S64T))])))
+              (IAdd (Read (Var 'fib S64T)) (Read (Var 'prev S64T))))
+        (set! (Var 'prev S64T) (Read (Var 'tmp S64T)))
+        (set! (Var 'i S64T) (IAdd (Read (Var 'i S64T)) (S64 1))))
+      (set! (Var 'return S64T) (Read (Var 'fib S64T)))])))
 
 (define (run-fib n)
   (define result-env (eval-stmt (hasheq) (hasheq 'n (S64 n)) fib))

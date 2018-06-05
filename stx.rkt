@@ -114,13 +114,13 @@
   (define-syntax id (S-expander impl)))
 
 (define-syntax (while stx) (raise-syntax-error 'while "Illegal outside S" stx))
-(define-syntax (assert! stx) (raise-syntax-error 'assert! "Illegal outside S" stx))
 (define-syntax (S stx)
   (syntax-parse stx
-    #:literals (void error begin set! if let/ec while assert! unsyntax)
-    [(_ (void)) (syntax/loc stx (Skip))]
+    #:literals (void error begin set! if let/ec while unsyntax)
+    [(_ (void)) (syntax/loc stx (Skip #f))]
+    [(_ (void m)) (syntax/loc stx (Skip m))]
     [(_ (error m)) (syntax/loc stx (Fail m))]
-    [(_ (begin)) (syntax/loc stx (Skip))]
+    [(_ (begin)) (syntax/loc stx (S (void)))]
     [(_ (begin s)) (syntax/loc stx (S s))]
     [(_ (begin a . d)) (syntax/loc stx (Begin (S a) (S (begin . d))))]
     [(_ (set! x e)) (syntax/loc stx (Assign (P x) (E e)))]
@@ -129,16 +129,13 @@
      (syntax/loc stx
        (let ([k-id (gensym 'k)])
          (Let/ec k-id
-                 (let ([the-ret (Return k-id)])
+                 (let ([the-ret (Jump k-id)])
                    (let-syntax ([k (S-expander
                                     (λ (stx) (syntax-case stx () [(_) #'the-ret])))])
                      (S (begin . b)))))))]
     [(_ (while p . b))
      ;; XXX Add I keyword
      (syntax/loc stx (While (E p) (U32 1) (S (begin . b))))]
-    [(_ (assert! p))
-     ;; XXX Add options
-     (syntax/loc stx (Assert #f (E p) "assert"))]
     [(_ (~and macro-use (macro-id . _)))
      #:when (dict-has-key? S-free-macros #'macro-id)
      ((dict-ref S-free-macros #'macro-id) #'macro-use)]
@@ -154,7 +151,7 @@
 ;;
 #;(Begin A (set! X (call F args)) B)
 ;; :=
-#;(Begin A (F X args) B) 
+#;(Begin A (F X args) B)
 
 (define-S-free-syntax cond
   (λ (stx)
@@ -172,6 +169,24 @@
   (λ (stx)
     (syntax-parse stx
       [(_ p . f) (syntax/loc stx (S (if p (void) (begin . f))))])))
+
+(define-S-expander assert!
+  (λ (stx)
+    (syntax-parse stx
+      [(_
+        (~optional (~and #:dyn (~bind [must-be-static? #f]))
+                   #:defaults ([must-be-static? #t]))
+        (~optional (~seq #:msg p-msg-expr)
+                   #:defaults ([p-msg-expr #'#f]))
+        p)
+       #:with p-e (if (attribute must-be-static?)
+                    (syntax/loc #'p (Static p))
+                    #'p)
+       (syntax/loc stx
+         (let ([p-msg (or p-msg-expr (format "Static Assertion: ~a" 'p))])
+           (S (if p-e
+                (void p-msg)
+                (error p-msg)))))])))
 
 (provide E P
          while assert! S
