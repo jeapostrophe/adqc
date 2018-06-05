@@ -8,8 +8,8 @@
 ;; XXX This module should use plus not ast (i.e. the thing that does
 ;; type checking, termination checking, and resource analysis)
 
-;; XXX float stx
-(define-simple-macro (define-flo-stx [tyname:id name:id bits] ...)
+;; Float syntax
+(define-simple-macro (define-flo-stx [tyname:id name:id bits arg-ctc] ...)
   (begin
     (begin
       (define tyname (FloT bits))
@@ -17,17 +17,14 @@
       (provide
        (contract-out
         [tyname Type?]
-        ;; TODO: More detailed contract? Probably want to restrict
-        ;; arg to valid floating-point value for given bit width.
-        [name (-> inexact? Expr?)])))
+        [name (-> arg-ctc Expr?)])))
     ...))
 
 (define-flo-stx
-  [F32T F32 32]
-  [F64T F64 64])
+  [F32T F32 32 single-flonum?]
+  [F64T F64 64 double-flonum?])
 
-;; Defines constructors for standard integer types, then provides
-;; them with appropriate contracts.
+;; Integer syntax
 (define-simple-macro (define-int-stx [tyname:id name:id signed? bits] ...)
   (begin
     (begin
@@ -51,8 +48,7 @@
   [U32T U32 #f 32]
   [U64T U64 #f 64])
 
-;; Defines constructors for binary ops, then provides
-;; them with appropriate contracts
+;; Binary Op syntax
 (define-simple-macro (define-bin-ops [name:id op] ...)
   (begin
     (begin
