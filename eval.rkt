@@ -89,7 +89,7 @@
 (define (eval-expr σ e)
   (define (rec e) (eval-expr σ e))
   (match e
-    [(Var x _)
+    [(Read (Var x _))
      (hash-ref σ x)]
     [(or (? Int?) (? Flo?))
      e]
@@ -102,7 +102,7 @@
 
 (define (eval-stmt γ σ s)
   (match s
-    [(Skip) σ]
+    [(Skip _) σ]
     [(Fail m) (error 'Fail m)]
     [(Assign (Var x _) e)
      (hash-set σ x (eval-expr σ e))]
@@ -114,14 +114,11 @@
      (cond [(eval-expr-pred σ p)
             (eval-stmt γ (eval-stmt γ σ b) s)]
            [else σ])]
-    [(Return l)
+    [(Jump l)
      ((hash-ref γ l) σ)]
     [(Let/ec l b)
      (let/ec this-return
-       (eval-stmt (hash-set γ l this-return) σ b))]
-    [(Assert _ p msg)
-     (or (and (eval-expr-pred σ p) σ)
-         (error 'Assert "Failed assertion: ~e" msg))]))
+       (eval-stmt (hash-set γ l this-return) σ b))]))
 
 ;; XXX better interface
 (define (eval-stmt* s)

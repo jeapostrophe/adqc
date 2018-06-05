@@ -27,39 +27,19 @@
     [(Flo bits val)
      ;; XXX perhaps use the fast way to read floats in C as the raw bits
      (list* "(" (flo-cast bits) (~a val) ")")]
-    [(Var x _)
+    [(Read (Var x _))
      (hash-ref ρ x)]
     [(BinOp op L R)
      (define op-str (hash-ref bin-op-table op))
      (list* "(" (rec L) " " op-str " " (rec R) ")")]))
 
 (define (compile-stmt γ ρ s)
-  ;; XXX This should consult the verifier. But, how?
-  ;;
-  ;; As we are compiling, we could compute the strongest
-  ;; post-condition (SP) of the code that came before this point and
-  ;; then check the theorem (not (SP => P)) for UNSAT. If it is SAT,
-  ;; then the condition is not verified (#f), if it is UNSAT, then the
-  ;; condition is checked.
-  ;;
-  ;; It is awkard to have the compiler interact with the theorem
-  ;; prover this way though, particularly having to compute the SP. So
-  ;; another idea is to have the verifier run first and return a weak
-  ;; hash-table mapping each precondition to whether it can be SAT or
-  ;; NOT in this way, then compiler can consult the table.
-  ;;
-  ;; Alternatively, verify! could be a Program -> Program function
-  ;; that simply removes the Asserts as it verifies them and the
-  ;; compiler always treats them as comments... I think that may be
-  ;; the most beautiful way, but it will take a lot of allocation, :(
-  ;; That could actually be quite cool, because may it could also use
-  ;; the SP to do optimization and constant propagation of something
-  ;; like that.
   (define (verify! p)
     #f)
   (define (rec s) (compile-stmt γ ρ s))
   (match s
-    [(Skip) '()]
+    [(Skip c)
+     (and c (list* "/* " c " */"))]
     [(Fail m)
      (list* "fprintf(stderr, " (~v m) ");" ind-nl
             "exit(1);")]
@@ -77,21 +57,12 @@
      (list* "while " (compile-expr ρ p) " {" ind++ ind-nl
             (rec b)
             ind-- ind-nl "}")]
-    [(Return l)
+    [(Jump l)
      (list* "goto " (hash-ref γ l) ";")]
     [(Let/ec l b)
      (define cl (~a (gensym 'label)))
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
-            cl ":")]
-    [(Assert must-be-static? p msg)
-     (list* "/* ASSERT " msg ": " (compile-expr ρ p) " */" ind-nl
-            (cond
-              [(verify! p)
-               "/* Statically verified! */"]
-              [(not must-be-static?)
-               (compile-stmt γ ρ (If p (Skip) (Fail (~a "Assertion failed: " msg))))]
-              [else
-               (error 'compile "Assertion not verifiable statically: ~a" msg)]))]))
+            cl ":")]))
 
 (define (compile-stmt* ρ s)
   (compile-stmt (hasheq) ρ s))
