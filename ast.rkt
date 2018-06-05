@@ -39,8 +39,12 @@
 (struct Assign Stmt (x e) #:transparent)
 (struct If Stmt (p t f) #:transparent)
 (struct While Stmt (p I body) #:transparent)
+;; XXX Is Throw or Goto a better name?
 (struct Return Stmt (label) #:transparent)
 (struct Let/ec Stmt (label body) #:transparent)
+;; XXX Delete Assert and add a (Static E) to Expr that says the
+;; expression must be provably constant, like lancet's frozen, then
+;; this can be made unto something entirely in a library
 (struct Assert Stmt (must-be-static? p msg) #:transparent)
 ;; XXX Let
 ;; XXX CCall
@@ -66,6 +70,7 @@
   [struct BinOp ([op symbol?] [L Expr?] [R Expr?])]
   [struct Int ([signed? boolean?]
                [bits (apply or/c integer-bit-widths)]
+               ;; XXX Should be constrained to correct range here?
                [val exact-integer?])]
   [struct Flo ([bits (apply or/c float-bit-widths)]
                ;; XXX should for Flo32 to be single-flonum?
