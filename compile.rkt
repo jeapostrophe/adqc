@@ -47,6 +47,14 @@
   ;; another idea is to have the verifier run first and return a weak
   ;; hash-table mapping each precondition to whether it can be SAT or
   ;; NOT in this way, then compiler can consult the table.
+  ;;
+  ;; Alternatively, verify! could be a Program -> Program function
+  ;; that simply removes the Asserts as it verifies them and the
+  ;; compiler always treats them as comments... I think that may be
+  ;; the most beautiful way, but it will take a lot of allocation, :(
+  ;; That could actually be quite cool, because may it could also use
+  ;; the SP to do optimization and constant propagation of something
+  ;; like that.
   (define (verify! p)
     #f)
   (define (rec s) (compile-stmt γ ρ s))
