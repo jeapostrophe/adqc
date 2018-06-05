@@ -150,20 +150,20 @@
 (module+ test
   (compile&emit
    (hasheq 'x "ecks" 'y "why")
-   (Begin*
-     (Assign (Var 'x S32T) (S32 0))
-     (Skip)
-     (Unless (IEq (Var 'x S32T) (S32 0))
-             (Fail "The world is upside-down!"))
-     (Let/ec 'end
-             (Begin*
-               (Assert #f (IULt (S32 0) (Var 'y S32T)) "y is positive")
-               (If (IEq (S32 5) (S32 6))
-                   (Assign (Var 'x S32T) (S32 1))
-                   (Assign (Var 'y S32T) (S32 2)))
-               (When (IEq (Var 'y S32T) (S32 2))
-                     (Begin (Assign (Var 'x S32T) (S32 1))
-                            (Return 'end)))
-               (While (IULt (Var 'x S32T) (S32 6)) (S32 1)
-                      (Assign (Var 'x S32T) (IAdd (Var 'x S32T) (S32 1))))))
-     (Assign (Var 'y S32T) (S32 42)))))
+   (S
+    (begin
+      (set! (Var 'x S32T) (S32 0))
+      (void)
+      (unless (IEq (Var 'x S32T) (S32 0))
+        (error "The world is upside-down!"))
+      (let/ec end
+        #,(Assert #f (IULt (S32 0) (Var 'y S32T)) "y is positive")
+        (if (IEq (S32 5) (S32 6))
+          (set! (Var 'x S32T) (S32 1))
+          (set! (Var 'y S32T) (S32 2)))
+        (when (IEq (Var 'y S32T) (S32 2))
+          (set! (Var 'x S32T) (S32 1))
+          (end))
+        (while (IULt (Var 'x S32T) (S32 6))
+               (set! (Var 'x S32T) (IAdd (Var 'x S32T) (S32 1)))))
+      (set! (Var 'y S32T) (S32 42))))))

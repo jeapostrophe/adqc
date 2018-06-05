@@ -38,7 +38,6 @@
 ;; XXX Change x to a path
 (struct Assign Stmt (x e) #:transparent)
 (struct If Stmt (p t f) #:transparent)
-;; XXX Remove I
 (struct While Stmt (p I body) #:transparent)
 (struct Return Stmt (label) #:transparent)
 (struct Let/ec Stmt (label body) #:transparent)
