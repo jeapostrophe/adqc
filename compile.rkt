@@ -13,11 +13,13 @@
 
 ;; XXX fill this in
 (define bin-op-table
-  (hasheq 'iadd "+"
-          'isub "-"
-          'imul "*"
-          'ieq "=="
-          'iult "<"))
+  (hasheq 'iadd "+" 'isub "-" 'imul "*" 'iudiv "/" 'isdiv "/" 'iurem "%" 'isrem "%"
+          'ishl "<<" 'ilshr ">>" 'iashr ">>" 'iand "&" 'ior "|" 'ixor "^"
+          'fadd "+" 'fsub "-" 'fmul "*" 'fdiv "/" 'frem "%"
+          'ieq "==" 'ine "!="
+          'iugt ">" 'iuge ">=" 'iult "<" 'iule "<="
+          'isgt ">" 'isge ">=" 'islt "<" 'isle "<="
+          'foeq "==" 'fogt ">" 'foge ">=" 'folt "<" 'fole "<="))
 
 (define (compile-expr ρ e)
   (define (rec e) (compile-expr ρ e))

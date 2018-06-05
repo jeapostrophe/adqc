@@ -82,3 +82,26 @@
              (compile-stmt γ ρ (If p (Skip) (Fail (~a "Assertion failed: " msg))))]
             [else
              (error 'compile "Assertion not verifiable statically: ~a" msg)]))]
+
+;;;; Interval Arithmetic
+(struct ival (l e h) #:transparent)
+(define (iunit x) (ival x x x))
+(define (ival+ x y)
+  (match-define (ival lx ex hx) x)
+  (match-define (ival ly ey hy) y)
+  (ival (+ lx ly) (+ ex ey) (+ hx hy)))
+(define (ivalU P x y)
+  (match-define (ival lx ex hx) x)
+  (match-define (ival ly ey hy) y)
+  (ival (min lx ly)
+        (+ (* P ex) (* (- 1 P) ey))
+        (max hx hy)))
+(define (ival*k l e h x)
+  (match-define (ival lx ex hx) x)
+  (ival (* l lx) (* e ex) (* h hx)))
+;;;; / Interval Arithmetic
+
+;; XXX Bound the trips through Whiles
+
+;; XXX Some way to enforce that a value is looked at (could be a
+;; generalization of ReadOnly?)

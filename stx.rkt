@@ -8,6 +8,9 @@
 ;; XXX This module should use plus not ast (i.e. the thing that does
 ;; type checking, termination checking, and resource analysis)
 
+;; XXX Should these macros record the src location in the data
+;; structure some how?
+
 ;; Float syntax
 (define-simple-macro (define-flo-stx [tyname:id name:id bits arg-ctc] ...)
   (begin
@@ -109,12 +112,18 @@
                      racket/dict
                      syntax/id-table))
 
+
+;; XXX implement E
 (define-syntax (E stx)
   (syntax-parse stx
     [(_ x) #'x]))
+
+;; XXX implement P
 (define-syntax (P stx)
   (syntax-parse stx
     [(_ x) #'x]))
+
+;; XXX implement I
 
 (begin-for-syntax
   (define S-free-macros (make-free-id-table))
@@ -158,13 +167,6 @@
     ;; confusing since we take over names (above)
     [(_ (unsyntax e)) #'e]))
 
-;; XXX Make a macro/protocol for calling a function where you inline
-;; and communicate the return value back in a sensible way.
-;;
-#;(Begin A (set! X (call F args)) B)
-;; :=
-#;(Begin A (F X args) B)
-
 (define-S-free-syntax cond
   (λ (stx)
     (syntax-parse stx
@@ -200,6 +202,23 @@
                 (void p-msg)
                 (error p-msg)))))])))
 
+;; XXX implement F
+
+;; XXX implement P
+
 (provide E P
          while assert! S
          define-S-free-syntax define-S-expander)
+
+;; XXX Array Slice
+;; XXX Modules/Units/Components/Type Classes like thing
+
+#;(interface addy
+    )
+
+#;(component add addy
+             (define (f [S8 x] [U32 y] [S64 z] -> [S8 a] [U8 b])
+               #:pre (> x 0) (> y x) (> z (+ x y))
+               #:post (= (+ a b) (+ z x))
+
+               ))

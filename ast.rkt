@@ -55,6 +55,7 @@
 (struct Expr () #:transparent)
 (struct Int Expr (signed? bits val) #:transparent)
 (struct Flo Expr (bits val) #:transparent)
+(struct Cast Expr (ty e) #:transparent)
 (struct Read Expr (p) #:transparent)
 (struct BinOp Expr (op L R) #:transparent)
 (struct LetE Expr (x xe be) #:transparent)
@@ -71,6 +72,7 @@
   [struct Flo ([bits (apply or/c float-bit-widths)]
                ;; XXX should for Flo32 to be single-flonum?
                [val flonum?])]
+  [struct Cast ([ty Type?] [e Expr?])]
   [struct Read ([p Path?])]
   [struct BinOp ([op symbol?] [L Expr?] [R Expr?])]
   [struct LetE ([x symbol?] [xe Expr?] [be Expr?])]
@@ -108,6 +110,10 @@
 (struct Let/ec Stmt (label body) #:transparent)
 (struct Let (x ty xi bs) #:transparent)
 (struct ReadOnly (x ty bs) #:transparent)
+;; DESIGN NOTE: `f` could be an `IntFun`, which includes `Stmt`, so
+;; this is a mutually recursive definition. Alternatively, we could
+;; treat functions like variables and have a name plus an environment
+;; binding later in `Program`.
 (struct Call (x ty f as bs) #:transparent)
 
 (provide
