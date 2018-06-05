@@ -9,6 +9,22 @@
 ;; type checking, termination checking, and resource analysis)
 
 ;; XXX float stx
+(define-simple-macro (define-flo-stx [tyname:id name:id bits] ...)
+  (begin
+    (begin
+      (define tyname (FloT bits))
+      (define (name v) (Flo bits v))
+      (provide
+       (contract-out
+        [tyname Type?]
+        ;; TODO: More detailed contract? Probably want to restrict
+        ;; arg to valid floating-point value for given bit width.
+        [name (-> inexact? Expr?)])))
+    ...))
+
+(define-flo-stx
+  [F32T F32 32]
+  [F64T F64 64])
 
 ;; Defines constructors for standard integer types, then provides
 ;; them with appropriate contracts.
