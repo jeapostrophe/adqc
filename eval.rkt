@@ -2,7 +2,7 @@
 (require racket/contract/base
          racket/contract/region
          racket/match
-         syntax/parse/define
+         threading
          "ast.rkt")
 
 ;; XXX float operations
@@ -16,6 +16,10 @@
   (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
   (arithmetic-shift n (- m)))
 
+(define/contract (logical-shift-right n m)
+  (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
+  (quotient n (expt 2 m)))
+
 ;; For now, assume 64 bits of storage for unsigned values.
 ;; TODO: Should signed values also be restricted to 64-bits?
 ;; Right now, they are basically BigInts and can grow very
@@ -28,63 +32,105 @@
 (define (unsigned-remainder a b)
   (modulo (remainder a b) 2^64))
 
-(define ((bin-op op) a b)
+(define (!= a b)
+  (not (= a b)))
+
+;;
+;; Operation wrappers
+;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (signed->unsigned bits val)
+  (modulo val (expt 2 bits)))
+
+(define ((int-op op) a b)
   (match-define (Int a-signed? a-bits a-val) a)
   (match-define (Int b-signed? b-bits b-val) b)
-  (unless (equal? a-signed? b-signed?)
+  (unless (eq? a-signed? b-signed?)
     (error "Mismatched signs" a b))
   (unless (= a-bits b-bits)
     (error "Mismatched bit widths" a b))
   (Int a-signed? a-bits (op a-val b-val)))
 
-(define (bool->c b)
-  (if b 1 0))
+(define ((flo-op op) a b)
+  (match-define (Flo a-bits a-val) a)
+  (match-define (Flo b-bits b-val) b)
+  (unless (= a-bits b-bits)
+    (error 'flo-op "Mismatched bit widths" a b))
+  (Flo a-bits (op a-val b-val)))
 
-(define-simple-macro (make-bin-op-table ([arith-name arith-op] ...)
-                                        ([cmp-name cmp-op] ...))
-  ;; TODO: better way of forwarding macro args to hasheq?
-  (make-immutable-hasheq
-   (append
-    (list (cons arith-name (bin-op arith-op)) ...)
-    (list (cons cmp-name (bin-op (λ (a b) (bool->c (cmp-op a b))))) ...))))
+(define ((ordered-op op) a b)
+  (and (not (equal? a +nan.0))
+       (not (equal? b +nan.0))
+       (op a b)))
 
-(define bin-op-table
-  (make-bin-op-table
-   ;; Binary arithmetic
-   (['iadd +]
-    ['isub -]
-    ['imul *]
-    ['iudiv unsigned-quotient]
-    ['isdiv quotient]
-    ['iurem unsigned-remainder]
-    ['isrem remainder]
-    ['ishl arithmetic-shift-left]
-    ; 'ilshr - logical rshift
-    ['iashr arithmetic-shift-right]
-    ['ior bitwise-ior]
-    ['iand bitwise-and]
-    ['ixor bitwise-xor])
-   ;; Binary comparisons
-   (['ieq =]
-    ['ine (λ (a b) (not (= a b)))]
-    ;; TODO: Should we keep separate signed and unsigned ops in the table if
-    ;; signed-ness is part of the integer type? Right now unsigned ops are
-    ;; pretty much broken since they just modulo their arguments by 2^64.
-    ;; Going forward ops should probably infer sign from arguments, then modulo
-    ;; the result depending on signed-ness of arguments to simulate
-    ;; overflow/underflow.
-    ['iugt (unsigned-cmp >)]
-    ['iuge (unsigned-cmp >=)]
-    ['iult (unsigned-cmp <)]
-    ['iule (unsigned-cmp <=)]
-    ['isgt >]
-    ['isge >=]
-    ['islt <]
-    ['isle <=])))
+(define ((unordered-op op) a b)
+  (or (equal? a +nan.0)
+      (equal? b +nan.0)
+      (op a b)))
 
+(define ((bool-op op) a b)
+  (if (op a b) 1 0))
+
+(define int-cmp
+  (λ~> bool-op int-op))
+
+(define ord-flo-cmp
+  (λ~> ordered-op bool-op flo-op))
+
+(define unord-flo-cmp
+  (λ~> unordered-op bool-op flo-op))
+
+;; TODO: This is wrong, need to implement better tracking of
+;; signed vs. unsigned values.
 (define ((unsigned-cmp op) a b)
   (op (modulo a 2^64)
       (modulo b 2^64)))
+
+(define bin-op-table
+  (hasheq 'iadd (int-op +)
+          'isub (int-op -)
+          'imul (int-op *)
+          'iudiv (int-op unsigned-quotient)
+          'isdiv (int-op quotient)
+          'iurem (int-op unsigned-remainder)
+          'isrem (int-op remainder)
+          'ishl (int-op arithmetic-shift-left)
+          'ilshr (int-op logical-shift-right)
+          'iashr (int-op arithmetic-shift-right)
+          'ior (int-op bitwise-ior)
+          'iand (int-op bitwise-and)
+          'ixor (int-op bitwise-xor)
+          'ieq (int-cmp =)
+          'ine (int-cmp !=)
+          'iugt (int-cmp (unsigned-cmp >))
+          'iuge (int-cmp (unsigned-cmp >=))
+          'iult (int-cmp (unsigned-cmp <))
+          'iule (int-cmp (unsigned-cmp <=))
+          'isgt (int-cmp >)
+          'isge (int-cmp >=)
+          'islt (int-cmp <)
+          'isle (int-cmp <=)
+          'fadd (flo-op +)
+          'fsub (flo-op -)
+          'fmul (flo-op *)
+          'fdiv (flo-op /)
+          'frem (flo-op remainder)
+          ; 'ffalse / 'ftrue -- probably don't care about these?
+          'foeq (ord-flo-cmp =)
+          'fogt (ord-flo-cmp >)
+          'foge (ord-flo-cmp >=)
+          'folt (ord-flo-cmp <)
+          'fole (ord-flo-cmp <=)
+          'fone (ord-flo-cmp !=)
+          ; 'ford - #t if both args not NAN - care?
+          'fueq (unord-flo-cmp =)
+          'fugt (unord-flo-cmp >)
+          'fuge (unord-flo-cmp >=)
+          'fult (unord-flo-cmp <)
+          'fule (unord-flo-cmp <=)
+          'fune (unord-flo-cmp !=)
+          ; 'funo - #t if either arg is NAN - care?
+          ))
 
 (define (eval-expr σ e)
   (define (rec e) (eval-expr σ e))
