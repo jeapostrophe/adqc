@@ -5,9 +5,10 @@
          threading
          "ast.rkt")
 
-;; XXX float operations
-;; XXX correct int operations
-
+;; TODO: These contracts are no longer effective since the evaluator
+;; will cast arguments anyway. Instead of using these Racket contracts,
+;; maybe int ops should be able to reject arguments greater than their
+;; bit width?
 (define/contract (arithmetic-shift-left n m)
   (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
   (arithmetic-shift n m))
@@ -19,18 +20,6 @@
 (define/contract (logical-shift-right n m)
   (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
   (quotient n (expt 2 m)))
-
-;; For now, assume 64 bits of storage for unsigned values.
-;; TODO: Should signed values also be restricted to 64-bits?
-;; Right now, they are basically BigInts and can grow very
-;; large or small.
-(define 2^64 (expt 2 64))
-
-(define (unsigned-quotient a b)
-  (modulo (quotient a b) 2^64))
-
-(define (unsigned-remainder a b)
-  (modulo (remainder a b) 2^64))
 
 (define (!= a b)
   (not (= a b)))
@@ -48,14 +37,26 @@
       val*
       (- val* (expt 2 bits))))
 
-(define ((int-op op) a b)
+(define (get-cast-fn signed?)
+  (if signed?
+      unsigned->signed
+      signed->unsigned))
+
+(define (((int-op signed?) op) a b)
   (match-define (Int a-signed? a-bits a-val) a)
   (match-define (Int b-signed? b-bits b-val) b)
   (unless (eq? a-signed? b-signed?)
     (error "Mismatched signs" a b))
   (unless (= a-bits b-bits)
     (error "Mismatched bit widths" a b))
-  (Int a-signed? a-bits (op a-val b-val)))
+  (define pre-cast (get-cast-fn signed?))
+  (define post-cast (get-cast-fn a-signed?))
+  (define a-val* (pre-cast a-bits a-val))
+  (define b-val* (pre-cast b-bits b-val))
+  (Int a-signed? a-bits (post-cast a-bits (op a-val* b-val*))))
+
+(define sint-op (int-op #t))
+(define uint-op (int-op #f))
 
 (define ((flo-op op) a b)
   (match-define (Flo a-bits a-val) a)
@@ -77,8 +78,11 @@
 (define ((bool-op op) a b)
   (if (op a b) 1 0))
 
-(define int-cmp
-  (λ~> bool-op int-op))
+(define sint-cmp
+  (λ~> bool-op sint-op))
+
+(define uint-cmp
+  (λ~> bool-op uint-op))
 
 (define ord-flo-cmp
   (λ~> ordered-op bool-op flo-op))
@@ -86,36 +90,30 @@
 (define unord-flo-cmp
   (λ~> unordered-op bool-op flo-op))
 
-;; TODO: This is wrong, need to implement better tracking of
-;; signed vs. unsigned values.
-(define ((unsigned-cmp op) a b)
-  (op (modulo a 2^64)
-      (modulo b 2^64)))
-
 (define bin-op-table
-  (hasheq 'iadd (int-op +)
-          'isub (int-op -)
-          'imul (int-op *)
-          'iudiv (int-op unsigned-quotient)
-          'isdiv (int-op quotient)
-          'iurem (int-op unsigned-remainder)
-          'isrem (int-op remainder)
-          'ishl (int-op arithmetic-shift-left)
-          'ilshr (int-op logical-shift-right)
-          'iashr (int-op arithmetic-shift-right)
-          'ior (int-op bitwise-ior)
-          'iand (int-op bitwise-and)
-          'ixor (int-op bitwise-xor)
-          'ieq (int-cmp =)
-          'ine (int-cmp !=)
-          'iugt (int-cmp (unsigned-cmp >))
-          'iuge (int-cmp (unsigned-cmp >=))
-          'iult (int-cmp (unsigned-cmp <))
-          'iule (int-cmp (unsigned-cmp <=))
-          'isgt (int-cmp >)
-          'isge (int-cmp >=)
-          'islt (int-cmp <)
-          'isle (int-cmp <=)
+  (hasheq 'iadd (uint-op +)
+          'isub (uint-op -)
+          'imul (uint-op *)
+          'iudiv (uint-op quotient)
+          'isdiv (sint-op quotient)
+          'iurem (uint-op remainder)
+          'isrem (sint-op remainder)
+          'ishl (uint-op arithmetic-shift-left)
+          'ilshr (uint-op logical-shift-right)
+          'iashr (uint-op arithmetic-shift-right)
+          'ior (uint-op bitwise-ior)
+          'iand (uint-op bitwise-and)
+          'ixor (uint-op bitwise-xor)
+          'ieq (uint-cmp =)
+          'ine (uint-cmp !=)
+          'iugt (uint-cmp >)
+          'iuge (uint-cmp >=)
+          'iult (uint-cmp <)
+          'iule (uint-cmp <=)
+          'isgt (sint-cmp >)
+          'isge (sint-cmp >=)
+          'islt (sint-cmp <)
+          'isle (sint-cmp <=)
           'fadd (flo-op +)
           'fsub (flo-op -)
           'fmul (flo-op *)
