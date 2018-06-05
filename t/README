@@ -1,7 +1,10 @@
 Things to implement:
+- Circular buffer
+- Heaps (& other binary trees on fixed arrays)
 - Search algorithms
 - NES audio synthesizer
 - MIC-1 simulator
 - Entity Component System (like Artemis or EntityX)
 - FSM language (like Embeddr)
 - Basic games (2048, Tetris, Tic-Tac-Toe, etc)
+- Complex games (Shooter, Platformer, Pacman, etc)
