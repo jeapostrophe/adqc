@@ -42,6 +42,12 @@
 (define (signed->unsigned bits val)
   (modulo val (expt 2 bits)))
 
+(define (unsigned->signed bits val)
+  (define val* (modulo val (expt 2 bits)))
+  (if (< val (expt 2 (sub1 bits)))
+      val*
+      (- val* (expt 2 bits))))
+
 (define ((int-op op) a b)
   (match-define (Int a-signed? a-bits a-val) a)
   (match-define (Int b-signed? b-bits b-val) b)
