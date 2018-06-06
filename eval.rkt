@@ -153,7 +153,7 @@
      (eval-expr (hash-set σ x (eval-expr σ xe)) be)]
     [(IfE ce te fe)
      (eval-expr σ (if (eval-expr-pred σ ce) te fe))]
-    [(Static e)
+    [(MetaE _ e)
      (eval-expr σ e)]))
 
 (define (eval-expr-pred σ pred)
@@ -185,7 +185,9 @@
      (let/ec this-return
        (eval-stmt (hash-set γ l this-return) σ b))]
     [(Let x ty xi bs)
-     (eval-stmt γ (hash-set σ x (eval-init σ ty xi)) bs)]))
+     (eval-stmt γ (hash-set σ x (eval-init σ ty xi)) bs)]
+    [(MetaS _ bs)
+     (eval-stmt γ σ bs)]))
 
 ;; XXX better interface
 (define (eval-stmt* s)

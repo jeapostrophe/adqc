@@ -10,9 +10,9 @@
      [(ISLe (Read (Var 'n S64T)) (S64 1))
       (set! (Var 'return S64T) (Read (Var 'n S64T)))]
      [else
-      (define fib : S64T := (ConI (Static (S64 1))))
-      (define prev : S64T := (ConI (Static (S64 1))))
-      (define i : S64T := (ConI (Static (S64 2))))
+      (define fib : S64T := (ConI (S64 1)))
+      (define prev : S64T := (ConI (S64 1)))
+      (define i : S64T := (ConI (S64 2)))
       (define tmp : S64T := (Undef))
       (while (ISLt (Read i) (Read (Var 'n S64T)))
         (set! tmp (Read fib))

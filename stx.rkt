@@ -202,7 +202,6 @@
                 (let-syntax ([x (P-expander
                                  (syntax-parser [_:id #'the-x-ref]))])
                   (S (begin . b)))))))]
-    ;; XXX ReadOnly
     ;; XXX Call
     [(_ (~and macro-use (macro-id . _)))
      #:when (dict-has-key? S-free-macros #'macro-id)
@@ -246,7 +245,7 @@
                  #:defaults ([p-msg-expr #'#f]))
       p)
      #:with p-e (if (attribute must-be-static?)
-                  (syntax/loc #'p (Static p))
+                  (syntax/loc #'p (MetaE 'XXX-must-be-static p))
                   #'p)
      (syntax/loc this-syntax
        (let ([p-msg (or p-msg-expr (format "~a" 'p))])

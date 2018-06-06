@@ -4,9 +4,6 @@
 (define float-bit-widths '(32 64))
 (define integer-bit-widths '(8 16 32 64))
 
-;; XXX There are a few places below where ty information could be
-;; synthesized from the pieces... maybe drop those places?
-
 ;; Extern Source
 (struct ExternSrc (ls hs) #:transparent)
 
@@ -60,32 +57,28 @@
 (struct BinOp Expr (op L R) #:transparent)
 (struct LetE Expr (x xe be) #:transparent)
 (struct IfE Expr (ce te fe) #:transparent)
-;; XXX replace with general Meta thing?
-(struct Static Expr (e) #:transparent)
+(struct MetaE Expr (m e) #:transparent)
 
 (provide
  (contract-out
   [struct Expr ()]
   [struct Int ([signed? boolean?]
                [bits (apply or/c integer-bit-widths)]
-               ;; XXX Should be constrained to correct range here?
                [val exact-integer?])]
   [struct Flo ([bits (apply or/c float-bit-widths)]
-               ;; XXX should for Flo32 to be single-flonum?
                [val flonum?])]
   [struct Cast ([ty Type?] [e Expr?])]
   [struct Read ([p Path?])]
   [struct BinOp ([op symbol?] [L Expr?] [R Expr?])]
   [struct LetE ([x symbol?] [xe Expr?] [be Expr?])]
   [struct IfE ([ce Expr?] [te Expr?] [fe Expr?])]
-  [struct Static ([e Expr?])]))
+  [struct MetaE ([m any/c] [e Expr?])]))
 
 ;; Initializer
 (struct Init () #:transparent)
 (struct Undef Init () #:transparent)
-(struct ConI Init (se) #:transparent)
-;; XXX this should have a type.
-(struct ZedI Init () #:transparent)
+(struct ConI Init (e) #:transparent)
+(struct ZedI Init (ty) #:transparent)
 (struct ArrI Init (is) #:transparent)
 (struct RecI Init (field->i) #:transparent)
 (struct UniI Init (mode i) #:transparent)
@@ -94,8 +87,11 @@
  (contract-out
   [struct Init ()]
   [struct Undef ()]
-  [struct ConI ([se Static?])]
-  [struct ZedI ()]
+  ;; DESIGN NOTE: It is unsafe for `e` to vary at runtime. We do not
+  ;; protect against that possibility here, though, because the core
+  ;; language is unsafe.
+  [struct ConI ([e Expr?])]
+  [struct ZedI ([ty Type?])]
   [struct ArrI ([is (listof Init?)])]
   [struct RecI ([field->i (hash/c symbol? Init?)])]
   [struct UniI ([mode symbol?] [i Init?])]))
@@ -111,8 +107,7 @@
 (struct Jump Stmt (label) #:transparent)
 (struct Let/ec Stmt (label body) #:transparent)
 (struct Let Stmt (x ty xi bs) #:transparent)
-;; XXX Replace with a general Meta thing?
-(struct ReadOnly Stmt (x ty bs) #:transparent)
+(struct MetaS Stmt (m bs) #:transparent)
 ;; DESIGN NOTE: `f` could be an `IntFun`, which includes `Stmt`, so
 ;; this is a mutually recursive definition. Alternatively, we could
 ;; treat functions like variables and have a name plus an environment
@@ -131,7 +126,7 @@
   [struct Jump ([label symbol?])]
   [struct Let/ec ([label symbol?] [body Stmt?])]
   [struct Let ([x symbol?] [ty Type?] [xi Init?] [bs Stmt?])]
-  [struct ReadOnly ([x symbol?] [ty Type?] [bs Stmt?])]
+  [struct MetaS ([m any/c] [bs Stmt?])]
   [struct Call ([x symbol?] [ty Type?] [f Fun?] [as (listof Expr?)] [bs Stmt?])]))
 
 ;; Functions
@@ -163,7 +158,7 @@
                                        (Begin
                                          (Let/ec ret-lab
                                                  fun-body)
-                                         (Assert Post)))                             
+                                         (Assert Post)))
                              (Assign x0 xR)))))
          res-body))
 ;; But the compiler MAY turn it into an actual function call (perhaps
@@ -176,10 +171,10 @@
   [struct Arg ([x symbol?] [ty Type?] [mode mode/c])]
   [struct Fun ()]
   [struct IntFun ([args (listof Arg?)]
-               [Pre Expr?]
-               [ret-x symbol?] [ret-ty Type?]
-               [Post Expr?]
-               [ret-lab symbol?] [body Stmt?])]
+                  [Pre Expr?]
+                  [ret-x symbol?] [ret-ty Type?]
+                  [Post Expr?]
+                  [ret-lab symbol?] [body Stmt?])]
   [struct ExtFun ([src ExternSrc?]
                   [args (listof Arg?)]
                   [ret-ty Type?]
@@ -187,11 +182,11 @@
 
 ;; Program
 (struct Global (ty xi) #:transparent)
-;; XXX This should be a list of name -> function mappings, rather than
-;; just one.
-(struct Program (globals main) #:transparent)
+(struct Program (globals private->public name->fun) #:transparent)
 
 (provide
  (contract-out
   [struct Global ([ty Type?] [xi Init?])]
-  [struct Program ([globals (hash/c symbol? Global?)] [main IntFun?])]))
+  [struct Program ([globals (hash/c symbol? Global?)]
+                   [private->public (hash/c symbol? (or/c #f string?))]
+                   [name->fun (hash/c string? IntFun?)])]))
