@@ -60,6 +60,7 @@
 (struct BinOp Expr (op L R) #:transparent)
 (struct LetE Expr (x xe be) #:transparent)
 (struct IfE Expr (ce te fe) #:transparent)
+;; XXX replace with general Meta thing?
 (struct Static Expr (e) #:transparent)
 
 (provide
@@ -83,6 +84,7 @@
 (struct Init () #:transparent)
 (struct Undef Init () #:transparent)
 (struct ConI Init (se) #:transparent)
+;; XXX this should have a type.
 (struct ZedI Init () #:transparent)
 (struct ArrI Init (is) #:transparent)
 (struct RecI Init (field->i) #:transparent)
@@ -185,6 +187,8 @@
 
 ;; Program
 (struct Global (ty xi) #:transparent)
+;; XXX This should be a list of name -> function mappings, rather than
+;; just one.
 (struct Program (globals main) #:transparent)
 
 (provide
