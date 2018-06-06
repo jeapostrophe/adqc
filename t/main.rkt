@@ -1,7 +1,9 @@
 #lang racket/base
 (require adqc)
 (module+ test
-  (require chk
+  (require (for-syntax racket/base
+                       syntax/parse)
+           chk
            (submod adqc/compile test)))
 
 ;; XXX write a general `te/ts/tp` function that takes an
@@ -10,7 +12,47 @@
 
 (module+ test
   ;; eval-expr
-  ;; TODO: macro for easier writing, tests for unsigned rem, logical shift right
+  (define-syntax (go stx)
+    (syntax-parse stx
+      [(_ expect act (~optional (~seq #:env env) #:defaults ([env #'(hasheq)])))
+       (quasisyntax/loc stx
+         (chk (#:stx #,stx expect)
+              (#:stx #,stx (eval-expr env act))))]))
+  (go (S64 5) (S64 5))
+  (go (S64 5) (Read (Var 'x S64T))
+      #:env (hasheq 'x (S64 5)))
+  (go (S64 11) (IAdd (S64 5) (S64 6)))
+  (go (S64 11) (IAdd (Read (Var 'x S64T)) (Read (Var 'y S64T)))
+      #:env (hasheq 'x (S64 5) 'y (S64 6)))
+  (go (S64 1) (ISub (S64 6) (S64 5)))
+  (go (S64 12) (IMul (S64 3) (S64 4)))
+  (go (U64 10) (IUDiv (U64 100) (U64 10)))
+  (go (S8 127) (IUDiv (S8 -2) (S8 2)))
+  (go (S8 127) (IUDiv (S8 -1) (S8 2)))
+  (go (S64 3) (ISDiv (S64 13) (S64 4)))
+  (go (S64 3) (ISDiv (S64 12) (S64 4)))
+  (go (S64 2) (ISRem (S64 12) (S64 5)))
+  (go (U64 5) (IURem (U64 105) (U64 10)))
+  (go (S8 1) (IURem (S8 -1) (S8 2)))
+  (go (S8 0) (IURem (S8 -2) (S8 2)))
+  (go (S64 4) (IShl (S64 2) (S64 1)))
+  (go (S64 2) (IAShr (S64 4) (S64 1)))
+  (go (S8 -32) (IAShr (S8 -128) (S8 2)))
+  (go (S8 32) (ILShr (S8 -128) (S8 2)))
+  (go (U8 4) (ILShr (U8 16) (U8 2)))
+  (go (S64 3) (IOr (S64 1) (S64 2)))
+  (go (U8 3) (IOr (U8 1) (U8 2)))
+  (go (S64 1) (IAnd (S64 3) (S64 1)))
+  (go (U8 1) (IAnd (U8 3) (U8 1)))
+  (go (S64 1) (IXor (S64 3) (S64 2)))
+  (go (U8 1) (IXor (U8 3) (U8 2)))
+  (go (S64 1) (IEq (S64 1) (S64 1)))
+  (go (S64 0) (IEq (S64 1) (S64 2)))
+  (go (S64 1) (INe (S64 1) (S64 2)))
+  (go (S64 0) (INe (S64 1) (S64 1)))
+  ;; TODO: rest of the integer tests, floating point tests.
+
+  #|
   (chk (eval-expr (hash) (S64 5)) (S64 5))
   (chk (eval-expr (hash 'x (S64 5)) (Read (Var 'x S64T))) (S64 5))
   (chk (eval-expr (hash) (IAdd (S64 5) (S64 6))) (S64 11))
@@ -36,6 +78,7 @@
   (chk (eval-expr (hash) (IEq (S64 1) (S64 1))) (S64 1))
   (chk (eval-expr (hash) (INe (S64 1) (S64 2))) (S64 1))
   ;; TODO: retyping unit tests is expensive...
+|#
   )
 
 #;
