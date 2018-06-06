@@ -69,6 +69,7 @@
   [ISRem 'isrem]
   [IURem 'iurem]
   [IShl  'ishl ]
+  [ILShr 'ilshr]
   [IAShr 'iashr]
   [IOr   'ior  ]
   [IAnd  'iand ]
