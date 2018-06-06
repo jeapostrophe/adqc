@@ -34,7 +34,7 @@
 
 (define (unsigned->signed bits val)
   (define val* (modulo val (expt 2 bits)))
-  (if (< val (expt 2 (sub1 bits)))
+  (if (< val* (expt 2 (sub1 bits)))
       val*
       (- val* (expt 2 bits))))
 
@@ -101,7 +101,7 @@
           'isrem (sint-op remainder)
           'ishl (uint-op arithmetic-shift-left)
           'ilshr (uint-op logical-shift-right)
-          'iashr (uint-op arithmetic-shift-right)
+          'iashr (sint-op arithmetic-shift-right)
           'ior (uint-op bitwise-ior)
           'iand (uint-op bitwise-and)
           'ixor (uint-op bitwise-xor)
