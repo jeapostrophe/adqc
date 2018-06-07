@@ -2,8 +2,9 @@
 (require racket/contract/base
          racket/contract/region
          racket/flonum
-         racket/undefined
+         racket/function
          racket/match
+         racket/undefined
          threading
          "ast.rkt")
 
@@ -73,6 +74,15 @@
     (error 'flo-op "Mismatched bit widths" a b))
   (Flo a-bits (op a-val b-val)))
 
+;; flo-cmp needs to be distinct from flo-op so that it
+;; can return an integer instead of a float.
+(define ((flo-cmp op) a b)
+  (match-define (Flo a-bits a-val) a)
+  (match-define (Flo b-bits b-val) b)
+  (unless (= a-bits b-bits)
+    (error 'flo-cmp "Mismatched bit widths" a b))
+  (Int #f 32 (if (op a-val b-val) 1 0)))
+
 (define ((ordered-op op) a b)
   (and (not (equal? a +nan.0))
        (not (equal? b +nan.0))
@@ -86,6 +96,9 @@
 (define ((bool-op op) a b)
   (if (op a b) 1 0))
 
+;; TODO: Should *int-cmp be its own function so that it can return a
+;; standard bit width regardless of arguments? C uses 'int' types for
+;; bools regardless of argument types, IIRC.
 (define sint-cmp
   (λ~> bool-op sint-op))
 
@@ -93,10 +106,10 @@
   (λ~> bool-op uint-op))
 
 (define ord-flo-cmp
-  (λ~> ordered-op bool-op flo-op))
+  (λ~> ordered-op flo-cmp))
 
 (define unord-flo-cmp
-  (λ~> unordered-op bool-op flo-op))
+  (λ~> unordered-op flo-cmp))
 
 (define bin-op-table
   (hasheq 'iadd (uint-op +)
@@ -127,21 +140,22 @@
           'fmul (flo-op fl*)
           'fdiv (flo-op fl/)
           'frem (flo-op fl-remainder)
-          ; 'ffalse / 'ftrue -- probably don't care about these?
+          'ffalse (flo-cmp (const #f))
+          'ftrue (flo-cmp (const #t))
           'foeq (ord-flo-cmp fl=)
           'fogt (ord-flo-cmp fl>)
           'foge (ord-flo-cmp fl>=)
           'folt (ord-flo-cmp fl<)
           'fole (ord-flo-cmp fl<=)
           'fone (ord-flo-cmp fl-!=)
-          ; 'ford - #t if both args not NAN - care?
+          'ford (ord-flo-cmp (const #t))
           'fueq (unord-flo-cmp fl=)
           'fugt (unord-flo-cmp fl>)
           'fuge (unord-flo-cmp fl>=)
           'fult (unord-flo-cmp fl<)
           'fule (unord-flo-cmp fl<=)
           'fune (unord-flo-cmp fl-!=)
-          ; 'funo - #t if either arg is NAN - care?
+          'funo (unord-flo-cmp (const #f))
           ))
 
 (define (eval-expr σ e)
