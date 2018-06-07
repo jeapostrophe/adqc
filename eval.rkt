@@ -46,7 +46,7 @@
       val*
       (- val* (expt 2 bits))))
 
-(define ((cast-int signed? bits) val)
+(define ((int-cast signed? bits) val)
   (if signed?
       (unsigned->signed bits val)
       (signed->unsigned bits val)))
@@ -58,8 +58,8 @@
     (error "Mismatched signs" a b))
   (unless (= a-bits b-bits)
     (error "Mismatched bit widths" a b))
-  (define pre-cast (cast-int signed? a-bits))
-  (define post-cast (cast-int a-signed? a-bits))
+  (define pre-cast (int-cast signed? a-bits))
+  (define post-cast (int-cast a-signed? a-bits))
   (Int a-signed? a-bits (post-cast (op (pre-cast a-val)
                                        (pre-cast b-val)))))
 
@@ -167,7 +167,7 @@
        (rec e))
      (match ty
        [(IntT signed? bits)
-        (define cast (cast-int signed? bits))
+        (define cast (int-cast signed? bits))
         (define val* (inexact->exact (floor val)))
         (Int signed? bits (cast val*))]
        [(FloT bits)
