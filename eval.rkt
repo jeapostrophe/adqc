@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/contract/base
          racket/contract/region
+         racket/flonum
          racket/undefined
          racket/match
          threading
@@ -24,6 +25,12 @@
 
 (define (!= a b)
   (not (= a b)))
+
+(define (fl-remainder a b)
+  (fl- a (fl* (flfloor (fl/ a b)) b)))
+
+(define (fl-!= a b)
+  (not (fl= a b)))
 
 ;;
 ;; Operation wrappers
@@ -115,25 +122,25 @@
           'isge (sint-cmp >=)
           'islt (sint-cmp <)
           'isle (sint-cmp <=)
-          'fadd (flo-op +)
-          'fsub (flo-op -)
-          'fmul (flo-op *)
-          'fdiv (flo-op /)
-          'frem (flo-op remainder)
+          'fadd (flo-op fl+)
+          'fsub (flo-op fl-)
+          'fmul (flo-op fl*)
+          'fdiv (flo-op fl/)
+          'frem (flo-op fl-remainder)
           ; 'ffalse / 'ftrue -- probably don't care about these?
-          'foeq (ord-flo-cmp =)
-          'fogt (ord-flo-cmp >)
-          'foge (ord-flo-cmp >=)
-          'folt (ord-flo-cmp <)
-          'fole (ord-flo-cmp <=)
-          'fone (ord-flo-cmp !=)
+          'foeq (ord-flo-cmp fl=)
+          'fogt (ord-flo-cmp fl>)
+          'foge (ord-flo-cmp fl>=)
+          'folt (ord-flo-cmp fl<)
+          'fole (ord-flo-cmp fl<=)
+          'fone (ord-flo-cmp fl-!=)
           ; 'ford - #t if both args not NAN - care?
-          'fueq (unord-flo-cmp =)
-          'fugt (unord-flo-cmp >)
-          'fuge (unord-flo-cmp >=)
-          'fult (unord-flo-cmp <)
-          'fule (unord-flo-cmp <=)
-          'fune (unord-flo-cmp !=)
+          'fueq (unord-flo-cmp fl=)
+          'fugt (unord-flo-cmp fl>)
+          'fuge (unord-flo-cmp fl>=)
+          'fult (unord-flo-cmp fl<)
+          'fule (unord-flo-cmp fl<=)
+          'fune (unord-flo-cmp fl-!=)
           ; 'funo - #t if either arg is NAN - care?
           ))
 
