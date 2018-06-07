@@ -124,7 +124,12 @@
   (go (U32 0) (FUEq (F64 0.0) (F64 1.0)))
   (go (U32 1) (FUEq (F64 1.0) (F64 +nan.0)))
   (go (U32 1) (FUno (F64 1.0) (F64 +nan.0)))
-  (go (U32 0) (FUno (F64 1.0) (F64 2.0))))
+  (go (U32 0) (FUno (F64 1.0) (F64 2.0)))
+  ;; Cast
+  (go (U32 23) (Cast U32T (S8 23)))
+  (go (F32 23.3f0) (Cast F32T (F64 23.3)))
+  (go (S32 23) (Cast S32T (F64 23.3)))
+  (go (F64 23.0) (Cast F64T (S32 23))))
 
 #;
 (module+ test
