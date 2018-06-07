@@ -76,7 +76,7 @@
 
 ;; Initializer
 (struct Init () #:transparent)
-(struct Undef Init () #:transparent)
+(struct UndI Init (ty) #:transparent)
 (struct ConI Init (e) #:transparent)
 (struct ZedI Init (ty) #:transparent)
 (struct ArrI Init (is) #:transparent)
@@ -86,7 +86,7 @@
 (provide
  (contract-out
   [struct Init ()]
-  [struct Undef ()]
+  [struct UndI ([ty Type?])]
   ;; DESIGN NOTE: It is unsafe for `e` to vary at runtime. We do not
   ;; protect against that possibility here, though, because the core
   ;; language is unsafe.
@@ -131,15 +131,16 @@
 
 ;; Functions
 (struct Arg (x ty mode) #:transparent)
-(define mode/c (or/c 'read-only 'ref))
-;; read-only := it and no piece of it can be modified
+(define mode/c (or/c 'read-only 'copy))
+;; read-only := it and no piece of it can be modified (could be
+;; implemented as read-only or copy)
 
-;; ref := the function receives a pointer and all changes are
-;; reflected back to caller, as if the function were inlined
+;; XXX ref := the function receives a pointer and all changes are
+;; reflected back to caller, as if the function were inlined. This
+;; should only work if the argument is a path
 
-;; XXX copy := the function receives a copy that may be modified, but
-;; changes are not visible. (This is not possible be inlined given
-;; what is supported above, because there is no Copy operation.)
+;; copy := the function receives a shallow copy that may be modified,
+;; but changes are not visible.
 
 (struct Fun () #:transparent)
 (struct IntFun Fun (args Pre ret-x ret-ty Post ret-lab body) #:transparent)

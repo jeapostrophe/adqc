@@ -4,7 +4,8 @@
   (require (for-syntax racket/base
                        syntax/parse)
            chk
-           (submod adqc/compile test)))
+           (submod adqc/compile test)
+           (submod adqc/eval test)))
 
 ;; XXX write a general `te/ts/tp` function that takes an
 ;; expr/stmt/program and tries to do all the things to it that make
@@ -21,10 +22,10 @@
   ;; Integer arithmetic
   (go (S64 5) (S64 5))
   (go (S64 5) (Read (Var 'x S64T))
-      #:env (hasheq 'x (S64 5)))
+      #:env (hasheq 'x (box (S64 5))))
   (go (S64 11) (IAdd (S64 5) (S64 6)))
   (go (S64 11) (IAdd (Read (Var 'x S64T)) (Read (Var 'y S64T)))
-      #:env (hasheq 'x (S64 5) 'y (S64 6)))
+      #:env (hasheq 'x (box (S64 5)) 'y (box (S64 6))))
   (go (S64 1) (ISub (S64 6) (S64 5)))
   (go (S64 12) (IMul (S64 3) (S64 4)))
   (go (U64 10) (IUDiv (U64 100) (U64 10)))

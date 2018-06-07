@@ -43,8 +43,8 @@
 (define (unsigned->signed bits val)
   (define val* (modulo val (expt 2 bits)))
   (if (< val* (expt 2 (sub1 bits)))
-      val*
-      (- val* (expt 2 bits))))
+    val*
+    (- val* (expt 2 bits))))
 
 (define ((int-cast signed? bits) val)
   (if signed?
@@ -157,12 +157,33 @@
           'funo (unord-flo-cmp (const #f))
           ))
 
+(define (type-cast ty v)
+  (match* (ty v)
+    [((IntT new-signed? new-bits) (Int _ _ n))
+     (Int new-signed? new-bits ((get-cast-fn new-signed?) n))]))
+
+(define (path-read σ p)
+  (define (rec p) (path-read σ p))
+  (match p
+    [(Var x _) (unbox (hash-ref σ x))]
+    [(Select p ie) (vector-ref (rec p) (eval-expr σ ie))]
+    [(Field p f) (hash-ref (rec p) f)]
+    [(Mode p m) (hash-ref (rec p) m)]
+    [(? ExtVar?) (error 'path-read "Cannot interp external variables: ~e" p)]))
+
+(define (path-write! σ p v)
+  (match p
+    [(Var x _) (set-box! (hash-ref σ x) v)]
+    [(Select p ie) (vector-set! (path-read σ p) (eval-expr σ ie) v)]
+    [(Field p f) (hash-set! (path-read σ p) f v)]
+    [(Mode p m) (hash-set! (path-read σ p) m v)]
+    [(? ExtVar?) (error 'path-write "Cannot interp external variables: ~e" p)]))
+
 (define (eval-expr σ e)
   (define (rec e) (eval-expr σ e))
   (match e
-    [(or (? Int?) (? Flo?))
-     e]
     [(Cast ty e)
+     ;; XXX move to separate function, like type-cast
      (match-define (or (Int _ _ val) (Flo _ val))
        (rec e))
      (match ty
@@ -176,12 +197,8 @@
             [32 real->single-flonum]
             [64 real->double-flonum]))
         (Flo bits (cast val))])]
-    ;; XXX use P
-    [(Read (Var x _))
-     (hash-ref σ x)]
     [(BinOp op L R)
-     ((hash-ref bin-op-table op)
-      (rec L) (rec R))]
+     ((hash-ref bin-op-table op) (rec L) (rec R))]
     [(LetE x xe be)
      (eval-expr (hash-set σ x (eval-expr σ xe)) be)]
     [(IfE ce te fe)
@@ -194,40 +211,92 @@
 (define (eval-expr-pred σ pred)
   (not (zero? (Int-val (eval-expr σ pred)))))
 
-(define (eval-init σ ty i)
-  (match i
-    [(Undef) undefined]
-    [(ConI e) (eval-expr σ e)]))
+(define (hash-map-ht h f)
+  (define hp (make-hasheq))
+  (for ([(k v) (in-hash h)])
+    (hash-set! hp k (f v)))
+  hp)
 
-(define (eval-stmt γ σ s)
+(define (type-zero ty)
+  (match ty
+    [(IntT signed? bits) (Int signed? bits 0)]
+    [(FloT 32) (Flo 32 (real->single-flonum 0.0))]
+    [(FloT 64) (Flo 64 (real->double-flonum 0.0))]
+    [(ArrT dim ety) (build-vector dim (λ (_) (type-zero ety)))]
+    [(RecT f->ty) (hash-map-ht f->ty type-zero)]
+    [(UniT mode->ty) (hash-map-ht mode->ty type-zero)]
+    [(? ExtT?) (error 'type-zero "Cannot interp external types: ~e" ty)]))
+
+(define (eval-init σ i)
+  (match i
+    [(UndI ty) (type-zero ty)]
+    [(ConI e) (eval-expr σ e)]
+    [(ZedI ty) (type-zero ty)]
+    [(ArrI is) (list->vector (map (λ (i) (eval-init σ i)) is))]
+    [(RecI f->i) (hash-map-ht f->i (λ (i) (eval-init σ i)))]
+    [(UniI m i) (make-hasheq (list (cons m (eval-init σ i))))]))
+
+(define (eval-stmt Σ γ σ s)
   (match s
     [(Skip _) σ]
     [(Fail m) (error 'Fail m)]
     [(Begin f s)
-     (eval-stmt γ (eval-stmt γ σ f) s)]
-    ;; XXX use P
-    [(Assign (Var x _) e)
-     (hash-set σ x (eval-expr σ e))]
+     (eval-stmt Σ γ σ f)
+     (eval-stmt Σ γ σ s)]
+    [(Assign p e)
+     (path-write! σ p (eval-expr σ e))]
     [(If p t f)
-     (eval-stmt γ σ (if (eval-expr-pred σ p) t f))]
+     (eval-stmt Σ γ σ (if (eval-expr-pred σ p) t f))]
     [(While p _ b)
-     (cond [(eval-expr-pred σ p)
-            (eval-stmt γ (eval-stmt γ σ b) s)]
-           [else σ])]
+     (when (eval-expr-pred σ p)
+       (eval-stmt Σ γ σ b)
+       (eval-stmt Σ γ σ s))]
     [(Jump l)
-     ((hash-ref γ l) σ)]
+     ((hash-ref γ l))]
     [(Let/ec l b)
      (let/ec this-return
-       (eval-stmt (hash-set γ l this-return) σ b))]
+       (eval-stmt Σ (hash-set γ l this-return) σ b))]
     [(Let x ty xi bs)
-     (eval-stmt γ (hash-set σ x (eval-init σ ty xi)) bs)]
+     (define xv (eval-init σ xi))
+     (eval-stmt Σ γ (hash-set σ x (box xv)) bs)]
     [(MetaS _ bs)
-     (eval-stmt γ σ bs)]))
+     (eval-stmt Σ γ σ bs)]
+    [(Call x ty f as bs)
+     (define xv (eval-fun Σ f (map (λ (e) (eval-expr σ e)) as)))
+     (eval-stmt Σ γ (hash-set σ x (box xv)) bs)]))
 
-;; XXX better interface
-(define (eval-stmt* s)
-  (eval-stmt (hasheq) (hasheq) s))
+(define (eval-fun Σ f vs)
+  (match f
+    [(? ExtFun?) (error 'eval-fun "Cannot interp external functions: ~e" f)]
+    [(IntFun as _ ret-x ret-ty _ ret-lab body)
+     (define ret-x-b (box (eval-init (hasheq) (UndI ret-ty))))
+     (let/ec this-return
+       (eval-stmt Σ (hasheq ret-lab this-return)
+                  (hash-set (for/fold ([σ Σ]) ([a (in-list as)] [v (in-list vs)])
+                              (match-define (Arg x ty m) a)
+                              (hash-set σ x (box v)))
+                            ret-x
+                            ret-x-b)
+                  body))
+     (unbox ret-x-b)]))
 
-(provide eval-expr
-         eval-stmt
-         eval-stmt*)
+(define (eval-program p n vs)
+  (match-define (Program gs _ n->f) p)
+  (define Σ
+    (for/hasheq ([(x g) (in-hash gs)])
+      (match-define (Global ty xi) g)
+      (values x (eval-init (hasheq) xi))))
+  (eval-fun Σ (hash-ref n->f n) vs))
+
+(define Value/c
+  (or/c Int? Flo? vector? hash?))
+
+(provide
+ (contract-out
+  [Value/c contract?]
+  [eval-program
+   (-> Program? string? (listof Value/c)
+       Value/c)]))
+
+(module+ test
+  (provide eval-expr eval-init eval-stmt eval-fun))
