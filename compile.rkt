@@ -1,5 +1,6 @@
 #lang racket/base
-(require racket/format
+(require racket/contract/base
+         racket/format
          racket/list
          racket/match
          "ast.rkt")
@@ -8,8 +9,8 @@
   (list* "(" (if signed? "" "u") "int" (~a bw) "_t)"))
 (define (flo-cast bw)
   (match bw
-    [32 "float"]
-    [64 "double"]))
+    [32 "(float)"]
+    [64 "(double)"]))
 
 ;; XXX fill this in
 (define bin-op-table
@@ -29,6 +30,12 @@
     [(Flo bits val)
      ;; XXX perhaps use the fast way to read floats in C as the raw bits
      (list* "(" (flo-cast bits) (~a val) ")")]
+    [(Cast ty e)
+     (match ty
+       [(IntT signed? bits)
+        (list* "(" (int-cast signed? bits) (rec e) ")")]
+       [(FloT bits)
+        (list* "(" (flo-cast bits) (rec e) ")")])]
     [(Read (Var x _))
      (hash-ref ρ x)]
     [(BinOp op L R)
