@@ -46,10 +46,10 @@
       val*
       (- val* (expt 2 bits))))
 
-(define (get-cast-fn signed?)
+(define ((cast-int signed? bits) val)
   (if signed?
-      unsigned->signed
-      signed->unsigned))
+      (unsigned->signed bits val)
+      (signed->unsigned bits val)))
 
 (define (((int-op signed?) op) a b)
   (match-define (Int a-signed? a-bits a-val) a)
@@ -58,11 +58,10 @@
     (error "Mismatched signs" a b))
   (unless (= a-bits b-bits)
     (error "Mismatched bit widths" a b))
-  (define pre-cast (get-cast-fn signed?))
-  (define post-cast (get-cast-fn a-signed?))
-  (define a-val* (pre-cast a-bits a-val))
-  (define b-val* (pre-cast b-bits b-val))
-  (Int a-signed? a-bits (post-cast a-bits (op a-val* b-val*))))
+  (define pre-cast (cast-int signed? a-bits))
+  (define post-cast (cast-int a-signed? a-bits))
+  (Int a-signed? a-bits (post-cast (op (pre-cast a-val)
+                                       (pre-cast b-val)))))
 
 (define sint-op (int-op #t))
 (define uint-op (int-op #f))
@@ -163,19 +162,20 @@
   (match e
     [(or (? Int?) (? Flo?))
      e]
-    ;; XXX Cast
     [(Cast ty e)
+     (match-define (or (Int _ _ val) (Flo _ val))
+       (rec e))
      (match ty
        [(IntT signed? bits)
-        (match-define (Int _ _ val) (rec e))
-        (Int signed? bits ((get-cast-fn signed?) bits val))]
+        (define cast (cast-int signed? bits))
+        (define val* (inexact->exact (floor val)))
+        (Int signed? bits (cast val*))]
        [(FloT bits)
-        (match-define (Flo prev-bits val) (rec e))
-        (define cast-fn
-          (cond [(= bits prev-bits) const]
-                [(= bits 32) real->single-flonum]
-                [(= bits 64) real->double-flonum]))
-        (Flo bits (cast-fn val))])]
+        (define cast
+          (match bits
+            [32 real->single-flonum]
+            [64 real->double-flonum]))
+        (Flo bits (cast val))])]
     ;; XXX use P
     [(Read (Var x _))
      (hash-ref σ x)]
