@@ -164,6 +164,18 @@
     [(or (? Int?) (? Flo?))
      e]
     ;; XXX Cast
+    [(Cast ty e)
+     (match ty
+       [(IntT signed? bits)
+        (match-define (Int _ _ val) (rec e))
+        (Int signed? bits ((get-cast-fn signed?) bits val))]
+       [(FloT bits)
+        (match-define (Flo prev-bits val) (rec e))
+        (define cast-fn
+          (cond [(= bits prev-bits) const]
+                [(= bits 32) real->single-flonum]
+                [(= bits 64) real->double-flonum]))
+        (Flo bits (cast-fn val))])]
     ;; XXX use P
     [(Read (Var x _))
      (hash-ref σ x)]
