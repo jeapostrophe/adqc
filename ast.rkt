@@ -66,7 +66,7 @@
                [bits (apply or/c integer-bit-widths)]
                [val exact-integer?])]
   [struct Flo ([bits (apply or/c float-bit-widths)]
-               [val flonum?])]
+               [val (or/c single-flonum? double-flonum?)])]
   [struct Cast ([ty Type?] [e Expr?])]
   [struct Read ([p Path?])]
   [struct BinOp ([op symbol?] [L Expr?] [R Expr?])]
