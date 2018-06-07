@@ -18,6 +18,7 @@
        (quasisyntax/loc stx
          (chk (#:stx #,stx expect)
               (#:stx #,stx (eval-expr env act))))]))
+  ;; Integer arithmetic
   (go (S64 5) (S64 5))
   (go (S64 5) (Read (Var 'x S64T))
       #:env (hasheq 'x (S64 5)))
@@ -46,11 +47,39 @@
   (go (U8 1) (IAnd (U8 3) (U8 1)))
   (go (S64 1) (IXor (S64 3) (S64 2)))
   (go (U8 1) (IXor (U8 3) (U8 2)))
+  ;; Integer comparison
   (go (S64 1) (IEq (S64 1) (S64 1)))
   (go (S64 0) (IEq (S64 1) (S64 2)))
   (go (S64 1) (INe (S64 1) (S64 2)))
   (go (S64 0) (INe (S64 1) (S64 1)))
-  ;; TODO: rest of the integer tests, floating point tests.
+  (go (U8 1) (IUGt (U8 5) (U8 4)))
+  (go (U8 0) (IUGt (U8 4) (U8 5)))
+  (go (S8 1) (IUGt (S8 -1) (S8 0)))
+  (go (S8 1) (ISGt (S8 1) (S8 0)))
+  (go (S8 0) (ISGt (S8 0) (S8 1)))
+  (go (S8 1) (ISGt (S8 0) (S8 -1)))
+  (go (U8 1) (IUGe (U8 1) (U8 1)))
+  (go (S8 1) (IUGe (S8 -1) (S8 0)))
+  (go (S8 1) (ISGe (S8 1) (S8 1)))
+  (go (S8 1) (ISGe (S8 1) (S8 -1)))
+  (go (U8 1) (IULt (U8 4) (U8 5)))
+  (go (U8 0) (IULt (U8 5) (U8 4)))
+  (go (S8 1) (IULt (S8 0) (S8 -1)))
+  (go (S8 1) (ISLt (S8 0) (S8 1)))
+  (go (S8 0) (ISLt (S8 1) (S8 0)))
+  (go (S8 1) (ISLt (S8 -1) (S8 0)))
+  (go (U8 1) (IULe (U8 1) (U8 1)))
+  (go (S8 1) (IULe (S8 0) (S8 -1)))
+  (go (S8 1) (ISLe (S8 1) (S8 1)))
+  (go (S8 1) (ISLe (S8 -1) (S8 1)))
+  ;; Floating point arithmetic
+  ;; TODO: Add tests to check for appropriate FP rounding errors?
+  (go (F64 3.5) (FAdd (F64 2.0) (F64 1.5)))
+  (go (F64 6.0) (FSub (F64 6.1) (F64 0.1)))
+  (go (F64 2.25) (FMul (F64 1.5) (F64 1.5)))
+  (go (F64 6.0) (FDiv (F64 9.0) (F64 1.5)))
+  (go (F64 1.2999999999999998) (FRem (F64 5.3) (F64 2.0)))
+  ;; TODO: Floating point comparisons
 
   #|
   (chk (eval-expr (hash) (S64 5)) (S64 5))
