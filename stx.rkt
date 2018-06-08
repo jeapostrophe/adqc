@@ -190,10 +190,6 @@
 (define-syntax-parameter current-return-var #f)
 (define-syntax-parameter S-in-tail? #f)
 
-;; XXX turn into S-expanders
-(define-syntax (return stx) (raise-syntax-error 'return "Illegal outside S" stx))
-(define-syntax (while stx) (raise-syntax-error 'while "Illegal outside S" stx))
-
 (define-syntax (S stx)
   (syntax-parse stx
     #:literals (void error begin define set! if let/ec while return let unsyntax)
@@ -218,10 +214,6 @@
                  (let ([the-ret (Jump k-id)])
                    (let-syntax ([k (S-expander (syntax-parser [(_) #'the-ret]))])
                      (S (begin . b)))))))]
-    [(_ (while (~optional (~seq #:I I)
-                          #:defaults ([I #'(U32 1)]))
-          p . b))
-     (syntax/loc stx (While (E p) (E I) (S (begin . b))))]
     [(_ (let ([x:id (~datum :) ty (~datum :=) xi]) . b))
      (syntax/loc stx
        (let ([x-id (gensym 'x)]
@@ -237,16 +229,6 @@
          ;; XXX must unsyntax the-ty later (when T is implemented)
          (S (let ([x : the-ty := (UndI the-ty)]) . b))))]
     ;; XXX Call like let but with <-
-    [(_ (return) ~!)
-     #:fail-unless (syntax-parameter-value #'current-return)
-     "Illegal outside of F"
-     (syntax/loc stx current-return)]
-    [(_ (return e) ~!)
-     #:fail-unless (and (syntax-parameter-value #'current-return)
-                        (syntax-parameter-value #'current-return-var))
-     "Illegal outside of F"
-     (syntax/loc stx
-       (S (begin (set! current-return-var e) (return))))]
     [(_ (~and macro-use (macro-id . _)))
      #:when (dict-has-key? S-free-macros #'macro-id)
      ((dict-ref S-free-macros #'macro-id) #'macro-use)]
@@ -299,6 +281,26 @@
               (void (format "Checked: ~a" p-msg))
               (error (format "Failed! ~a" p-msg))))))]))
 
+(define-S-expander while
+  (syntax-parser
+    [(_ (~optional (~seq #:I I)
+                       #:defaults ([I #'(U32 1)]))
+       p . b)
+     (syntax/loc this-syntax (While (E p) (E I) (S (begin . b))))]))
+
+(define-S-expander return
+  (syntax-parser
+    [(_)
+     #:fail-unless (syntax-parameter-value #'current-return)
+     "Illegal outside of F"
+     (syntax/loc this-syntax current-return)]
+    [(_ e)
+     #:fail-unless (and (syntax-parameter-value #'current-return)
+                        (syntax-parameter-value #'current-return-var))
+     "Illegal outside of F"
+     (syntax/loc this-syntax
+       (S (begin (set! current-return-var e) (return))))]))
+
 (begin-for-syntax
   (define-syntax-class Farg
     #:attributes (x ref var arg)
@@ -347,7 +349,7 @@
                              (let-syntax
                                  ([ret-lab (S-expander (syntax-parser [(_) #'the-ret]))])
                                (syntax-parameterize
-                                   ([current-return 
+                                   ([current-return
                                      (make-rename-transformer #'the-ret)]
                                     [current-return-var
                                      (make-rename-transformer #'r.x)]
