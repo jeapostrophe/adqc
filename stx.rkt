@@ -7,7 +7,9 @@
          "ast.rkt")
 
 ;; XXX This module should use plus not ast (i.e. the thing that does
-;; type checking, termination checking, and resource analysis)
+;; type checking, termination checking, and resource analysis). And
+;; plus should have an "any" type that causes inference, and that
+;; should be supported here.
 
 ;; XXX Should these macros record the src location in the data
 ;; structure some how?
@@ -130,6 +132,7 @@
 
 (require (for-syntax racket/base
                      syntax/parse
+                     racket/list
                      racket/syntax
                      racket/dict
                      syntax/id-table))
@@ -148,11 +151,17 @@
       (define-syntax id (S-expander impl)))))
 
 ;; XXX implement T
+(define-expanders&macros
+  T-free-macros define-T-free-syntax
+  T-expander define-T-expander)
 (define-syntax (T stx)
   (syntax-parse stx
     [(_ x) #'x]))
 
 ;; XXX implement E
+(define-expanders&macros
+  E-free-macros define-E-free-syntax
+  E-expander define-E-expander)
 (define-syntax (E stx)
   (syntax-parse stx
     [(_ x) #'x]))
@@ -166,6 +175,9 @@
     [(_ x) #'x]))
 
 ;; XXX implement I
+(define-expanders&macros
+  I-free-macros define-I-free-syntax
+  I-expander define-I-expander)
 (define-syntax (I stx)
   (syntax-parse stx
     [(_ x) #'x]))
@@ -178,8 +190,10 @@
 (define-syntax-parameter current-return-var #f)
 (define-syntax-parameter S-in-tail? #f)
 
+;; XXX turn into S-expanders
 (define-syntax (return stx) (raise-syntax-error 'return "Illegal outside S" stx))
 (define-syntax (while stx) (raise-syntax-error 'while "Illegal outside S" stx))
+
 (define-syntax (S stx)
   (syntax-parse stx
     #:literals (void error begin define set! if let/ec while return let unsyntax)
@@ -216,27 +230,30 @@
                 (let-syntax ([x (P-expander
                                  (syntax-parser [_:id #'the-x-ref]))])
                   (S (begin . b)))))))]
-    [(_ (return))
+    [(_ (let ([x:id (~datum :) ty]) . b))
+     (syntax/loc stx
+       (let ([the-ty (T ty)])
+         ;; XXX must unsyntax the-ty later (when T is implemented)
+         (S (let ([x : the-ty := (UndI the-ty)]) . b))))]
+    ;; XXX Call like let but with <-
+    [(_ (return) ~!)
      #:fail-unless (syntax-parameter-value #'current-return)
      "Illegal outside of F"
      (syntax/loc stx current-return)]
-    [(_ (return e))
+    [(_ (return e) ~!)
      #:fail-unless (and (syntax-parameter-value #'current-return)
                         (syntax-parameter-value #'current-return-var))
      "Illegal outside of F"
      (syntax/loc stx
        (S (begin (set! current-return-var e) (return))))]
-    ;; XXX Call
     [(_ (~and macro-use (macro-id . _)))
      #:when (dict-has-key? S-free-macros #'macro-id)
      ((dict-ref S-free-macros #'macro-id) #'macro-use)]
     [(_ (~and macro-use (macro-id . _)))
      #:declare macro-id (static S-expander? "S expander")
      ((attribute macro-id.value) #'macro-use)]
-    ;; XXX Maybe not require this and just silently drop out? Seems
-    ;; confusing since we take over names (above)
     [(_ (unsyntax e)) #'e]
-    [(_ e)
+    [(_ e ~!)
      #:fail-unless (syntax-parameter-value #'S-in-tail?)
      "Cannot end in expression when not in tail position"
      (syntax/loc stx (S (return e)))]))
@@ -314,7 +331,8 @@
         (~optional (~seq #:return ret-lab:id)
                    #:defaults ([ret-lab (generate-temporary)]))
         . bs)
-     ;; XXX check a ... unique
+     #:fail-when (check-duplicates (syntax->list #'(a.x ...)) bound-identifier=?)
+     "All arguments must have unique identifiers"
      (syntax/loc stx
        (let* ([ret-lab-id (gensym 'ret-lab)]
               [a.ref a.var] ...
@@ -353,6 +371,9 @@
     [(_ (x:id . args) . more)
      (quasisyntax/loc stx
        (define-fun x . #,(syntax/loc #'args (args . more))))]))
+
+;; XXX include/use-fun (or something) to use a function defined
+;; elsewhere in a normal Racket ctxt
 
 ;; XXX define-extern-fun
 

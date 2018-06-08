@@ -12,7 +12,7 @@
         (define fib : S64T := (ConI (S64 1)))
         (define prev : S64T := (ConI (S64 1)))
         (define i : S64T := (ConI (S64 2)))
-        (define tmp : S64T := (UndI S64T))
+        (define tmp : S64T)
         (while (ISLt (Read i) (Read n))
           (set! tmp (Read fib))
           (set! fib (IAdd (Read fib) (Read prev)))
