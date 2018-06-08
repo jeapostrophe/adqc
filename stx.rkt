@@ -18,7 +18,7 @@
 ;; should be supported here.
 
 ;; XXX Should these macros record the src location in the data
-;; structure some how?
+;; structure some how? (perhaps plus should do that with meta?)
 
 (define-syntax-rule (define-expanders&macros
                       S-free-macros define-S-free-syntax
