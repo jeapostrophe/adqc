@@ -5,9 +5,9 @@
 (define fib-p
   (Prog
    (define-fun (fib [n : S64T]) : S64T
-     (define a : S64T := (ConI (S64 0)))
-     (define b : S64T := (ConI (S64 1)))
-     (define i : S64T := (ConI (S64 0)))
+     (define a : S64T := (S64 0))
+     (define b : S64T := (S64 1))
+     (define i : S64T := (S64 0))
      (define tmp : S64T)
      (while (ISLt (Read i) (Read n))
        {tmp <- (Read a)}

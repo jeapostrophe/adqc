@@ -174,13 +174,27 @@
   (syntax-parse stx
     [(_ x) #'x]))
 
-;; XXX implement I
 (define-expanders&macros
   I-free-macros define-I-free-syntax
   I-expander define-I-expander)
+;; XXX should undef, zero, array, record, and union be literals?
 (define-syntax (I stx)
-  (syntax-parse stx
-    [(_ x) #'x]))
+  (syntax-parse stx #:literals (unsyntax)
+    [(_ ((~datum undef) ty)) (syntax/loc stx (UndI (T ty)))]
+    [(_ ((~datum zero) ty)) (syntax/loc stx (ZedI (T ty)))]
+    [(_ ((~datum array) i ...)) (syntax/loc stx (ArrI (list (I i) ...)))]
+    [(_ ((~datum record) (~seq k:id i) ...))
+     (syntax/loc stx (RecI (make-immutable-hasheq (list (cons 'k (I i)) ...))))]
+    [(_ ((~datum union) m:id i))
+     (syntax/loc stx (UniI 'm (I i)))]
+    [(_ (~and macro-use (macro-id . _)))
+     #:when (dict-has-key? I-free-macros #'macro-id)
+     ((dict-ref I-free-macros #'macro-id) #'macro-use)]
+    [(_ (~and macro-use (macro-id . _)))
+     #:declare macro-id (static I-expander? "I expander")
+     ((attribute macro-id.value) #'macro-use)]
+    [(_ (unsyntax e)) #'e]
+    [(_ x) (syntax/loc stx (ConI (E x)))]))
 
 (define-expanders&macros
   S-free-macros define-S-free-syntax
@@ -227,7 +241,7 @@
      (syntax/loc stx
        (let ([the-ty (T ty)])
          ;; XXX must unsyntax the-ty later (when T is implemented)
-         (S (let ([x : the-ty := (UndI the-ty)]) . b))))]
+         (S (let ([x : the-ty := (undef the-ty)]) . b))))]
     [(_ (let ([x:id (~datum :) ty (~datum :=) f (~datum <-) a ...]) . b))
      (syntax/loc stx
        (let ([x-id (gensym 'x)]
