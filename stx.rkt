@@ -82,6 +82,8 @@
      (syntax/loc stx (BinOp 'op (E l) (E r)))]
     [(_ (e (~datum :) ty))
      (syntax/loc stx (Cast (T ty) (E e)))]
+    ;; XXX simultaneous
+    ;; XXX let*
     [(_ (let ([x (~datum :) ty (~datum :=) xe]) be))
      (syntax/loc stx
        (let ([x-id (gensym 'x)]
@@ -91,6 +93,8 @@
                  (let-syntax ([x (P-expander
                                   (syntax-parser [_:id #'the-x-ref]))])
                    (E be))))))]
+    ;; XXX cond
+    ;; XXX and, or, not
     [(_ (if c t f))
      (syntax/loc stx (IfE (E c) (E t) (E f)))]
     [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
@@ -427,3 +431,4 @@
          Prog)
 
 ;; XXX Array Slice
+;; XXX data types
