@@ -367,26 +367,44 @@
                      (Var-x r.ref) (Var-ty r.ref) the-post
                      ret-lab-id the-body)))))]))
 
+(define-syntax (include-fun stx)
+  (syntax-parse stx
+    [(_ #:maybe n:expr f:expr)
+     (if (syntax-parameter-value #'current-Prog)
+       (syntax/loc stx
+         (hash-set! (Program-name->fun current-Prog) n f))
+       #'(void))]
+    [(_ n:expr f:expr)
+     #:fail-unless (syntax-parameter-value #'current-Prog)
+     "Cannot include function outside of Prog"
+     (syntax/loc stx (include-fun #:maybe n f))]
+    [(_ x:id)
+     (syntax/loc stx (include-fun (symbol->string 'x) x))]
+    [(_ #:maybe x:id)
+     (syntax/loc stx (include-fun #:maybe (symbol->string 'x) x))]))
+
 (define-syntax (define-fun stx)
   (syntax-parse stx
     [(_ x:id . more)
-     #:do [(define inside-Prog? (syntax-parameter-value #'current-Prog))]
-     #:with install-in-Prog
-     (if inside-Prog?
-       (syntax/loc stx
-         (hash-set! (Program-name->fun current-Prog) (symbol->string 'x) x))
-       #'(void))
      (quasisyntax/loc stx
        (begin (define x #,(syntax/loc #'more (F . more)))
-              install-in-Prog))]
+              (include-fun #:maybe x)))]
     [(_ (x:id . args) . more)
      (quasisyntax/loc stx
        (define-fun x . #,(syntax/loc #'args (args . more))))]))
 
-;; XXX include/use-fun (or something) to use a function defined
-;; elsewhere in a normal Racket ctxt
-
-;; XXX define-extern-fun
+(define-syntax (define-extern-fun stx)
+  (syntax-parse stx
+    [(_ x:id
+        (~optional (~seq #:name name:expr)
+                   #:defaults ([name #'(symbol->string 'x)]))
+        (a:Farg ...)
+        (~datum :) ret-ty:expr
+        #:src es:expr)
+     (syntax/loc stx
+       (define x
+         (ExtFun es (let ([a.ref a.var] ...) (list a.arg ...))
+                 ret-ty name)))]))
 
 (define-syntax (define-global stx)
   (syntax-parse stx
@@ -425,7 +443,7 @@
          while assert! return S
          define-S-free-syntax define-S-expander
          F
-         define-fun define-global
+         define-fun include-fun define-extern-fun define-global
          Prog)
 
 ;; XXX Array Slice
