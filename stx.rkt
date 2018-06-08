@@ -228,7 +228,15 @@
        (let ([the-ty (T ty)])
          ;; XXX must unsyntax the-ty later (when T is implemented)
          (S (let ([x : the-ty := (UndI the-ty)]) . b))))]
-    ;; XXX Call like let but with <-
+    [(_ (let ([x:id (~datum :) ty (~datum :=) f (~datum <-) a ...]) . b))
+     (syntax/loc stx
+       (let ([x-id (gensym 'x)]
+             [the-ty (T ty)])
+         (Call x-id the-ty f (list (E a) ...)
+               (let ([the-x-ref (Var x-id the-ty)])
+                 (let-syntax ([x (P-expander
+                                  (syntax-parser [_:id #'the-x-ref]))])
+                   (S (begin . b)))))))]
     [(_ (~and macro-use (macro-id . _)))
      #:when (dict-has-key? S-free-macros #'macro-id)
      ((dict-ref S-free-macros #'macro-id) #'macro-use)]
@@ -284,8 +292,8 @@
 (define-S-expander while
   (syntax-parser
     [(_ (~optional (~seq #:I I)
-                       #:defaults ([I #'(U32 1)]))
-       p . b)
+                   #:defaults ([I #'(U32 1)]))
+        p . b)
      (syntax/loc this-syntax (While (E p) (E I) (S (begin . b))))]))
 
 (define-S-expander return
