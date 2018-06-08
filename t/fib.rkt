@@ -4,10 +4,10 @@
 
 (define fib-p
   (Prog
-   (define-fun (fib [n : S64T]) : [return : S64T]
+   (define-fun (fib [n : S64T]) : S64T
      (cond
        [(ISLe (Read n) (S64 1))
-        (set! return (Read n))]
+        (Read n)]
        [else
         (define fib : S64T := (ConI (S64 1)))
         (define prev : S64T := (ConI (S64 1)))
@@ -18,7 +18,7 @@
           (set! fib (IAdd (Read fib) (Read prev)))
           (set! prev (Read tmp))
           (set! i (IAdd (Read i) (S64 1))))
-        (set! return (Read fib))]))))
+        (Read fib)]))))
 
 (define (run-fib n)
   (Int-val (eval-program fib-p "fib" (list (S64 n)))))

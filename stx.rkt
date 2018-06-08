@@ -176,18 +176,24 @@
 
 (define-syntax-parameter current-return #f)
 (define-syntax-parameter current-return-var #f)
+(define-syntax-parameter S-in-tail? #f)
 
+(define-syntax (return stx) (raise-syntax-error 'return "Illegal outside S" stx))
 (define-syntax (while stx) (raise-syntax-error 'while "Illegal outside S" stx))
 (define-syntax (S stx)
   (syntax-parse stx
-    #:literals (void error begin define set! if let/ec while let unsyntax)
+    #:literals (void error begin define set! if let/ec while return let unsyntax)
     [(_ (void)) (syntax/loc stx (Skip #f))]
     [(_ (void m)) (syntax/loc stx (Skip m))]
     [(_ (error m)) (syntax/loc stx (Fail m))]
     [(_ (begin)) (syntax/loc stx (S (void)))]
     [(_ (begin (define . d) . b)) (syntax/loc stx (S (let (d) . b)))]
     [(_ (begin s)) (syntax/loc stx (S s))]
-    [(_ (begin a . d)) (syntax/loc stx (Begin (S a) (S (begin . d))))]
+    [(_ (begin a . d))
+     (syntax/loc stx
+       (Begin (syntax-parameterize ([S-in-tail? #f])
+                (S a))
+              (S (begin . d))))]
     [(_ (set! p e)) (syntax/loc stx (Assign (P p) (E e)))]
     [(_ (if p t f)) (syntax/loc stx (If (E p) (S t) (S f)))]
     [(_ (let/ec k:id . b))
@@ -210,6 +216,16 @@
                 (let-syntax ([x (P-expander
                                  (syntax-parser [_:id #'the-x-ref]))])
                   (S (begin . b)))))))]
+    [(_ (return))
+     #:fail-unless (syntax-parameter-value #'current-return)
+     "Illegal outside of F"
+     (syntax/loc stx current-return)]
+    [(_ (return e))
+     #:fail-unless (and (syntax-parameter-value #'current-return)
+                        (syntax-parameter-value #'current-return-var))
+     "Illegal outside of F"
+     (syntax/loc stx
+       (S (begin (set! current-return-var e) (return))))]
     ;; XXX Call
     [(_ (~and macro-use (macro-id . _)))
      #:when (dict-has-key? S-free-macros #'macro-id)
@@ -219,7 +235,11 @@
      ((attribute macro-id.value) #'macro-use)]
     ;; XXX Maybe not require this and just silently drop out? Seems
     ;; confusing since we take over names (above)
-    [(_ (unsyntax e)) #'e]))
+    [(_ (unsyntax e)) #'e]
+    [(_ e)
+     #:fail-unless (syntax-parameter-value #'S-in-tail?)
+     "Cannot end in expression when not in tail position"
+     (syntax/loc stx (S (return e)))]))
 
 (define-S-free-syntax cond
   (syntax-parser
@@ -278,6 +298,11 @@
     [pattern
      (x:id (~datum :) ty)
      #:attr ref (generate-temporary #'x)
+     #:attr var (syntax/loc this-syntax (Var (gensym 'x) ty))]
+    [pattern
+     ty
+     #:attr x (generate-temporary)
+     #:attr ref (generate-temporary #'x)
      #:attr var (syntax/loc this-syntax (Var (gensym 'x) ty))]))
 (define-syntax (F stx)
   (syntax-parse stx
@@ -303,10 +328,11 @@
                              (let-syntax
                                  ([ret-lab (S-expander (syntax-parser [(_) #'the-ret]))])
                                (syntax-parameterize
-                                   ([current-return
-                                     (make-rename-transformer #'ret-lab)]
+                                   ([current-return 
+                                     (make-rename-transformer #'the-ret)]
                                     [current-return-var
-                                     (make-rename-transformer #'r.x)])
+                                     (make-rename-transformer #'r.x)]
+                                    [S-in-tail? #t])
                                  (S (begin . bs)))))))])
              (IntFun (list a.arg ...) pre
                      (Var-x r.ref) (Var-ty r.ref) the-post
@@ -364,7 +390,7 @@
          the-prog))]))
 
 (provide T P E I
-         while assert! S
+         while assert! return S
          define-S-free-syntax define-S-expander
          F
          define-fun define-global
