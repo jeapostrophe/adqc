@@ -187,7 +187,9 @@
     [(IfE ce te fe)
      (eval-expr σ (if (eval-expr-pred σ ce) te fe))]
     [(MetaE _ e)
-     (eval-expr σ e)]))
+     (eval-expr σ e)]
+    [(Fail msg)
+     (error 'eval-expr msg)]))
 
 (define (eval-expr-pred σ pred)
   (not (zero? (Int-val (eval-expr σ pred)))))

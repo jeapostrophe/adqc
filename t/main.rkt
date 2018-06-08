@@ -129,7 +129,9 @@
   (go (U32 23) (Cast U32T (S8 23)))
   (go (F32 23.3f0) (Cast F32T (F64 23.3)))
   (go (S32 23) (Cast S32T (F64 23.3)))
-  (go (F64 23.0) (Cast F64T (S32 23))))
+  (go (F64 23.0) (Cast F64T (S32 23)))
+  ;; Fail
+  (chk #:x (eval-expr (hasheq) (Fail "Fail Stmt")) "Fail Stmt"))
 
 #;
 (module+ test
