@@ -209,6 +209,7 @@
                 (S a))
               (S (begin . d))))]
     [(_ (set! p e)) (syntax/loc stx (Assign (P p) (E e)))]
+    [(_ {p (~datum <-) e}) (syntax/loc stx (S (set! p e)))]
     [(_ (if p t f)) (syntax/loc stx (If (E p) (S t) (S f)))]
     [(_ (let/ec k:id . b))
      (syntax/loc stx
