@@ -55,7 +55,8 @@
 (struct Cast Expr (ty e) #:transparent)
 (struct Read Expr (p) #:transparent)
 (struct BinOp Expr (op L R) #:transparent)
-(struct LetE Expr (x xe be) #:transparent)
+;; XXX allow simultaneous?
+(struct LetE Expr (x ty xe be) #:transparent)
 (struct IfE Expr (ce te fe) #:transparent)
 (struct MetaE Expr (m e) #:transparent)
 
@@ -70,7 +71,7 @@
   [struct Cast ([ty Type?] [e Expr?])]
   [struct Read ([p Path?])]
   [struct BinOp ([op symbol?] [L Expr?] [R Expr?])]
-  [struct LetE ([x symbol?] [xe Expr?] [be Expr?])]
+  [struct LetE ([x symbol?] [ty Type?] [xe Expr?] [be Expr?])]
   [struct IfE ([ce Expr?] [te Expr?] [fe Expr?])]
   [struct MetaE ([m any/c] [e Expr?])]))
 

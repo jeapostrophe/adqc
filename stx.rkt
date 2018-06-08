@@ -4,6 +4,12 @@
          racket/match
          syntax/parse/define
          racket/stxparam
+         (for-syntax racket/base
+                     syntax/parse
+                     racket/list
+                     racket/syntax
+                     racket/dict
+                     syntax/id-table)
          "ast.rkt")
 
 ;; XXX This module should use plus not ast (i.e. the thing that does
@@ -13,129 +19,6 @@
 
 ;; XXX Should these macros record the src location in the data
 ;; structure some how?
-
-;; Float syntax
-(define-simple-macro (define-flo-stx [tyname:id name:id bits arg-ctc] ...)
-  (begin
-    (begin
-      (define tyname (FloT bits))
-      (define (name v) (Flo bits v))
-      (provide
-       (contract-out
-        [tyname Type?]
-        [name (-> arg-ctc Expr?)])))
-    ...))
-
-(define-flo-stx
-  [F32T F32 32 single-flonum?]
-  [F64T F64 64 double-flonum?])
-
-;; Integer syntax
-(define-simple-macro (define-int-stx [tyname:id name:id signed? bits] ...)
-  (begin
-    (begin
-      (define tyname (IntT signed? bits))
-      (define (name v) (Int signed? bits v))
-      (provide
-       (contract-out
-        [tyname Type?]
-        [name (-> (integer-in (- (expt 2 (sub1 bits)))
-                              (sub1 (expt 2 (sub1 bits))))
-                  Expr?)])))
-    ...))
-
-(define-int-stx
-  [S8T  S8  #t  8]
-  [S16T S16 #t 16]
-  [S32T S32 #t 32]
-  [S64T S64 #t 64]
-  [U8T  U8  #f  8]
-  [U16T U16 #f 16]
-  [U32T U32 #f 32]
-  [U64T U64 #f 64])
-
-;; Binary Op syntax
-(define-simple-macro (define-bin-ops [name:id op] ...)
-  (begin
-    (begin
-      (define (name L R)
-        (BinOp op L R)) ...)
-    (provide
-     (contract-out [name (Expr? Expr? . -> . Expr?)] ...))))
-
-(define-bin-ops
-  [IAdd   'iadd  ]
-  [ISub   'isub  ]
-  [IMul   'imul  ]
-  [ISDiv  'isdiv ]
-  [IUDiv  'iudiv ]
-  [ISRem  'isrem ]
-  [IURem  'iurem ]
-  [IShl   'ishl  ]
-  [ILShr  'ilshr ]
-  [IAShr  'iashr ]
-  [IOr    'ior   ]
-  [IAnd   'iand  ]
-  [IXor   'ixor  ]
-  [IEq    'ieq   ]
-  [INe    'ine   ]
-  [IUGt   'iugt  ]
-  [ISGt   'isgt  ]
-  [IUGe   'iuge  ]
-  [ISGe   'isge  ]
-  [IULt   'iult  ]
-  [ISLt   'islt  ]
-  [IULe   'iule  ]
-  [ISLe   'isle  ]
-  [FAdd   'fadd  ]
-  [FSub   'fsub  ]
-  [FMul   'fmul  ]
-  [FDiv   'fdiv  ]
-  [FRem   'frem  ]
-  [FFalse 'ffalse]
-  [FTrue  'ftrue ]
-  [FOEq   'foeq  ]
-  [FOGt   'fogt  ]
-  [FOGe   'foge  ]
-  [FOLt   'folt  ]
-  [FOLe   'fole  ]
-  [FONe   'fone  ]
-  [FOrd   'ford  ]
-  [FUEq   'fueq  ]
-  [FUGt   'fugt  ]
-  [FUGe   'fuge  ]
-  [FULt   'fult  ]
-  [FULe   'fule  ]
-  [FUNe   'fune  ]
-  [FUno   'funo  ])
-
-(define (And L R)
-  (IAnd (INe (U32 0) L)
-        (INe (U32 0) R)))
-
-(define (Or L R)
-  (IOr (INe (U32 0) L)
-       (INe (U32 0) R)))
-
-(define (Not e)
-  (IEq (U32 0) e))
-
-(define (Implies a b)
-  (Or (Not a) b))
-
-(provide
- (contract-out
-  [And (-> Expr? Expr? Expr?)]
-  [Or (-> Expr? Expr? Expr?)]
-  [Not (-> Expr? Expr?)]
-  [Implies (-> Expr? Expr? Expr?)]))
-
-(require (for-syntax racket/base
-                     syntax/parse
-                     racket/list
-                     racket/syntax
-                     racket/dict
-                     syntax/id-table))
 
 (define-syntax-rule (define-expanders&macros
                       S-free-macros define-S-free-syntax
@@ -156,14 +39,14 @@
   T-expander define-T-expander)
 (define-syntax (T stx)
   (syntax-parse stx
-    [(_ x) #'x]))
-
-;; XXX implement E
-(define-expanders&macros
-  E-free-macros define-E-free-syntax
-  E-expander define-E-expander)
-(define-syntax (E stx)
-  (syntax-parse stx
+    #:literals (unsyntax)
+    [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
+     #:when (dict-has-key? T-free-macros #'macro-id)
+     ((dict-ref T-free-macros #'macro-id) #'macro-use)]
+    [(_ (~and macro-use (~or macro-id (macro-id . _))))
+     #:declare macro-id (static T-expander? "T expander")
+     ((attribute macro-id.value) #'macro-use)]
+    [(_ (unsyntax e)) #'e]
     [(_ x) #'x]))
 
 ;; XXX implement P
@@ -175,26 +58,109 @@
     [(_ x) #'x]))
 
 (define-expanders&macros
+  E-free-macros define-E-free-syntax
+  E-expander define-E-expander)
+
+(begin-for-syntax
+  (define-literal-set E-bin-op
+    #:datum-literals (
+     iadd isub imul isdiv iudiv isrem iurem ishl ilshr iashr ior iand
+     ixor ieq ine iugt isgt iuge isge iult islt iule isle
+     
+     fadd fsub fmul fdiv frem foeq fogt foge folt fole fone fueq fugt
+     fuge fult fule fune)
+    ())
+  (define E-bin-op? (literal-set->predicate E-bin-op)))
+
+(define-syntax (E stx)
+  (syntax-parse stx
+    #:literals (if let unsyntax)
+    ;; XXX recognize literal numbers and find the smallest type
+    ;; XXX make generic binops that look at the types and determine the operation
+    [(_ (op:id l r))
+     #:when (E-bin-op? #'op)
+     (syntax/loc stx (BinOp 'op (E l) (E r)))]
+    [(_ (e (~datum :) ty))
+     (syntax/loc stx (Cast (T ty) (E e)))]
+    [(_ (let ([x (~datum :) ty (~datum :=) xe]) be))
+     (syntax/loc stx
+       (let ([x-id (gensym 'x)]
+             [the-ty (T ty)])
+         (LetE x-id the-ty (E xe)
+               (let ([the-x-ref (Var x-id the-ty)])
+                 (let-syntax ([x (P-expander
+                                  (syntax-parser [_:id #'the-x-ref]))])
+                   (E be))))))]
+    [(_ (if c t f))
+     (syntax/loc stx (IfE (E c) (E t) (E f)))]
+    [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
+     #:when (dict-has-key? E-free-macros #'macro-id)
+     ((dict-ref E-free-macros #'macro-id) #'macro-use)]
+    [(_ (~and macro-use (~or macro-id (macro-id . _))))
+     #:declare macro-id (static E-expander? "E expander")
+     ((attribute macro-id.value) #'macro-use)]
+    [(_ (unsyntax e)) #'e]
+    [(_ p) (syntax/loc stx (Read (P p)))]))
+
+(define-simple-macro (define-flo-stx [name:id bits] ...)
+  (begin
+    (begin
+      (define-syntax (name stx) (raise-syntax-error 'name "Illegal outside T or E" stx))
+      (define-T-free-syntax name (syntax-parser [_:id #'(FloT bits)]))
+      (define-E-free-syntax name
+        (syntax-parser
+          [(_ n:expr)
+           (syntax/loc this-syntax (Flo bits n))]))
+      (provide name))
+    ...))
+
+(define-flo-stx
+  [F32 32]
+  [F64 64])
+
+(define-simple-macro (define-int-stx [name:id signed? bits] ...)
+  (begin
+    (begin
+      (define-syntax (name stx) (raise-syntax-error 'name "Illegal outside T or E" stx))
+      (define-T-free-syntax name (syntax-parser [_:id #'(IntT signed? bits)]))
+      (define-E-free-syntax name
+        (syntax-parser
+          [(_ n:expr)
+           (syntax/loc this-syntax (Int signed? bits n))]))
+      (provide name))
+    ...))
+
+(define-int-stx
+  [S8  #t  8]
+  [S16 #t 16]
+  [S32 #t 32]
+  [S64 #t 64]
+  [U8  #f  8]
+  [U16 #f 16]
+  [U32 #f 32]
+  [U64 #f 64])
+
+(define-expanders&macros
   I-free-macros define-I-free-syntax
   I-expander define-I-expander)
 ;; XXX should undef, zero, array, record, and union be literals?
 (define-syntax (I stx)
   (syntax-parse stx #:literals (unsyntax)
-    [(_ ((~datum undef) ty)) (syntax/loc stx (UndI (T ty)))]
-    [(_ ((~datum zero) ty)) (syntax/loc stx (ZedI (T ty)))]
-    [(_ ((~datum array) i ...)) (syntax/loc stx (ArrI (list (I i) ...)))]
-    [(_ ((~datum record) (~seq k:id i) ...))
-     (syntax/loc stx (RecI (make-immutable-hasheq (list (cons 'k (I i)) ...))))]
-    [(_ ((~datum union) m:id i))
-     (syntax/loc stx (UniI 'm (I i)))]
-    [(_ (~and macro-use (macro-id . _)))
-     #:when (dict-has-key? I-free-macros #'macro-id)
-     ((dict-ref I-free-macros #'macro-id) #'macro-use)]
-    [(_ (~and macro-use (macro-id . _)))
-     #:declare macro-id (static I-expander? "I expander")
-     ((attribute macro-id.value) #'macro-use)]
-    [(_ (unsyntax e)) #'e]
-    [(_ x) (syntax/loc stx (ConI (E x)))]))
+                [(_ ((~datum undef) ty)) (syntax/loc stx (UndI (T ty)))]
+                [(_ ((~datum zero) ty)) (syntax/loc stx (ZedI (T ty)))]
+                [(_ ((~datum array) i ...)) (syntax/loc stx (ArrI (list (I i) ...)))]
+                [(_ ((~datum record) (~seq k:id i) ...))
+                 (syntax/loc stx (RecI (make-immutable-hasheq (list (cons 'k (I i)) ...))))]
+                [(_ ((~datum union) m:id i))
+                 (syntax/loc stx (UniI 'm (I i)))]
+                [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
+                 #:when (dict-has-key? I-free-macros #'macro-id)
+                 ((dict-ref I-free-macros #'macro-id) #'macro-use)]
+                [(_ (~and macro-use (~or macro-id (macro-id . _))))
+                 #:declare macro-id (static I-expander? "I expander")
+                 ((attribute macro-id.value) #'macro-use)]
+                [(_ (unsyntax e)) #'e]
+                [(_ x) (syntax/loc stx (ConI (E x)))]))
 
 (define-expanders&macros
   S-free-macros define-S-free-syntax
@@ -251,10 +217,10 @@
                  (let-syntax ([x (P-expander
                                   (syntax-parser [_:id #'the-x-ref]))])
                    (S (begin . b)))))))]
-    [(_ (~and macro-use (macro-id . _)))
+    [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
      #:when (dict-has-key? S-free-macros #'macro-id)
      ((dict-ref S-free-macros #'macro-id) #'macro-use)]
-    [(_ (~and macro-use (macro-id . _)))
+    [(_ (~and macro-use (~or macro-id (macro-id . _))))
      #:declare macro-id (static S-expander? "S expander")
      ((attribute macro-id.value) #'macro-use)]
     [(_ (unsyntax e)) #'e]
@@ -332,7 +298,7 @@
                  #:defaults ([mode #''read-only]))
       x:id (~datum :) ty)
      #:attr ref (generate-temporary #'x)
-     #:attr var (syntax/loc this-syntax (Var (gensym 'x) ty))
+     #:attr var (syntax/loc this-syntax (Var (gensym 'x) (T ty)))
      #:attr arg (syntax/loc this-syntax (Arg (Var-x ref) (Var-ty ref) mode))])
   (define-syntax-class Fret
     #:attributes (x ref var)
@@ -340,12 +306,12 @@
     [pattern
      (x:id (~datum :) ty)
      #:attr ref (generate-temporary #'x)
-     #:attr var (syntax/loc this-syntax (Var (gensym 'x) ty))]
+     #:attr var (syntax/loc this-syntax (Var (gensym 'x) (T ty)))]
     [pattern
      ty
      #:attr x (generate-temporary)
      #:attr ref (generate-temporary #'x)
-     #:attr var (syntax/loc this-syntax (Var (gensym 'x) ty))]))
+     #:attr var (syntax/loc this-syntax (Var (gensym 'x) (T ty)))]))
 (define-syntax (F stx)
   (syntax-parse stx
     [(_ (a:Farg ...) (~datum :) r:Fret
@@ -366,7 +332,7 @@
            (let-values
                ([(the-post the-body)
                  (let-syntax ([r.x (P-expander (syntax-parser [_:id #'r.ref]))])
-                   (values post
+                   (values (E post)
                            (let ([the-ret (Jump ret-lab-id)])
                              (let-syntax
                                  ([ret-lab (S-expander (syntax-parser [(_) #'the-ret]))])
@@ -377,7 +343,7 @@
                                      (make-rename-transformer #'r.x)]
                                     [S-in-tail? #t])
                                  (S (begin . bs)))))))])
-             (IntFun (list a.arg ...) pre
+             (IntFun (list a.arg ...) (E pre)
                      (Var-x r.ref) (Var-ty r.ref) the-post
                      ret-lab-id the-body)))))]))
 

@@ -17,8 +17,8 @@
     (syntax-parse stx
       [(_ expect act (~optional (~seq #:env env) #:defaults ([env #'(hasheq)])))
        (quasisyntax/loc stx
-         (chk (#:stx #,stx expect)
-              (#:stx #,stx (eval-expr env act))))]))
+         (chk (#:stx #,stx (eval-expr env act))
+              (#:stx #,stx expect)))]))
   ;; Integer arithmetic
   (go (S64 5) (S64 5))
   (go (S64 5) (Read (Var 'x S64T))
@@ -251,21 +251,23 @@
 (module+ test
   (compile&emit
    (hasheq 'x "ecks" 'y "why")
-   (S
-    (begin
-      (set! (Var 'x S32T) (S32 0))
-      (void)
-      (unless (IEq (Read (Var 'x S32T)) (S32 0))
-        (error "The world is upside-down!"))
-      (let/ec end
-        (assert! #:dyn #:msg "y is positive"
-                 (IULt (S32 0) (Read (Var 'y S32T))))
-        (if (IEq (S32 5) (S32 6))
-          (set! (Var 'x S32T) (S32 1))
-          (set! (Var 'y S32T) (S32 2)))
-        (when (IEq (Read (Var 'y S32T)) (S32 2))
-          (set! (Var 'x S32T) (S32 1))
-          (end))
-        (while (IULt (Read (Var 'x S32T)) (S32 6))
-          (set! (Var 'x S32T) (IAdd (Read (Var 'x S32T)) (S32 1)))))
-      (set! (Var 'y S32T) (S32 42))))))
+   (let ([x (Var 'x (T S32))]
+         [y (Var 'y (T S32))])
+     (S
+      (begin
+        (set! x (S32 0))
+        (void)
+        (unless (ieq x (S32 0))
+          (error "The world is upside-down!"))
+        (let/ec end
+          (assert! #:dyn #:msg "y is positive"
+                   (iult (S32 0) y))
+          (if (ieq (S32 5) (S32 6))
+            (set! x (S32 1))
+            (set! y (S32 2)))
+          (when (ieq y (S32 2))
+            (set! x (S32 1))
+            (end))
+          (while (iult x (S32 6))
+            (set! x (iadd x (S32 1)))))
+        (set! y (S32 42)))))))

@@ -199,7 +199,7 @@
         (Flo bits (cast val))])]
     [(BinOp op L R)
      ((hash-ref bin-op-table op) (rec L) (rec R))]
-    [(LetE x xe be)
+    [(LetE x xt xe be)
      (eval-expr (hash-set σ x (eval-expr σ xe)) be)]
     [(IfE ce te fe)
      (eval-expr σ (if (eval-expr-pred σ ce) te fe))]

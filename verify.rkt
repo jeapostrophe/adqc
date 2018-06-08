@@ -4,10 +4,28 @@
          "ast.rkt"
          "stx.rkt")
 
+(define (True? x)
+  (E (ine (U32 0) #,x)))
+
+(define (And L R)
+  (E (iand #,(True? L) #,(True? R))))
+
+(define (Or L R)
+  (E (ior #,(True? L) #,(True? R))))
+
+(define (Not e)
+  (E (ieq (U32 0) #,e)))
+
+(define (Implies a b)
+  (Or (Not a) b))
+
+;; XXX annoying that we have to know which are functions and which are
+;; not
+
 (define (weakest-precond stmt post-cond)
   (match stmt
     [(Skip _) post-cond]
-    [(Fail _) (U32 0)]
+    [(Fail _) (Int #f 32 0)]
     [(Assign (Var x _) e)
      (subst x e post-cond)]
     [(Begin L-stmt R-stmt)
