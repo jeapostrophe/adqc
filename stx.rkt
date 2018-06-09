@@ -56,13 +56,25 @@
      ((attribute macro-id.value) #'macro-use)]
     [(_ (unsyntax e)) #'e]))
 
-;; XXX implement P
 (define-expanders&macros
   P-free-macros define-P-free-syntax
   P-expander define-P-expander)
 (define-syntax (P stx)
   (syntax-parse stx
-    [(_ x) #'x]))
+    [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
+     #:when (dict-has-key? P-free-macros #'macro-id)
+     ((dict-ref P-free-macros #'macro-id) #'macro-use)]
+    [(_ (~and macro-use (~or macro-id (macro-id . _))))
+     #:declare macro-id (static P-expander? "P expander")
+     ((attribute macro-id.value) #'macro-use)]
+    [(_ x:id) #'x]
+    [(_ (p ... (e)))
+     (syntax/loc stx (Select (P (p ...)) (E e)))]
+    [(_ (p ... (~datum ->) f:id))
+     (syntax/loc stx (Field (P (p ...)) 'f))]
+    [(_ (p ... (~datum as) m:id))
+     (syntax/loc stx (Mode (P (p ...)) 'm))]    
+    [(_ (unsyntax e)) #'e]))
 
 (define-expanders&macros
   E-free-macros define-E-free-syntax
@@ -111,7 +123,7 @@
      #:declare macro-id (static E-expander? "E expander")
      ((attribute macro-id.value) #'macro-use)]
     [(_ (unsyntax e)) #'e]
-    [(_ p) (syntax/loc stx (Read (P p)))]))
+    [(_ p) (quasisyntax/loc stx (Read #,(syntax/loc #'p (P p))))]))
 
 (define-simple-macro (define-flo-stx [name:id bits] ...)
   (begin

@@ -21,10 +21,10 @@
               (#:stx #,stx (E expect))))]))
   ;; Integer arithmetic
   (go (S64 5) (S64 5))
-  (go (S64 5) (Var 'x (T S64))
+  (go (S64 5) #,(Read (Var 'x (T S64)))
       #:env (hasheq 'x (box (E (S64 5)))))
   (go (S64 11) (iadd (S64 5) (S64 6)))
-  (go (S64 11) (iadd (Var 'x (T S64)) (Var 'y (T S64)))
+  (go (S64 11) (iadd #,(Read (Var 'x (T S64))) #,(Read (Var 'y (T S64))))
       #:env (hasheq 'x (box (E (S64 5))) 'y (box (E (S64 6)))))
   (go (S64 1) (isub (S64 6) (S64 5)))
   (go (S64 12) (imul (S64 3) (S64 4)))
