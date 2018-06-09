@@ -68,7 +68,7 @@
      ixor ieq ine iugt isgt iuge isge iult islt iule isle
      
      fadd fsub fmul fdiv frem foeq fogt foge folt fole fone fueq fugt
-     fuge fult fule fune)
+     fuge fult fule fune ffalse ftrue ford funo)
     ())
   (define E-bin-op? (literal-set->predicate E-bin-op)))
 

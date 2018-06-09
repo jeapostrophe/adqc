@@ -160,7 +160,8 @@
 (define (type-cast ty v)
   (match* (ty v)
     [((IntT new-signed? new-bits) (Int _ _ n))
-     (Int new-signed? new-bits ((get-cast-fn new-signed?) n))]))
+     (Int new-signed? new-bits
+          ((int-cast new-signed? new-bits) n))]))
 
 (define (path-read σ p)
   (define (rec p) (path-read σ p))
@@ -182,6 +183,9 @@
 (define (eval-expr σ e)
   (define (rec e) (eval-expr σ e))
   (match e
+    [(? Int?) e]
+    [(? Flo?) e]
+    [(Read p) (path-read σ p)]
     [(Cast ty e)
      ;; XXX move to separate function, like type-cast
      (match-define (or (Int _ _ val) (Flo _ val))
