@@ -101,7 +101,7 @@
      (syntax/loc stx (BinOp 'op (E l) (E r)))]
     [(_ (e (~datum :) ty))
      (syntax/loc stx (Cast (T ty) (E e)))]
-    ;; XXX simultaneous
+    ;; XXX simultaneous let
     ;; XXX let*
     [(_ (let ([x (~datum :) ty (~datum :=) xe]) be))
      (syntax/loc stx
