@@ -432,3 +432,5 @@
 
 ;; XXX Array Slice
 ;; XXX data types
+
+;; XXX try using multiscope2 -- https://github.com/michaelballantyne/multiscope2
