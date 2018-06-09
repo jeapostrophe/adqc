@@ -48,8 +48,8 @@
 
 (define ((int-cast signed? bits) val)
   (if signed?
-      (unsigned->signed bits val)
-      (signed->unsigned bits val)))
+    (unsigned->signed bits val)
+    (signed->unsigned bits val)))
 
 (define (((int-op signed?) op) a b)
   (match-define (Int a-signed? a-bits a-val) a)
@@ -154,14 +154,21 @@
           'fult (unord-flo-cmp fl<)
           'fule (unord-flo-cmp fl<=)
           'fune (unord-flo-cmp fl-!=)
-          'funo (unord-flo-cmp (const #f))
-          ))
+          'funo (unord-flo-cmp (const #f))))
 
 (define (type-cast ty v)
-  (match* (ty v)
-    [((IntT new-signed? new-bits) (Int _ _ n))
-     (Int new-signed? new-bits
-          ((int-cast new-signed? new-bits) n))]))
+  (match-define (or (Int _ _ val) (Flo _ val)) v)
+  (match ty
+    [(IntT signed? bits)
+     (define cast (int-cast signed? bits))
+     (define val* (inexact->exact (floor val)))
+     (Int signed? bits (cast val*))]
+    [(FloT bits)
+     (define cast
+       (match bits
+         [32 real->single-flonum]
+         [64 real->double-flonum]))
+     (Flo bits (cast val))]))
 
 (define (path-read σ p)
   (define (rec p) (path-read σ p))
@@ -186,21 +193,7 @@
     [(? Int?) e]
     [(? Flo?) e]
     [(Read p) (path-read σ p)]
-    [(Cast ty e)
-     ;; XXX move to separate function, like type-cast
-     (match-define (or (Int _ _ val) (Flo _ val))
-       (rec e))
-     (match ty
-       [(IntT signed? bits)
-        (define cast (int-cast signed? bits))
-        (define val* (inexact->exact (floor val)))
-        (Int signed? bits (cast val*))]
-       [(FloT bits)
-        (define cast
-          (match bits
-            [32 real->single-flonum]
-            [64 real->double-flonum]))
-        (Flo bits (cast val))])]
+    [(Cast ty e) (type-cast ty (rec e))]
     [(BinOp op L R)
      ((hash-ref bin-op-table op) (rec L) (rec R))]
     [(LetE x xt xe be)
