@@ -20,6 +20,8 @@
 ;; XXX Should these macros record the src location in the data
 ;; structure some how? (perhaps plus should do that with meta?)
 
+;; XXX Use remix for #%dot and #%braces
+
 (define-syntax-rule (define-expanders&macros
                       S-free-macros define-S-free-syntax
                       S-expander define-S-expander)
@@ -33,21 +35,26 @@
     (define-simple-macro (define-S-expander id impl)
       (define-syntax id (S-expander impl)))))
 
-;; XXX implement T
 (define-expanders&macros
   T-free-macros define-T-free-syntax
   T-expander define-T-expander)
 (define-syntax (T stx)
   (syntax-parse stx
     #:literals (unsyntax)
+    ;; XXX should array, record, and union be literals?
+    [(_ ((~datum array) dim:nat elem))
+     (syntax/loc stx (ArrT dim (T elem)))]
+    [(_ ((~datum record) (~seq f:id ft) ...))
+     (syntax/loc stx (RecT (make-immutable-hasheq (list (cons 'f (T ft)) ...))))]
+    [(_ ((~datum union) (~seq m:id mt) ...))
+     (syntax/loc stx (UniT (make-immutable-hasheq (list (cons 'm (T mt)) ...))))]
     [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
      #:when (dict-has-key? T-free-macros #'macro-id)
      ((dict-ref T-free-macros #'macro-id) #'macro-use)]
     [(_ (~and macro-use (~or macro-id (macro-id . _))))
      #:declare macro-id (static T-expander? "T expander")
      ((attribute macro-id.value) #'macro-use)]
-    [(_ (unsyntax e)) #'e]
-    [(_ x) #'x]))
+    [(_ (unsyntax e)) #'e]))
 
 ;; XXX implement P
 (define-expanders&macros
@@ -210,8 +217,7 @@
     [(_ (let ([x:id (~datum :) ty]) . b))
      (syntax/loc stx
        (let ([the-ty (T ty)])
-         ;; XXX must unsyntax the-ty later (when T is implemented)
-         (S (let ([x : the-ty := (undef the-ty)]) . b))))]
+         (S (let ([x : #,the-ty := (undef #,the-ty)]) . b))))]
     [(_ (let ([x:id (~datum :) ty (~datum :=) f (~datum <-) a ...]) . b))
      (syntax/loc stx
        (let ([x-id (gensym 'x)]
