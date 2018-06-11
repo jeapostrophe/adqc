@@ -4,6 +4,8 @@
 (define float-bit-widths '(32 64))
 (define integer-bit-widths '(8 16 32 64))
 
+;; XXX most string? in this code is c-identifier-string?
+
 ;; Extern Source
 (struct ExternSrc (ls hs) #:transparent)
 

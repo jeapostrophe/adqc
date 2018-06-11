@@ -22,6 +22,8 @@
 
 ;; XXX Use remix for #%dot and #%braces
 
+;; XXX fix bound occurrences
+
 (define-syntax-rule (define-expanders&macros
                       S-free-macros define-S-free-syntax
                       S-expander define-S-expander)
@@ -296,7 +298,10 @@
     [(_ (~optional (~seq #:I I)
                    #:defaults ([I #'(U32 1)]))
         p . b)
-     (syntax/loc this-syntax (While (E p) (E I) (S (begin . b))))]))
+     ;; XXX The invariant should be a MetaS!!!!
+     (syntax/loc this-syntax (While (E p) (E I)
+                                    (syntax-parameterize ([S-in-tail? #f])
+                                      (S (begin . b)))))]))
 
 (define-S-expander return
   (syntax-parser
@@ -354,6 +359,8 @@
            (let-values
                ([(the-post the-body)
                  (let-syntax ([r.x (P-expander (syntax-parser [_:id #'r.ref]))])
+                   ;; XXX If r.x is invented, how does post know its
+                   ;; name? Maybe with 'the-return'?
                    (values (E post)
                            (let ([the-ret (Jump ret-lab-id)])
                              (let-syntax
@@ -386,6 +393,7 @@
      (syntax/loc stx (include-fun #:maybe (symbol->string 'x) x))]))
 
 (define-syntax (define-fun stx)
+  ;; XXX let user chose the name
   (syntax-parse stx
     [(_ x:id . more)
      (quasisyntax/loc stx
