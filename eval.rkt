@@ -245,6 +245,7 @@
     [(If p t f)
      (eval-stmt Σ γ σ (if (eval-expr-pred σ p) t f))]
     [(While p _ b)
+     ;; XXX Do something with I (i.e. transform into an assert)
      (when (eval-expr-pred σ p)
        (eval-stmt Σ γ σ b)
        (eval-stmt Σ γ σ s))]
