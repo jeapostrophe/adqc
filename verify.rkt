@@ -63,6 +63,27 @@
 ;;
 ;; https://www.risc.jku.at/education/oldmoodle/file.php/22/slides/02-hoare.pdf
 
+(define (strongest-postcond stmt pre-cond)
+  (match stmt
+    [(Skip _) pre-cond]
+    ;; TODO: Should this actually be false?
+    [(Fail _) (Int #f 32 1)]
+    [(Assign (Var x _) e)
+     (subst e x pre-cond)]
+    [(Begin f s)
+     (define pre-cond* (strongest-postcond f pre-cond))
+     (strongest-postcond s pre-cond*)]
+    [(If pred then else)
+     (And (Implies pred
+                   (strongest-postcond then pre-cond))
+          (Implies (Not pred)
+                   (strongest-postcond else pre-cond)))]
+    ;; TODO: I?
+    [(While p _ body)
+     (And pre-cond (Not p))]
+    ))
+    
+
 ;; XXX verify! function that compiler needs (notes about it here:)
 
 ;; As we are compiling, we could compute the strongest
