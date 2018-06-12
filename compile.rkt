@@ -40,7 +40,10 @@
      (hash-ref ρ x)]
     [(BinOp op L R)
      (define op-str (hash-ref bin-op-table op))
-     (list* "(" (rec L) " " op-str " " (rec R) ")")]))
+     (list* "(" (rec L) " " op-str " " (rec R) ")")]
+    [(MetaE _ e)
+     (rec e)]
+    ))
 
 (define (compile-stmt γ ρ s)
   (define (verify! p)
@@ -104,3 +107,6 @@
   (define (compile&emit ρ s)
     (tree-for idisplay (compile-stmt* ρ s)))
   (provide compile&emit))
+
+(module+ test
+  (compile&emit (hasheq 'x 'x) (Assign (Var 'x (IntT #f 32)) (Int #f 32 100))))
