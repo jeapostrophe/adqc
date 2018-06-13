@@ -25,6 +25,10 @@
        [32 "float"]
        [64 "double"])]))
 
+(define (compile-path p)
+  ;; XXX
+  (match p))
+
 (define (compile-expr ρ e)
   (define (rec e) (compile-expr ρ e))
   (match e
@@ -39,8 +43,10 @@
     [(BinOp op L R)
      (define op-str (hash-ref bin-op-table op))
      (list* "(" (rec L) " " op-str " " (rec R) ")")]
-    ;; xxx: What to do with type information?
-    [(LetE x xt xe be)
+    [(LetE x _ xe be)
+     ;; DESIGN: We ignore xt because x does not become a real thing in
+     ;; C (because we can't make it.) If/when we compile to LLVM, we
+     ;; will be able to make it something and it will be useful.
      (compile-expr (hash-set ρ x (compile-expr ρ xe)) be)]
     [(IfE ce te fe)
      (list* "(" (rec ce) " ? " (rec te) " : " (rec fe) ")")]
@@ -61,12 +67,15 @@
   (match i
     ;; xxx: init to zero? Or is this indented to allow users to
     ;; not initialize values?
+    ;;
+    ;; JM: It should just not initialize it (i.e. "int x" vs "int x =
+    ;; ???"). The evaluator will always initialize to 0, but it
+    ;; doesn't have to.
     [(UndI ty) #f]
     [(ConI e) (compile-expr ρ e)]
     [(ArrI is)
      (add-between (map rec is) '(", ") #:splice? #t
-                  #:before-first '("{ ") #:after-last '(" }"))]
-    ))
+                  #:before-first '("{ ") #:after-last '(" }"))]))
 
 (define (compile-stmt γ ρ s)
   (define (rec s) (compile-stmt γ ρ s))
@@ -99,8 +108,17 @@
     [(MetaS _ s)
      (compile-stmt γ ρ s)]))
 
-(define (compile-stmt* ρ s)
-  (compile-stmt (hasheq) ρ s))
+;; Σ is a renaming environment for public functions
+;; ρ is a renaming environment for global variables
+(define (compile-fun Σ ρ f)
+  ;; XXX
+  (match f))
+
+(define (compile-program p)
+  ;; XXX
+  (match p))
+
+;; Display code
 
 (define ind-nl (gensym))
 (define ind++ (gensym))
@@ -128,11 +146,15 @@
 (module+ test
   ;; XXX Drop this function and just accept a Program from ast.rkt
   (define (compile&emit ρ s)
-    (tree-for idisplay (compile-stmt* ρ s)))
+    (tree-for idisplay (compile-stmt (hasheq) ρ s)))
   (provide compile&emit))
+
+;; XXX A function that actually really calls the compiler with the
+;; appropriate -l lines, etc.
 
 (module+ test
   ;; XXX: Actually test things instead of just printing them to console
+  ;; JM: Actually, don't and hook the test suite into the compiler
   (define (dnewline)
     (printf "~n~n"))
   (compile&emit (hasheq 'x 'x) (Assign (Var 'x (IntT #f 32)) (Int #f 32 100)))
