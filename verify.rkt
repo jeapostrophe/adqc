@@ -36,7 +36,7 @@
                    (weakest-precond else post-cond))
           (Implies (Not pred)
                    (weakest-precond then post-cond)))]
-    [(While pred invar do-stmt)
+    [(MetaS (cons 'while-invariant invar) (While pred do-stmt))
      (And invar
           (And (Implies (And pred invar)
                         (weakest-precond do-stmt invar))
@@ -78,8 +78,7 @@
                    (strongest-postcond then pre-cond))
           (Implies (Not pred)
                    (strongest-postcond else pre-cond)))]
-    ;; TODO: I?
-    [(While p _ body)
+    [(MetaS (cons 'while-invariant I) (While p body))
      (And pre-cond (Not p))]
     ))
     

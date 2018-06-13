@@ -75,7 +75,7 @@
     [(_ (p ... (~datum ->) f:id))
      (syntax/loc stx (Field (P (p ...)) 'f))]
     [(_ (p ... (~datum as) m:id))
-     (syntax/loc stx (Mode (P (p ...)) 'm))]    
+     (syntax/loc stx (Mode (P (p ...)) 'm))]
     [(_ (unsyntax e)) #'e]))
 
 (define-expanders&macros
@@ -85,11 +85,11 @@
 (begin-for-syntax
   (define-literal-set E-bin-op
     #:datum-literals (
-     iadd isub imul isdiv iudiv isrem iurem ishl ilshr iashr ior iand
-     ixor ieq ine iugt isgt iuge isge iult islt iule isle
-     
-     fadd fsub fmul fdiv frem foeq fogt foge folt fole fone fueq fugt
-     fuge fult fule fune ffalse ftrue ford funo)
+                      iadd isub imul isdiv iudiv isrem iurem ishl ilshr iashr ior iand
+                      ixor ieq ine iugt isgt iuge isge iult islt iule isle
+
+                      fadd fsub fmul fdiv frem foeq fogt foge folt fole fone fueq fugt
+                      fuge fult fule fune ffalse ftrue ford funo)
     ())
   (define E-bin-op? (literal-set->predicate E-bin-op)))
 
@@ -285,7 +285,8 @@
                  #:defaults ([p-msg-expr #'#f]))
       p)
      #:with p-e (if (attribute must-be-static?)
-                  (syntax/loc #'p (MetaE 'XXX-must-be-static p))
+                  ;; XXX use struct
+                  (syntax/loc #'p (MetaE 'must-be-static p))
                   #'p)
      (syntax/loc this-syntax
        (let ([p-msg (or p-msg-expr (format "~a" 'p))])
@@ -298,10 +299,12 @@
     [(_ (~optional (~seq #:I I)
                    #:defaults ([I #'(U32 1)]))
         p . b)
-     ;; XXX The invariant should be a MetaS!!!!
-     (syntax/loc this-syntax (While (E p) (E I)
-                                    (syntax-parameterize ([S-in-tail? #f])
-                                      (S (begin . b)))))]))
+     (syntax/loc this-syntax
+       ;; XXX use struct
+       (MetaS (cons 'while-invariant (E I))
+              (While (E p)
+                     (syntax-parameterize ([S-in-tail? #f])
+                       (S (begin . b))))))]))
 
 (define-S-expander return
   (syntax-parser
@@ -372,9 +375,12 @@
                                      (make-rename-transformer #'r.x)]
                                     [S-in-tail? #t])
                                  (S (begin . bs)))))))])
-             (IntFun (list a.arg ...) (E pre)
-                     (Var-x r.ref) (Var-ty r.ref) the-post
-                     ret-lab-id the-body)))))]))
+             (MetaFun
+              ;; XXX use struct
+              (vector 'fun-invariants (E pre) the-post)
+              (IntFun (list a.arg ...)
+                      (Var-x r.ref) (Var-ty r.ref)
+                      ret-lab-id the-body))))))]))
 
 (define-syntax (include-fun stx)
   (syntax-parse stx

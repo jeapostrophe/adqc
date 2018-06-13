@@ -70,8 +70,6 @@
     ))
 
 (define (compile-stmt γ ρ s)
-  (define (verify! p)
-    #f)
   (define (rec s) (compile-stmt γ ρ s))
   (match s
     [(Skip c)
@@ -89,7 +87,7 @@
             ind-- ind-nl "} else {" ind++ ind-nl
             (rec f)
             ind-- ind-nl "}")]
-    [(While p _ b)
+    [(While p b)
      (list* "while " (compile-expr ρ p) " {" ind++ ind-nl
             (rec b)
             ind-- ind-nl "}")]
@@ -98,7 +96,9 @@
     [(Let/ec l b)
      (define cl (~a (gensym 'label)))
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
-            cl ":")]))
+            cl ":")]
+    [(MetaS _ s)
+     (compile-stmt γ ρ s)]))
 
 (define (compile-stmt* ρ s)
   (compile-stmt (hasheq) ρ s))

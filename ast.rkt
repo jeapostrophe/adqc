@@ -66,7 +66,11 @@
 (struct Cast Expr (ty e) #:transparent)
 (struct Read Expr (p) #:transparent)
 (struct BinOp Expr (op L R) #:transparent)
-;; XXX allow simultaneous?
+;; DESIGN: We could instead make LamE and AppE then make expressions a
+;; static simply-typed version of the lambda-calculus. I think this
+;; would be overkill. The main thing I think we are losing with this
+;; system is have simultaneous substitution. We can recover that in
+;; the syntax macros at the Racket level.
 (struct LetE Expr (x ty xe be) #:transparent)
 (struct IfE Expr (ce te fe) #:transparent)
 (struct MetaE Expr (m e) #:transparent)
@@ -115,7 +119,7 @@
 (struct Begin Stmt (f s) #:transparent)
 (struct Assign Stmt (p e) #:transparent)
 (struct If Stmt (p t f) #:transparent)
-(struct While Stmt (p I body) #:transparent)
+(struct While Stmt (p body) #:transparent)
 (struct Jump Stmt (label) #:transparent)
 (struct Let/ec Stmt (label body) #:transparent)
 (struct Let Stmt (x ty xi bs) #:transparent)
@@ -134,49 +138,33 @@
   [struct Begin ([f Stmt?] [s Stmt?])]
   [struct Assign ([p Path?] [e Expr?])]
   [struct If ([p Expr?] [t Stmt?] [f Stmt?])]
-  [struct While ([p Expr?] [I Expr?] [body Stmt?])]
+  [struct While ([p Expr?] [body Stmt?])]
   [struct Jump ([label symbol?])]
   [struct Let/ec ([label symbol?] [body Stmt?])]
   [struct Let ([x symbol?] [ty Type?] [xi Init?] [bs Stmt?])]
   [struct MetaS ([m any/c] [bs Stmt?])]
-  [struct Call ([x symbol?] [ty Type?] [f Fun?] [as (listof Expr?)] [bs Stmt?])]))
+  [struct Call ([x symbol?] [ty Type?] [f Fun?] [as (listof (or/c Expr? Path?))] [bs Stmt?])]))
 
 ;; Functions
 (struct Arg (x ty mode) #:transparent)
-(define mode/c (or/c 'read-only 'copy))
+(define mode/c (or/c 'read-only 'copy 'ref))
 ;; read-only := it and no piece of it can be modified (could be
 ;; implemented as read-only or copy)
 
-;; XXX ref := the function receives a pointer and all changes are
+;; ref := the function receives a pointer and all changes are
 ;; reflected back to caller, as if the function were inlined. This
-;; should only work if the argument is a path
+;; should only work if the argument is a path.
 
 ;; copy := the function receives a shallow copy that may be modified,
 ;; but changes are not visible.
 
 (struct Fun () #:transparent)
-(struct IntFun Fun (args Pre ret-x ret-ty Post ret-lab body) #:transparent)
+(struct IntFun Fun (args ret-x ret-ty ret-lab body) #:transparent)
 ;; This definition is carefully chosen to be trivially inline-able.
-#;(Call x0 ty0 (IntFun (list (Arg x1 ty1 mode1) ... (Arg xN tyN modeN))
-                       Pre xR tyR Post ret-lab fun-body)
-        (list xe1 ... xeN) res-body)
-;; =
-#;(Let x0 ty0 (Undef)
-       (Begin
-         (Let* ([mode1 x1 : ty1 := xe1] ... [modeN xN : tyN := xeN])
-               (Begin (Assert Pre)
-                      (Let xR tyR (Undef)
-                           (Begin
-                             (ReadOnly x0 ty0
-                                       (Begin
-                                         (Let/ec ret-lab
-                                                 fun-body)
-                                         (Assert Post)))
-                             (Assign x0 xR)))))
-         res-body))
-;; But the compiler MAY turn it into an actual function call (perhaps
+;; but the compiler MAY turn it into an actual function call (perhaps
 ;; if it is used many times)
 
+(struct MetaFun Fun (m f) #:transparent)
 (struct ExtFun Fun (src args ret-ty name) #:transparent)
 
 (provide
@@ -184,14 +172,17 @@
   [struct Arg ([x symbol?] [ty Type?] [mode mode/c])]
   [struct Fun ()]
   [struct IntFun ([args (listof Arg?)]
-                  [Pre Expr?]
                   [ret-x symbol?] [ret-ty Type?]
-                  [Post Expr?]
                   [ret-lab symbol?] [body Stmt?])]
+  [struct MetaFun ([m any/c] [f Fun?])]
   [struct ExtFun ([src ExternSrc?]
                   [args (listof Arg?)]
                   [ret-ty Type?]
                   [name c-identifier-string?])]))
+
+(define (IntFun*? x)
+  (or (IntFun? x)
+      (and (MetaFun? x) (IntFun*? (MetaFun-f x)))))
 
 ;; Program
 (struct Global (ty xi) #:transparent)
@@ -202,4 +193,4 @@
   [struct Global ([ty Type?] [xi Init?])]
   [struct Program ([globals (hash/c symbol? Global?)]
                    [private->public (hash/c symbol? (or/c #f c-identifier-string?))]
-                   [name->fun (hash/c c-identifier-string? IntFun?)])]))
+                   [name->fun (hash/c c-identifier-string? IntFun*?)])]))

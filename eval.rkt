@@ -244,8 +244,7 @@
      (path-write! σ p (eval-expr σ e))]
     [(If p t f)
      (eval-stmt Σ γ σ (if (eval-expr-pred σ p) t f))]
-    [(While p _ b)
-     ;; XXX Do something with I (i.e. transform into an assert)
+    [(While p b)
      (when (eval-expr-pred σ p)
        (eval-stmt Σ γ σ b)
        (eval-stmt Σ γ σ s))]
@@ -260,13 +259,16 @@
     [(MetaS _ bs)
      (eval-stmt Σ γ σ bs)]
     [(Call x ty f as bs)
+     ;; XXX handle Path as and ref args
      (define xv (eval-fun Σ f (map (λ (e) (eval-expr σ e)) as)))
      (eval-stmt Σ γ (hash-set σ x (box xv)) bs)]))
 
 (define (eval-fun Σ f vs)
   (match f
     [(? ExtFun?) (error 'eval-fun "Cannot interp external functions: ~e" f)]
-    [(IntFun as _ ret-x ret-ty _ ret-lab body)
+    [(MetaFun _ f) (eval-fun Σ f vs)]
+    [(IntFun as ret-x ret-ty ret-lab body)
+     ;; XXX handle Path vs and ref args
      (define ret-x-b (box (eval-init (hasheq) (UndI ret-ty))))
      (let/ec this-return
        (eval-stmt Σ (hasheq ret-lab this-return)
