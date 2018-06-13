@@ -4,14 +4,23 @@
 (define float-bit-widths '(32 64))
 (define integer-bit-widths '(8 16 32 64))
 
-;; XXX most string? in this code is c-identifier-string?
+;; This is a partial test, see
+;; http://en.cppreference.com/w/c/language/identifier for the complete
+;; rules.
+(define (c-identifier-string? x)
+  (regexp-match #rx"^[_a-zA-Z][a-zA-Z0-9_]*$" x))
+;; Legal things the right of -l in cc
+(define c-library-string? string?)
+;; Legal things inside the <>s of an #include
+(define c-header-string? string?)
 
 ;; Extern Source
 (struct ExternSrc (ls hs) #:transparent)
 
 (provide
  (contract-out
-  [struct ExternSrc ([ls (listof string?)] [hs (listof string?)])]))
+  [struct ExternSrc ([ls (listof c-library-string?)]
+                     [hs (listof c-header-string?)])]))
 
 ;; Types
 (struct Type () #:transparent)
@@ -31,7 +40,7 @@
   [struct ArrT ([dim exact-nonnegative-integer?] [ety Type?])]
   [struct RecT ([field->ty (hash/c symbol? Type?)])]
   [struct UniT ([mode->ty (hash/c symbol? Type?)])]
-  [struct ExtT ([src ExternSrc?] [name string?])]))
+  [struct ExtT ([src ExternSrc?] [name c-identifier-string?])]))
 
 ;; Path
 (struct Path () #:transparent)
@@ -48,7 +57,7 @@
   [struct Select ([p Path?] [ie Expr?])]
   [struct Field ([p Path?] [f symbol?])]
   [struct Mode ([p Path?] [m symbol?])]
-  [struct ExtVar ([src ExternSrc?] [name string?] [ty Type?])]))
+  [struct ExtVar ([src ExternSrc?] [name c-identifier-string?] [ty Type?])]))
 
 ;; Expressions
 (struct Expr () #:transparent)
@@ -182,7 +191,7 @@
   [struct ExtFun ([src ExternSrc?]
                   [args (listof Arg?)]
                   [ret-ty Type?]
-                  [name string?])]))
+                  [name c-identifier-string?])]))
 
 ;; Program
 (struct Global (ty xi) #:transparent)
@@ -192,5 +201,5 @@
  (contract-out
   [struct Global ([ty Type?] [xi Init?])]
   [struct Program ([globals (hash/c symbol? Global?)]
-                   [private->public (hash/c symbol? (or/c #f string?))]
-                   [name->fun (hash/c string? IntFun?)])]))
+                   [private->public (hash/c symbol? (or/c #f c-identifier-string?))]
+                   [name->fun (hash/c c-identifier-string? IntFun?)])]))
