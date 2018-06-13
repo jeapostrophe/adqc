@@ -399,12 +399,14 @@
      (syntax/loc stx (include-fun #:maybe (symbol->string 'x) x))]))
 
 (define-syntax (define-fun stx)
-  ;; XXX let user chose the name
   (syntax-parse stx
-    [(_ x:id . more)
+    [(_ x:id #:as n:expr . more)
      (quasisyntax/loc stx
        (begin (define x #,(syntax/loc #'more (F . more)))
-              (include-fun #:maybe x)))]
+              (include-fun #:maybe n x)))]
+    [(_ x:id . more)
+     (quasisyntax/loc stx
+       (define-fun x #:as (symbol->string 'x) . more))]
     [(_ (x:id . args) . more)
      (quasisyntax/loc stx
        (define-fun x . #,(syntax/loc #'args (args . more))))]))
