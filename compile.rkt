@@ -3,6 +3,7 @@
          racket/format
          racket/list
          racket/match
+         racket/string
          "ast.rkt")
 
 ;; XXX fill this in
@@ -47,19 +48,27 @@
     [(MetaE _ e)
      (rec e)]))
 
-(define (decl ty name [val #f])
+(define (compile-decl ty name [val #f])
+  (define assign (and val (list* " = " val)))
   (match ty
     [(or (? IntT?) (? FloT?))
-     (define assign (and val (list* " = " val)))
      (list* (compile-type ty) #\space name assign ";")]
     [(ArrT dim ety)
-     (list* (compile-type ety) #\space name "[" (~a dim) "];")]
+     (list* (compile-type ety) #\space name "[" (~a dim) "]" assign ";")]
     ))
 
 (define (compile-init ρ i)
   (match i
-    [(UndI ty)
-    (void)]
+    ;; TODO: init to zero? Or is this indented to allow users to
+    ;; not initialize values?
+    [(UndI ty) #f]
+    [(ConI e) (compile-expr ρ e)]
+    [(ArrI is)
+     (define i-asts (for/list ([i is]) (compile-init ρ i)))
+     (add-between i-asts '(", ")
+                  #:before-first '("{ ")
+                  #:after-last '(" }")
+                  #:splice? #t)]
     ))
 
 (define (compile-stmt γ ρ s)
@@ -126,6 +135,7 @@
   (provide compile&emit))
 
 (module+ test
+  ;; TODO: Actually test things instead of just printing them to console
   (define (dnewline)
     (printf "~n~n"))
   (compile&emit (hasheq 'x 'x) (Assign (Var 'x (IntT #f 32)) (Int #f 32 100)))
@@ -141,5 +151,14 @@
                           (LetE 'x (IntT #f 32) (Int #f 32 5)
                                 (BinOp 'iadd
                                        (Read (Var 'x (IntT #f 32)))
-                                       (Int #f 32 1))))))
+                                       (Int #f 32 1)))))
+  (dnewline)
+  (tree-for idisplay
+            (compile-decl
+             (ArrT 3 (IntT #f 32)) "my_arr"
+             (compile-init (hasheq)
+                           (ArrI (list
+                                  (ConI (Int #f 32 0))
+                                  (ConI (Int #f 32 1))
+                                  (ConI (Int #f 32 2))))))))
   
