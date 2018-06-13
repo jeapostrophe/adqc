@@ -58,17 +58,15 @@
     ))
 
 (define (compile-init ρ i)
+  (define (rec i) (compile-init ρ i))
   (match i
     ;; TODO: init to zero? Or is this indented to allow users to
     ;; not initialize values?
     [(UndI ty) #f]
     [(ConI e) (compile-expr ρ e)]
     [(ArrI is)
-     (define i-asts (for/list ([i is]) (compile-init ρ i)))
-     (add-between i-asts '(", ")
-                  #:before-first '("{ ")
-                  #:after-last '(" }")
-                  #:splice? #t)]
+     (add-between (map rec is) '(", ") #:splice? #t
+                  #:before-first '("{ ") #:after-last '(" }"))]
     ))
 
 (define (compile-stmt γ ρ s)
