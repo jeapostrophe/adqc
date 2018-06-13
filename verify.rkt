@@ -66,7 +66,7 @@
 (define (strongest-postcond stmt pre-cond)
   (match stmt
     [(Skip _) pre-cond]
-    ;; TODO: Should this actually be false?
+    ;; xxx: Should this actually be false?
     [(Fail _) (Int #f 32 1)]
     [(Assign (Var x _) e)
      (subst e x pre-cond)]

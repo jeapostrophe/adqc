@@ -8,7 +8,7 @@
          threading
          "ast.rkt")
 
-;; TODO: These contracts are no longer effective since the evaluator
+;; xxx: These contracts are no longer effective since the evaluator
 ;; will cast arguments anyway. Instead of using these Racket contracts,
 ;; maybe int ops should be able to reject arguments greater than their
 ;; bit width?
@@ -95,7 +95,7 @@
 (define ((bool-op op) a b)
   (if (op a b) 1 0))
 
-;; TODO: Should *int-cmp be its own function so that it can return a
+;; xxx: Should *int-cmp be its own function so that it can return a
 ;; standard bit width regardless of arguments? C uses 'int' types for
 ;; bools regardless of argument types, IIRC.
 (define sint-cmp

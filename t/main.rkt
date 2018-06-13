@@ -74,7 +74,7 @@
   (go (S8 1) (isle (S8 1) (S8 1)))
   (go (S8 1) (isle (S8 -1) (S8 1)))
   ;; Floating point arithmetic
-  ;; TODO: Add tests to check for appropriate FP rounding errors?
+  ;; xxx: Add tests to check for appropriate FP rounding errors?
   (go (F64 3.5) (fadd (F64 2.0) (F64 1.5)))
   (go (F64 6.0) (fsub (F64 6.1) (F64 0.1)))
   (go (F64 2.25) (fmul (F64 1.5) (F64 1.5)))
@@ -155,7 +155,7 @@
        3)
   (chk (eval-expr (hash) (IBinOp 'isdiv 13 4))
        3)
-  ;; TODO: What's the actual difference between signed
+  ;; xxx: What's the actual difference between signed
   ;; and unsigned remainder?
   (chk (eval-expr (hash) (IBinOp 'isrem 12 5))
        2)
@@ -245,7 +245,7 @@
                                             (Assign 'y (IBinOp 'iadd 'x 'x)))))
        (hash 'x 5 'y 10))
 
-  ;;TODO: Tests for check-pred.
+  ;; xxx: Tests for check-pred.
   )
 
 (module+ test

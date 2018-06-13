@@ -31,7 +31,6 @@
     [(Int signed? bits val)
      (list* "((" (compile-type (IntT signed? bits)) ")" (~a val) ")")]
     [(Flo bits val)
-     ;; XXX perhaps use the fast way to read floats in C as the raw bits
      (list* "((" (compile-type (FloT bits)) ")" (~a val) ")")]
     [(Cast ty e)
      (list* "((" (compile-type ty) ")" (rec e) ")")]
@@ -40,7 +39,7 @@
     [(BinOp op L R)
      (define op-str (hash-ref bin-op-table op))
      (list* "(" (rec L) " " op-str " " (rec R) ")")]
-    ;; TODO: What to do with type information?
+    ;; xxx: What to do with type information?
     [(LetE x xt xe be)
      (compile-expr (hash-set ρ x (compile-expr ρ xe)) be)]
     [(IfE ce te fe)
@@ -60,7 +59,7 @@
 (define (compile-init ρ i)
   (define (rec i) (compile-init ρ i))
   (match i
-    ;; TODO: init to zero? Or is this indented to allow users to
+    ;; xxx: init to zero? Or is this indented to allow users to
     ;; not initialize values?
     [(UndI ty) #f]
     [(ConI e) (compile-expr ρ e)]
@@ -127,13 +126,13 @@
     [x (f x)]))
 
 (module+ test
-  ;; XXX better interface
+  ;; XXX Drop this function and just accept a Program from ast.rkt
   (define (compile&emit ρ s)
     (tree-for idisplay (compile-stmt* ρ s)))
   (provide compile&emit))
 
 (module+ test
-  ;; TODO: Actually test things instead of just printing them to console
+  ;; XXX: Actually test things instead of just printing them to console
   (define (dnewline)
     (printf "~n~n"))
   (compile&emit (hasheq 'x 'x) (Assign (Var 'x (IntT #f 32)) (Int #f 32 100)))
