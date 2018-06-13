@@ -362,19 +362,27 @@
            (let-values
                ([(the-post the-body)
                  (let-syntax ([r.x (P-expander (syntax-parser [_:id #'r.ref]))])
-                   ;; XXX If r.x is invented, how does post know its
-                   ;; name? Maybe with 'the-return'?
-                   (values (E post)
-                           (let ([the-ret (Jump ret-lab-id)])
-                             (let-syntax
-                                 ([ret-lab (S-expander (syntax-parser [(_) #'the-ret]))])
-                               (syntax-parameterize
-                                   ([current-return
-                                     (make-rename-transformer #'the-ret)]
-                                    [current-return-var
-                                     (make-rename-transformer #'r.x)]
-                                    [S-in-tail? #t])
-                                 (S (begin . bs)))))))])
+                   (syntax-parameterize
+                       ([current-return-var
+                         (make-rename-transformer #'r.x)])
+                     ;; DESIGN: If the return variable is synthesized,
+                     ;; then the post condition COULD look at it via
+                     ;; current-return-var, which is a really ugly
+                     ;; name. Maybe we name it something better?
+                     ;; Alternatively, maybe we want it to be illegal
+                     ;; for the post condition to refer to the result
+                     ;; in this case, so the user has to specify a
+                     ;; name?
+                     (values (E post)
+                             (let ([the-ret (Jump ret-lab-id)])
+                               (let-syntax
+                                   ([ret-lab
+                                     (S-expander (syntax-parser [(_) #'the-ret]))])
+                                 (syntax-parameterize
+                                     ([current-return
+                                       (make-rename-transformer #'the-ret)]
+                                      [S-in-tail? #t])
+                                   (S (begin . bs))))))))])
              (MetaFun
               ;; XXX use struct
               (vector 'fun-invariants (E pre) the-post)
