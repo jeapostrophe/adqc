@@ -5,13 +5,6 @@
          racket/match
          "ast.rkt")
 
-(define (int-cast signed? bw)
-  (list* "(" (if signed? "" "u") "int" (~a bw) "_t)"))
-(define (flo-cast bw)
-  (match bw
-    [32 "(float)"]
-    [64 "(double)"]))
-
 ;; XXX fill this in
 (define bin-op-table
   (hasheq 'iadd "+" 'isub "-" 'imul "*" 'iudiv "/" 'isdiv "/" 'iurem "%" 'isrem "%"
@@ -22,27 +15,51 @@
           'isgt ">" 'isge ">=" 'islt "<" 'isle "<="
           'foeq "==" 'fogt ">" 'foge ">=" 'folt "<" 'fole "<="))
 
+(define (compile-type ty)
+  (match ty
+    [(IntT signed? bits)
+     (list* (if signed? "" "u") "int" (~a bits) "_t")]
+    [(FloT bits)
+     (match bits
+       [32 "float"]
+       [64 "double"])]))
+
 (define (compile-expr ρ e)
   (define (rec e) (compile-expr ρ e))
   (match e
     [(Int signed? bits val)
-     (list* "(" (int-cast signed? bits) (~a val) ")")]
+     (list* "((" (compile-type (IntT signed? bits)) ")" (~a val) ")")]
     [(Flo bits val)
      ;; XXX perhaps use the fast way to read floats in C as the raw bits
-     (list* "(" (flo-cast bits) (~a val) ")")]
+     (list* "((" (compile-type (FloT bits)) ")" (~a val) ")")]
     [(Cast ty e)
-     (match ty
-       [(IntT signed? bits)
-        (list* "(" (int-cast signed? bits) (rec e) ")")]
-       [(FloT bits)
-        (list* "(" (flo-cast bits) (rec e) ")")])]
+     (list* "((" (compile-type ty) ")" (rec e) ")")]
     [(Read (Var x _))
      (hash-ref ρ x)]
     [(BinOp op L R)
      (define op-str (hash-ref bin-op-table op))
      (list* "(" (rec L) " " op-str " " (rec R) ")")]
+    ;; TODO: What to do with type information?
+    [(LetE x xt xe be)
+     (compile-expr (hash-set ρ x (compile-expr ρ xe)) be)]
+    [(IfE ce te fe)
+     (list* "(" (rec ce) " ? " (rec te) " : " (rec fe) ")")]
     [(MetaE _ e)
-     (rec e)]
+     (rec e)]))
+
+(define (decl ty name [val #f])
+  (match ty
+    [(or (? IntT?) (? FloT?))
+     (define assign (and val (list* " = " val)))
+     (list* (compile-type ty) #\space name assign ";")]
+    [(ArrT dim ety)
+     (list* (compile-type ety) #\space name "[" (~a dim) "];")]
+    ))
+
+(define (compile-init ρ i)
+  (match i
+    [(UndI ty)
+    (void)]
     ))
 
 (define (compile-stmt γ ρ s)
@@ -109,4 +126,20 @@
   (provide compile&emit))
 
 (module+ test
-  (compile&emit (hasheq 'x 'x) (Assign (Var 'x (IntT #f 32)) (Int #f 32 100))))
+  (define (dnewline)
+    (printf "~n~n"))
+  (compile&emit (hasheq 'x 'x) (Assign (Var 'x (IntT #f 32)) (Int #f 32 100)))
+  (dnewline)
+  (tree-for idisplay
+            (compile-expr (hasheq)
+                          (IfE (BinOp 'islt (Int #f 32 5) (Int #f 32 6))
+                               (BinOp 'iadd (Int #t 64 2) (Int #t 64 3))
+                               (BinOp 'isub (Int #t 64 5) (Int #t 64 6)))))
+  (dnewline)
+  (tree-for idisplay
+            (compile-expr (hasheq)
+                          (LetE 'x (IntT #f 32) (Int #f 32 5)
+                                (BinOp 'iadd
+                                       (Read (Var 'x (IntT #f 32)))
+                                       (Int #f 32 1))))))
+  
