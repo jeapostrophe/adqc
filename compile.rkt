@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/contract/base
          racket/format
+         racket/function
          racket/list
          racket/match
          racket/string
@@ -65,17 +66,24 @@
 (define (compile-init ρ i)
   (define (rec i) (compile-init ρ i))
   (match i
-    ;; xxx: init to zero? Or is this indented to allow users to
-    ;; not initialize values?
-    ;;
-    ;; JM: It should just not initialize it (i.e. "int x" vs "int x =
-    ;; ???"). The evaluator will always initialize to 0, but it
-    ;; doesn't have to.
     [(UndI ty) #f]
     [(ConI e) (compile-expr ρ e)]
+    [(ZedI ty) (type-zero ty)]
     [(ArrI is)
      (add-between (map rec is) '(", ") #:splice? #t
-                  #:before-first '("{ ") #:after-last '(" }"))]))
+                  #:before-first '("{ ") #:after-last '(" }"))]
+    ;; XXX: RecT, UniT
+    ))
+
+(define (type-zero ty)
+  (match ty
+    [(IntT signed? bits)
+     (compile-expr (hasheq) (Int signed? bits 0))]
+    [(FloT bits)
+     (compile-expr (hasheq) (Flo bits 0.0))]
+    [(ArrT dim ety) "{ 0 }"]
+    ;; XXX: RecT, UniT, ExtT
+    ))
 
 (define (compile-stmt γ ρ s)
   (define (rec s) (compile-stmt γ ρ s))
