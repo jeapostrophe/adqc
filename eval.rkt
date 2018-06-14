@@ -8,34 +8,15 @@
          threading
          "ast.rkt")
 
-;; xxx: These contracts are no longer effective since the evaluator
-;; will cast arguments anyway. Instead of using these Racket contracts,
-;; maybe int ops should be able to reject arguments greater than their
-;; bit width?
-(define/contract (arithmetic-shift-left n m)
-  (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
-  (arithmetic-shift n m))
-
-(define/contract (arithmetic-shift-right n m)
-  (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
-  (arithmetic-shift n (- m)))
-
-(define/contract (logical-shift-right n m)
-  (exact-integer? exact-nonnegative-integer? . -> . exact-integer?)
-  (quotient n (expt 2 m)))
-
-(define (!= a b)
-  (not (= a b)))
-
+(define (arithmetic-shift-left n m) (arithmetic-shift n m))
+(define (arithmetic-shift-right n m) (arithmetic-shift n (- m)))
+(define (logical-shift-right n m) (quotient n (expt 2 m)))
+(define (!= a b) (not (= a b)))
+(define (fl-!= a b) (not (fl= a b)))
 (define (fl-remainder a b)
   (fl- a (fl* (flfloor (fl/ a b)) b)))
 
-(define (fl-!= a b)
-  (not (fl= a b)))
-
-;;
 ;; Operation wrappers
-;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (signed->unsigned bits val)
   (modulo val (expt 2 bits)))
@@ -73,8 +54,8 @@
     (error 'flo-op "Mismatched bit widths" a b))
   (Flo a-bits (op a-val b-val)))
 
-;; flo-cmp needs to be distinct from flo-op so that it
-;; can return an integer instead of a float.
+;; flo-cmp needs to be distinct from flo-op so that it can return an
+;; integer instead of a float.
 (define ((flo-cmp op) a b)
   (match-define (Flo a-bits a-val) a)
   (match-define (Flo b-bits b-val) b)
@@ -177,7 +158,7 @@
     [(Select p ie) (vector-ref (rec p) (eval-expr σ ie))]
     [(Field p f) (hash-ref (rec p) f)]
     [(Mode p m) (hash-ref (rec p) m)]
-    [(? ExtVar?) (error 'path-read "Cannot interp external variables: ~e" p)]))
+    [(? ExtVar?) (error 'path-read "XXX Cannot interp external variables yet: ~e" p)]))
 
 (define (path-write! σ p v)
   (match p
@@ -185,7 +166,7 @@
     [(Select p ie) (vector-set! (path-read σ p) (eval-expr σ ie) v)]
     [(Field p f) (hash-set! (path-read σ p) f v)]
     [(Mode p m) (hash-set! (path-read σ p) m v)]
-    [(? ExtVar?) (error 'path-write "Cannot interp external variables: ~e" p)]))
+    [(? ExtVar?) (error 'path-write "XXX Cannot interp external variables yet: ~e" p)]))
 
 (define (eval-expr σ e)
   (define (rec e) (eval-expr σ e))
@@ -222,7 +203,7 @@
     [(ArrT dim ety) (build-vector dim (λ (_) (type-zero ety)))]
     [(RecT f->ty) (hash-map-ht f->ty type-zero)]
     [(UniT mode->ty) (hash-map-ht mode->ty type-zero)]
-    [(? ExtT?) (error 'type-zero "Cannot interp external types: ~e" ty)]))
+    [(? ExtT?) (error 'type-zero "XXX Cannot interp external types yet: ~e" ty)]))
 
 (define (eval-init σ i)
   (match i
@@ -265,7 +246,7 @@
 
 (define (eval-fun Σ f vs)
   (match f
-    [(? ExtFun?) (error 'eval-fun "Cannot interp external functions: ~e" f)]
+    [(? ExtFun?) (error 'eval-fun "XXX Cannot interp external functions yet: ~e" f)]
     [(MetaFun _ f) (eval-fun Σ f vs)]
     [(IntFun as ret-x ret-ty ret-lab body)
      ;; XXX handle Path vs and ref args
