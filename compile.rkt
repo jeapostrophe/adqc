@@ -26,9 +26,27 @@
        [32 "float"]
        [64 "double"])]))
 
-(define (compile-path p)
-  ;; XXX
-  (match p))
+(define (compile-path ρ path)
+  (define (rec path) (compile-path ρ path))
+  (match path
+    [(Var x _)
+     (hash-ref ρ x)]
+    [(Select path ie)
+     (list* "(" (rec path) "[" (compile-expr ρ ie) "])")]
+    [(Field path f)
+     (list* "(" (rec path) "." f ")")]
+    [(Mode path m)
+     (list "(" (rec path) "." m ")")]
+    ;; XXX: Are f and m literal, or should we rename map them? If we don't,
+    ;; then we have to restrict names of fields/modes to valid C IDs, even
+    ;; in the CF+ layer. If we do, then we either need separate rename maps
+    ;; for vars, fields, and modes, or we need to assume that a given name,
+    ;; when mapped to its 'valid C equivalent', will always produce the same
+    ;; output. In that case, maybe rho isn't a hash table but actually a pure
+    ;; function?
+
+    ;; XXX: ExtVar
+    ))
 
 (define (compile-expr ρ e)
   (define (rec e) (compile-expr ρ e))
