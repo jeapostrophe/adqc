@@ -113,6 +113,15 @@
      (define cl (~a (gensym 'label)))
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
             cl ":")]
+    ;; XXX: What data is ρ supposed to carry? Right now it just
+    ;; maps from name -> name, which seems obviously wrong, but
+    ;; in 'compile-expr', the `(Read (Var x _))` case seems to
+    ;; expect this. Should we change it so that ρ maps from
+    ;; name to type?
+    [(Let x ty xi bs)
+     (define decl (compile-decl ty x (compile-init ρ xi)))
+     (list* decl ind-nl
+            (compile-stmt γ (hash-set ρ x x) bs))]
     [(MetaS _ s)
      (compile-stmt γ ρ s)]))
 
@@ -187,5 +196,11 @@
                            (ArrI (list
                                   (ConI (Int #f 32 0))
                                   (ConI (Int #f 32 1))
-                                  (ConI (Int #f 32 2))))))))
+                                  (ConI (Int #f 32 2)))))))
+  (dnewline)
+  (tree-for idisplay
+            (compile-stmt
+             (hasheq) (hasheq 'y 'y)
+             (Let 'x (ArrT 3 (IntT #t 32)) (ZedI (ArrT 3 (IntT #t 32)))
+                  (Assign (Var 'y (IntT #t 32)) (Int #t 32 5))))))
   
