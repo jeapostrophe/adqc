@@ -181,11 +181,13 @@
 (module+ test
   ;; XXX Drop this function and just accept a Program from ast.rkt
   (define (compile&emit ρ s)
-    (tree-for idisplay (compile-stmt (hasheq) ρ s)))
-  (provide compile&emit))
+    (tree-for idisplay (compile-stmt (hasheq) ρ s))))
 
 ;; XXX A function that actually really calls the compiler with the
 ;; appropriate -l lines, etc.
+
+;; XXX A function that calls the above one and links it in and sends
+;; it some input
 
 (module+ test
   ;; XXX: Actually test things instead of just printing them to console

@@ -297,6 +297,3 @@
   [eval-program
    (-> Program? string? (listof Value/c)
        Value/c)]))
-
-(module+ test
-  (provide eval-expr eval-init eval-stmt eval-fun))

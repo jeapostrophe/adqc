@@ -16,15 +16,13 @@
        {i <- (iadd i (S64 1))})
      a)))
 
-(define (run-fib n)
-  (Int-val (eval-program fib-p "fib" (list (E (S64 n))))))
-
 (define (rfib n)
   (for/fold ([a 0] [b 1] #:result a)
             ([i (in-range n)])
     (values b (+ a b))))
 
 (module+ test
-  (require chk)
+  (require chk
+           "main.rkt")
   (for ([i (in-range 10)])
-    (chk (run-fib i) (rfib i))))
+    (TProg1 fib-p "fib" (S64 i) => (S64 (rfib i)))))
