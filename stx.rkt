@@ -98,29 +98,36 @@
     ())
   (define E-bin-op? (literal-set->predicate E-bin-op)))
 
+(define (Let*E xs tys xes be)
+  (cond [(empty? xs) be]
+        [else
+         (LetE (first xs) (first tys) (first xes)
+               (Let*E (rest xs) (rest tys) (rest xes) be))]))
+
 (define-syntax (E stx)
   (syntax-parse stx
     #:literals (if let unsyntax)
-    ;; XXX recognize literal numbers and find the smallest type
+    ;; XXX recognize literal numbers + booleans and find the smallest
+    ;; type (or use inferred)
+    ;;
     ;; XXX make generic binops that look at the types and determine the operation
     [(_ (op:id l r))
      #:when (E-bin-op? #'op)
      (syntax/loc stx (BinOp 'op (E l) (E r)))]
     [(_ (e (~datum :) ty))
      (syntax/loc stx (Cast (T ty) (E e)))]
-    ;; XXX simultaneous let
-    ;; XXX let*
-    [(_ (let ([x (~datum :) ty (~datum :=) xe]) be))
+    [(_ (let ([x (~datum :) xty (~datum :=) xe] ...) be))
+     #:with (x-id ...) (generate-temporaries #'(x ...))
+     #:with (the-ty ...) (generate-temporaries #'(xty ...))
      (syntax/loc stx
-       (let ([x-id (gensym 'x)]
-             [the-ty (T ty)])
-         (LetE x-id the-ty (E xe)
-               (let ([the-x-ref (Var x-id the-ty)])
-                 (let-syntax ([x (P-expander
-                                  (syntax-parser [_ #'the-x-ref]))])
-                   (E be))))))]
-    ;; XXX cond
-    ;; XXX and, or, not
+       (let ([x-id (gensym 'x)] ... [the-ty (T xty)] ...)
+         (Let*E (list x-id ...)
+                (list the-ty ...)
+                (list (E xe) ...)
+                (let ([the-x-ref (Var x-id the-ty)] ...)
+                  (let-syntax ([x (P-expander
+                                   (syntax-parser [_ #'the-x-ref]))] ...)
+                    (E be))))))]
     [(_ (if c t f))
      (syntax/loc stx (IfE (E c) (E t) (E f)))]
     [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
@@ -131,6 +138,34 @@
      ((attribute macro-id.value) #'macro-use)]
     [(_ (unsyntax e)) #'e]
     [(_ p) (quasisyntax/loc stx (Read #,(syntax/loc #'p (P p))))]))
+
+(define-E-free-syntax cond
+  (syntax-parser
+    #:literals (else)
+    [(_ [else e]) (syntax/loc this-syntax (E e))]
+    [(_ [q a] . more)
+     (syntax/loc this-syntax (E (if q a (cond . more))))]))
+(define-E-free-syntax and
+  (syntax-parser
+    [(_) (syntax/loc this-syntax (E #t))]
+    [(_ e) (syntax/loc this-syntax (E e))]
+    [(_ x e ...) (syntax/loc this-syntax (E (if x (and e ...) #f)))]))
+(define-E-free-syntax or
+  (syntax-parser
+    [(_) (syntax/loc this-syntax (E #f))]
+    [(_ e) (syntax/loc this-syntax (E e))]
+    [(_ x e ...)
+     (syntax/loc this-syntax
+       (E (let ([tmp x]) (if tmp tmp (or e ...)))))]))
+(define-E-free-syntax not
+  (syntax-parser
+    [(_ e) (syntax/loc this-syntax (E (ieq #f e)))]))
+(define-E-free-syntax let*
+  (syntax-parser
+    [(_ () e) (syntax/loc this-syntax (E e))]
+    [(_ (f r ...) e)
+     (syntax/loc this-syntax
+       (E (let (f) (let* (r ...) e))))]))
 
 (define-simple-macro (define-flo-stx [name:id bits] ...)
   (begin
