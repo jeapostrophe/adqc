@@ -71,9 +71,8 @@
 (struct BinOp Expr (op L R) #:transparent)
 ;; DESIGN: We could instead make LamE and AppE then make expressions a
 ;; static simply-typed version of the lambda-calculus. I think this
-;; would be overkill. The main thing I think we are losing with this
-;; system is have simultaneous substitution. We can recover that in
-;; the syntax macros at the Racket level.
+;; would be overkill. We can do most of what we want with Racket
+;; macros though.
 (struct LetE Expr (x ty xe be) #:transparent)
 (struct IfE Expr (ce te fe) #:transparent)
 (struct MetaE Expr (m e) #:transparent)
