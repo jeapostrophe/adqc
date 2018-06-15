@@ -5,27 +5,38 @@
          adqc
          chk)
 
+(define (TProg1* stx the-p the-cp n args expect-ans)
+  (define eval-ans #f)
+  (define comp-ans #f)
+  (chk
+   #:t (#:stx stx (set! eval-ans (eval-program the-p n args))))
+  (when expect-ans
+    (chk (#:stx stx eval-ans)
+         (#:stx stx expect-ans)))
+  (unless the-cp
+    (chk #:t (set! the-cp (link-program the-p))))
+  (when the-cp
+    (chk #:t (set! comp-ans (run-linked-program the-cp n args)))
+    (when comp-ans (chk #:= comp-ans eval-ans))))
 (define-syntax (TProg1 stx)
   (syntax-parse stx
     [(_ the-p:id
+        (~optional (~seq #:compiled compiled-p:id)
+                   #:defaults ([compiled-p #''#f]))
         n:expr (~and arg-e (~not (~datum =>))) ...
         (~optional (~seq (~datum =>) ans (~bind [ans-e #'(E ans)]))
                    #:defaults ([ans-e #'#f])))
      (quasisyntax/loc stx
-       (let ([eval-ans #f]
-             [expect-ans ans-e])
-         (chk #:t (#:stx #,stx
-                   (set! eval-ans (eval-program the-p n (list (E arg-e) ...)))))
-         (when expect-ans
-           (chk (#:stx #,stx eval-ans)
-                (#:stx #,#'ans-e expect-ans)))
-         #;"XXX compare with compiler"))]))
+       (TProg1* #'#,stx the-p compiled-p n (list (E arg-e) ...) ans-e))]))
 (define-syntax (TProg stx)
   (syntax-parse stx
     [(_ p-body ... #:tests t ...)
      (syntax/loc stx
-       (let ([the-p (Prog p-body ...)])
-         (TProg1 the-p . t) ...))]))
+       (let ([the-p #f]
+             [the-cp #f])
+         (chk #:t (set! the-p (Prog p-body ...)))
+         (chk #:t (set! the-cp (link-program the-p)))
+         (TProg1 the-p #:compiled the-cp . t) ...))]))
 (define-syntax (TS stx)
   (syntax-parse stx
     [(_ the-s (~optional (~seq ans)

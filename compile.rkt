@@ -183,11 +183,18 @@
   (define (compile&emit ρ s)
     (tree-for idisplay (compile-stmt (hasheq) ρ s))))
 
-;; XXX A function that actually really calls the compiler with the
+;; XXX A function that actually really calls the C compiler with the
 ;; appropriate -l lines, etc.
 
-;; XXX A function that calls the above one and links it in and sends
-;; it some input
+;; XXX Maybe move to linker.rkt because we need to implement ffi stuff?
+(define (link-program p)
+  (error 'link-program "Not implemented"))
+
+(define (run-linked-program lp n args)
+  (error 'run-linked-program "Not implemented"))
+
+(provide link-program
+         run-linked-program)
 
 (module+ test
   ;; XXX: Actually test things instead of just printing them to console
