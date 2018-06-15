@@ -58,7 +58,7 @@
                          #:defaults ([ans #f])))
      #:with f (generate-temporary)
      (quasisyntax/loc stx
-       ;; XXX Allow returning something else
+       ;; XXX Once type inference is implemented, just drop this S64
        (TProg (define-fun (f) : S64 the-s)
               #:tests
               #,(syntax/loc stx
@@ -127,7 +127,6 @@
   (TE (isle (S8 1) (S8 1)) (S8 1))
   (TE (isle (S8 -1) (S8 1)) (S8 1))
   ;; Floating point arithmetic
-  ;; xxx: Add tests to check for appropriate FP rounding errors?
   (TE (fadd (F64 2.0) (F64 1.5)) (F64 3.5))
   (TE (fsub (F64 6.1) (F64 0.1)) (F64 6.0))
   (TE (fmul (F64 1.5) (F64 1.5)) (F64 2.25))
