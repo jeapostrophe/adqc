@@ -29,18 +29,26 @@
 (define (compile-path ρ path)
   (define (rec path) (compile-path ρ path))
   (match path
-    [(Var x _)
-     (hash-ref ρ x)]
+    [(Var x ty)
+     (values (hash-ref ρ x) ty)]
     [(Select path ie)
-     (list* "(" (rec path) "[" (compile-expr ρ ie) "])")]
+     (define-values (pc pty) (rec path))
+     (match-define (ArrT _ ety) pty)
+     (values (list* "(" pc "[" (compile-expr ρ ie) "])")
+             ety)]
     [(Field path f)
-     ;; XXX use type of path to translate f to C if necessary
-     (list* "(" (rec path) "." f ")")]
+     (define-values (pc pty) (rec path))
+     (match-define (RecT f->ty f->c _) pty)
+     (values (list* "(" pc "." (hash-ref f->c f f) ")")
+             (hash-ref f->ty f))]
     [(Mode path m)
-     ;; XXX use type of path to translate m to C if necessary
-     (list "(" (rec path) "." m ")")]
-    ;; XXX: ExtVar
-    ))
+     (define-values (pc pty) (rec path))
+     (match-define (UniT m->ty m->c) pty)
+     (values (list "(" pc "." (hash-ref m->c m m) ")")
+             (hash-ref m->ty m))]
+    [(ExtVar src n ty)
+     ;; XXX register src
+     (values n ty)]))
 
 (define (compile-expr ρ e)
   (define (rec e) (compile-expr ρ e))
@@ -189,5 +197,3 @@
 
 (provide link-program
          run-linked-program)
-
-  
