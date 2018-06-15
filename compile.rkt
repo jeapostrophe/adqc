@@ -34,17 +34,11 @@
     [(Select path ie)
      (list* "(" (rec path) "[" (compile-expr ρ ie) "])")]
     [(Field path f)
+     ;; XXX use type of path to translate f to C if necessary
      (list* "(" (rec path) "." f ")")]
     [(Mode path m)
+     ;; XXX use type of path to translate m to C if necessary
      (list "(" (rec path) "." m ")")]
-    ;; XXX: Are f and m literal, or should we rename map them? If we don't,
-    ;; then we have to restrict names of fields/modes to valid C IDs, even
-    ;; in the CF+ layer. If we do, then we either need separate rename maps
-    ;; for vars, fields, and modes, or we need to assume that a given name,
-    ;; when mapped to its 'valid C equivalent', will always produce the same
-    ;; output. In that case, maybe rho isn't a hash table but actually a pure
-    ;; function?
-
     ;; XXX: ExtVar
     ))
 

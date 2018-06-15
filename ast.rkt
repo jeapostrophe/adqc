@@ -27,8 +27,8 @@
 (struct IntT Type (signed? bits) #:transparent)
 (struct FloT Type (bits) #:transparent)
 (struct ArrT Type (dim ety) #:transparent)
-(struct RecT Type (field->ty) #:transparent)
-(struct UniT Type (mode->ty) #:transparent)
+(struct RecT Type (field->ty field->c c-order) #:transparent)
+(struct UniT Type (mode->ty mode->c) #:transparent)
 (struct ExtT Type (src name) #:transparent)
 
 (provide
@@ -38,8 +38,11 @@
                 [bits (apply or/c integer-bit-widths)])]
   [struct FloT ([bits (apply or/c float-bit-widths)])]
   [struct ArrT ([dim exact-nonnegative-integer?] [ety Type?])]
-  [struct RecT ([field->ty (hash/c symbol? Type?)])]
-  [struct UniT ([mode->ty (hash/c symbol? Type?)])]
+  [struct RecT ([field->ty (hash/c symbol? Type?)]
+                [field->c (hash/c symbol? c-identifier-string?)]
+                [c-order (listof symbol?)])]
+  [struct UniT ([mode->ty (hash/c symbol? Type?)]
+                [mode->c (hash/c symbol? c-identifier-string?)])]
   [struct ExtT ([src ExternSrc?] [name c-identifier-string?])]))
 
 ;; Path

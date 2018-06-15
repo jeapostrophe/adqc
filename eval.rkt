@@ -201,8 +201,8 @@
     [(FloT 32) (Flo 32 (real->single-flonum 0.0))]
     [(FloT 64) (Flo 64 (real->double-flonum 0.0))]
     [(ArrT dim ety) (build-vector dim (λ (_) (type-zero ety)))]
-    [(RecT f->ty) (hash-map-ht f->ty type-zero)]
-    [(UniT mode->ty) (hash-map-ht mode->ty type-zero)]
+    [(RecT f->ty _ _) (hash-map-ht f->ty type-zero)]
+    [(UniT mode->ty _) (hash-map-ht mode->ty type-zero)]
     [(? ExtT?) (error 'type-zero "XXX Cannot interp external types yet: ~e" ty)]))
 
 (define (eval-init σ i)
