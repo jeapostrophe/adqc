@@ -5,48 +5,55 @@
          adqc
          chk)
 
+;; XXX Remove this once compilation really exists
+(define TEST-COMPILATION? #f)
+
 (define (TProg1* stx the-p the-cp n args expect-ans)
   (define eval-ans #f)
   (define comp-ans #f)
   (chk
-   #:t (#:stx stx (set! eval-ans (eval-program the-p n args))))
-  (when expect-ans
-    (chk (#:stx stx eval-ans)
-         (#:stx stx expect-ans)))
-  (unless the-cp
-    (chk #:t (set! the-cp (link-program the-p))))
-  (when the-cp
-    (chk #:t (set! comp-ans (run-linked-program the-cp n args)))
-    (when comp-ans (chk #:= comp-ans eval-ans))))
+   #:t (#:src stx (set! eval-ans (eval-program the-p n args))))
+  (when (and expect-ans eval-ans)
+    (chk (#:src stx eval-ans)
+         (#:src stx expect-ans)))
+  (when TEST-COMPILATION?
+    (unless the-cp
+      (chk #:t (set! the-cp (link-program the-p))))
+    (when the-cp
+      (chk #:t (set! comp-ans (run-linked-program the-cp n args)))
+      (when comp-ans (chk #:= comp-ans eval-ans)))))
 (define-syntax (TProg1 stx)
   (syntax-parse stx
     [(_ the-p:id
         (~optional (~seq #:compiled compiled-p:id)
                    #:defaults ([compiled-p #''#f]))
-        n:expr (~and arg-e (~not (~datum =>))) ...
-        (~optional (~seq (~datum =>) ans (~bind [ans-e #'(E ans)]))
-                   #:defaults ([ans-e #'#f])))
+        . t)
+     #:with (n:expr (~and arg-e (~not (~datum =>))) ...
+                    (~optional (~seq (~datum =>) ans (~bind [ans-e #'(E ans)]))
+                               #:defaults ([ans-e #'#f]))) #'t
      (quasisyntax/loc stx
-       (TProg1* #'#,stx the-p compiled-p n (list (E arg-e) ...) ans-e))]))
+       (TProg1* #'t the-p compiled-p n (list (E arg-e) ...) ans-e))]))
 (define-syntax (TProg stx)
   (syntax-parse stx
     [(_ p-body ... #:tests t ...)
-     (syntax/loc stx
+     (quasisyntax/loc stx
        (let ([the-p #f]
              [the-cp #f])
          (chk #:t (set! the-p (Prog p-body ...)))
-         (chk #:t (set! the-cp (link-program the-p)))
+         (when TEST-COMPILATION?
+           (chk #:t (set! the-cp (link-program the-p))))
          (TProg1 the-p #:compiled the-cp . t) ...))]))
 (define-syntax (TS stx)
   (syntax-parse stx
     [(_ the-s (~optional (~seq ans)
                          #:defaults ([ans #f])))
      #:with f (generate-temporary)
-     (syntax/loc stx
+     (quasisyntax/loc stx
        ;; XXX Allow returning something else
        (TProg (define-fun (f) : S64 the-s)
               #:tests
-              [(symbol->string 'f) (~@ . (~? (=> ans) ()))]))]))
+              #,(syntax/loc stx
+                  [(symbol->string 'f) (~@ . (~? (=> ans) ()))])))]))
 (define-syntax (TE stx)
   (syntax-parse stx
     [(_ the-e (~optional ans
@@ -234,4 +241,28 @@
             (set! x (iadd x (S32 1)))))
         (set! y (S32 42))
         (iadd x y))
-      (S32 43)))
+      (S32 43))
+
+  (TS (begin
+        (define x : U32 := (U32 0))
+        {x <- (U32 100)}
+        x)
+      (U32 100))
+  (TS (return (if (islt (U32 5) (U32 6))
+                (iadd (S64 2) (S64 3))
+                (isub (S64 5) (S64 6))))
+      (S64 5))
+  (TS (return (let ([x : U32 := (U32 5)])
+                (iadd x (U32 1))))
+      (U32 6))
+  (TS (begin (define my-array : (array 3 U32) := (array (U32 0) (U32 1) (U32 2)))
+             (iadd (my-array @ (U32 0))
+                   (iadd (my-array @ (U32 1))
+                         (my-array @ (U32 2)))))
+      (U32 (+ 0 1 2)))
+  (TS (begin (define y : S32 := (S32 5))
+             (define my-array : (array 3 S32) := (zero (array 3 S32)))
+             {y <- (iadd y (my-array @ (U32 2)))}
+             y)
+      (S32 5))
+  )

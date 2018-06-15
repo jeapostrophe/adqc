@@ -155,7 +155,7 @@
   (define (rec p) (path-read σ p))
   (match p
     [(Var x _) (unbox (hash-ref σ x))]
-    [(Select p ie) (vector-ref (rec p) (eval-expr σ ie))]
+    [(Select p ie) (vector-ref (rec p) (Int-val (eval-expr σ ie)))]
     [(Field p f) (hash-ref (rec p) f)]
     [(Mode p m) (hash-ref (rec p) m)]
     [(? ExtVar?) (error 'path-read "XXX Cannot interp external variables yet: ~e" p)]))
@@ -178,7 +178,7 @@
     [(BinOp op L R)
      ((hash-ref bin-op-table op) (rec L) (rec R))]
     [(LetE x xt xe be)
-     (eval-expr (hash-set σ x (eval-expr σ xe)) be)]
+     (eval-expr (hash-set σ x (box (eval-expr σ xe))) be)]
     [(IfE ce te fe)
      (eval-expr σ (if (eval-expr-pred σ ce) te fe))]
     [(MetaE _ e)

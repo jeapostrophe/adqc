@@ -196,38 +196,4 @@
 (provide link-program
          run-linked-program)
 
-(module+ test
-  ;; XXX: Actually test things instead of just printing them to console
-  ;; JM: Actually, don't and hook the test suite into the compiler
-  (define (dnewline)
-    (printf "~n~n"))
-  (compile&emit (hasheq 'x 'x) (Assign (Var 'x (IntT #f 32)) (Int #f 32 100)))
-  (dnewline)
-  (tree-for idisplay
-            (compile-expr (hasheq)
-                          (IfE (BinOp 'islt (Int #f 32 5) (Int #f 32 6))
-                               (BinOp 'iadd (Int #t 64 2) (Int #t 64 3))
-                               (BinOp 'isub (Int #t 64 5) (Int #t 64 6)))))
-  (dnewline)
-  (tree-for idisplay
-            (compile-expr (hasheq)
-                          (LetE 'x (IntT #f 32) (Int #f 32 5)
-                                (BinOp 'iadd
-                                       (Read (Var 'x (IntT #f 32)))
-                                       (Int #f 32 1)))))
-  (dnewline)
-  (tree-for idisplay
-            (compile-decl
-             (ArrT 3 (IntT #f 32)) "my_arr"
-             (compile-init (hasheq)
-                           (ArrI (list
-                                  (ConI (Int #f 32 0))
-                                  (ConI (Int #f 32 1))
-                                  (ConI (Int #f 32 2)))))))
-  (dnewline)
-  (tree-for idisplay
-            (compile-stmt
-             (hasheq) (hasheq 'y 'y)
-             (Let 'x (ArrT 3 (IntT #t 32)) (ZedI (ArrT 3 (IntT #t 32)))
-                  (Assign (Var 'y (IntT #t 32)) (Int #t 32 5))))))
   

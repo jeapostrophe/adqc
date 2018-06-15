@@ -24,5 +24,6 @@
 (module+ test
   (require chk
            "main.rkt")
+  ;; XXX Use TProg
   (for ([i (in-range 10)])
     (TProg1 fib-p "fib" (S64 i) => (S64 (rfib i)))))

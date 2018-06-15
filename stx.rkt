@@ -63,6 +63,13 @@
   P-expander define-P-expander)
 (define-syntax (P stx)
   (syntax-parse stx
+    [(_ (p ... (~datum @) e))
+     (syntax/loc stx (Select (P (p ...)) (E e)))]
+    [(_ (p ... (~datum ->) f:id))
+     (syntax/loc stx (Field (P (p ...)) 'f))]
+    [(_ (p ... (~datum as) m:id))
+     (syntax/loc stx (Mode (P (p ...)) 'm))]
+    [(_ (unsyntax e)) #'e]
     [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
      #:when (dict-has-key? P-free-macros #'macro-id)
      ((dict-ref P-free-macros #'macro-id) #'macro-use)]
@@ -70,13 +77,7 @@
      #:declare macro-id (static P-expander? "P expander")
      ((attribute macro-id.value) #'macro-use)]
     [(_ x:id) #'x]
-    [(_ (p ... (e)))
-     (syntax/loc stx (Select (P (p ...)) (E e)))]
-    [(_ (p ... (~datum ->) f:id))
-     (syntax/loc stx (Field (P (p ...)) 'f))]
-    [(_ (p ... (~datum as) m:id))
-     (syntax/loc stx (Mode (P (p ...)) 'm))]
-    [(_ (unsyntax e)) #'e]))
+    [(_ (x:id)) #'x]))
 
 (define-expanders&macros
   E-free-macros define-E-free-syntax
@@ -112,7 +113,7 @@
          (LetE x-id the-ty (E xe)
                (let ([the-x-ref (Var x-id the-ty)])
                  (let-syntax ([x (P-expander
-                                  (syntax-parser [_:id #'the-x-ref]))])
+                                  (syntax-parser [_ #'the-x-ref]))])
                    (E be))))))]
     ;; XXX cond
     ;; XXX and, or, not
@@ -226,7 +227,7 @@
          (Let x-id the-ty (I xi)
               (let ([the-x-ref (Var x-id the-ty)])
                 (let-syntax ([x (P-expander
-                                 (syntax-parser [_:id #'the-x-ref]))])
+                                 (syntax-parser [_ #'the-x-ref]))])
                   (S (begin . b)))))))]
     [(_ (let ([x:id (~datum :) ty]) . b))
      (syntax/loc stx
@@ -239,7 +240,7 @@
          (Call x-id the-ty f (list (E a) ...)
                (let ([the-x-ref (Var x-id the-ty)])
                  (let-syntax ([x (P-expander
-                                  (syntax-parser [_:id #'the-x-ref]))])
+                                  (syntax-parser [_ #'the-x-ref]))])
                    (S (begin . b)))))))]
     [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
      #:when (dict-has-key? S-free-macros #'macro-id)
@@ -358,10 +359,10 @@
        (let* ([ret-lab-id (gensym 'ret-lab)]
               [a.ref a.var] ...
               [r.ref r.var])
-         (let-syntax ([a.x (P-expander (syntax-parser [_:id #'a.ref]))] ...)
+         (let-syntax ([a.x (P-expander (syntax-parser [_ #'a.ref]))] ...)
            (let-values
                ([(the-post the-body)
-                 (let-syntax ([r.x (P-expander (syntax-parser [_:id #'r.ref]))])
+                 (let-syntax ([r.x (P-expander (syntax-parser [_ #'r.ref]))])
                    (syntax-parameterize
                        ([current-return-var
                          (make-rename-transformer #'r.x)])
