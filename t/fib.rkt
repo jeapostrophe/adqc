@@ -1,6 +1,5 @@
 #lang racket/base
-(require racket/list
-         adqc)
+(require adqc)
 
 (define fib-p
   (Prog
@@ -22,8 +21,7 @@
     (values b (+ a b))))
 
 (module+ test
-  (require chk
-           "main.rkt")
+  (require "main.rkt")
   (TProgN fib-p
           ["fib" (S64 0) => (S64 (rfib 0))]
           ["fib" (S64 1) => (S64 (rfib 1))]
