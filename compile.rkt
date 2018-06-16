@@ -98,16 +98,26 @@
     ;; XXX: ExtT
     ))
 
-(define (compile-init ρ i)
-  (define (rec i) (compile-init ρ i))
+(define (compile-init ρ ty i)
+  (define (rec i) (compile-init ρ ty i))
   (match i
     [(UndI ty) #f]
     [(ConI e) (compile-expr ρ e)]
     [(ZedI ty) (type-zero ty)]
     [(ArrI is)
      (list* "{ "(add-between (map rec is) ", ") " }")]
-    ;; XXX: RecT, UniT
-    ))
+    [(RecI f->i)
+     (match-define (RecT f->ty _ c-order) ty)
+     (list* "{ "
+            (add-between
+             (for/list ([f (in-list c-order)])
+               (compile-init ρ (hash-ref f->ty f) (hash-ref f->i f)))
+             ", ")
+            " }")]
+    [(UniI m i)
+     (match-define (UniT m->ty m->c) ty)
+     (define ie (compile-init ρ (hash-ref m->ty m) i))
+     (list* "{ ." (hash-ref m->c m) " = " ie " }")]))
 
 (define (type-zero ty)
   (match ty
@@ -148,7 +158,7 @@
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
             cl ":")]
     [(Let x ty xi bs)
-     (list* (compile-decl ty x (compile-init ρ xi)) ind-nl
+     (list* (compile-decl ty x (compile-init ρ ty xi)) ind-nl
             (compile-stmt γ (hash-set ρ x (gensym 'var)) bs))]
     [(MetaS _ s)
      (compile-stmt γ ρ s)]))
