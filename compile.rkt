@@ -59,8 +59,10 @@
      (list* "((" (compile-type (FloT bits)) ")" (~a val) ")")]
     [(Cast ty e)
      (list* "((" (compile-type ty) ")" (rec e) ")")]
-    [(Read (Var x _))
-     (hash-ref ρ x)]
+    [(Read path)
+     (match-define-values (name _)
+       (compile-path ρ path))
+     name]
     [(BinOp op L R)
      (define op-str (hash-ref bin-op-table op))
      (list* "(" (rec L) " " op-str " " (rec R) ")")]
@@ -143,8 +145,10 @@
     [(Fail m)
      (list* "fprintf(stderr, " (~v m) ");" ind-nl
             "exit(1);")]
-    [(Assign (Var x _) e)
-     (list* (hash-ref ρ x) " = " (compile-expr ρ e) ";")]
+    [(Assign path e)
+     (match-define-values (name _)
+       (compile-path ρ path))
+     (list* name " = " (compile-expr ρ e) ";")]
     [(Begin f s)
      (list* (rec f) ind-nl (rec s))]
     [(If p t f)
