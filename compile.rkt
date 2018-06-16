@@ -116,8 +116,8 @@
      (compile-expr (hasheq) (Int signed? bits 0))]
     [(FloT bits)
      (compile-expr (hasheq) (Flo bits 0.0))]
-    [(ArrT dim ety) "{ 0 }"]
-    ;; XXX: RecT, UniT, ExtT
+    [(or (? ArrT?) (? RecT?) (? UniT?)) "{ 0 }"]
+    ;; XXX: ExtT
     ))
 
 (define (compile-stmt γ ρ s)
