@@ -105,7 +105,13 @@
     [(ConI e) (compile-expr ρ e)]
     [(ZedI ty) (type-zero ty)]
     [(ArrI is)
-     (list* "{ "(add-between (map rec is) ", ") " }")]
+     (match-define (ArrT _ ety) ty)
+     (list* "{ "
+            (add-between
+             (for/list ([i (in-list is)])
+               (compile-init ρ ety i))
+             ", ")
+            " }")]
     [(RecI f->i)
      (match-define (RecT f->ty _ c-order) ty)
      (list* "{ "
