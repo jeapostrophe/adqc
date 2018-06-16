@@ -81,6 +81,21 @@
      (list* (compile-type ty) #\space name assign ";")]
     [(ArrT dim ety)
      (list* (compile-type ety) #\space name "[" (~a dim) "]" assign ";")]
+    [(RecT f->ty f->c c-order)
+     (list* "struct {" ind++ ind-nl
+            (add-between
+             (for/list ([f (in-list c-order)])
+               (compile-decl (hash-ref f->ty f) (hash-ref f->c f)))
+             ind-nl)
+            ind-- ind-nl "} " name assign ";")]
+    [(UniT m->ty m->c)
+     (list* "union {" ind++ ind-nl
+            (add-between
+             (for/list ([(m ty) (in-hash m->ty)])
+               (compile-decl ty (hash-ref m->c m)))
+             ind-nl)
+            ind-- ind-nl "} " name assign ";")]
+    ;; XXX: ExtT
     ))
 
 (define (compile-init ρ i)
