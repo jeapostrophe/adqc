@@ -105,8 +105,7 @@
     [(ConI e) (compile-expr ρ e)]
     [(ZedI ty) (type-zero ty)]
     [(ArrI is)
-     (add-between (map rec is) '(", ") #:splice? #t
-                  #:before-first '("{ ") #:after-last '(" }"))]
+     (list* "{ "(add-between (map rec is) ", ") " }")]
     ;; XXX: RecT, UniT
     ))
 
@@ -148,15 +147,9 @@
      (define cl (~a (gensym 'label)))
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
             cl ":")]
-    ;; XXX: What data is ρ supposed to carry? Right now it just
-    ;; maps from name -> name, which seems obviously wrong, but
-    ;; in 'compile-expr', the `(Read (Var x _))` case seems to
-    ;; expect this. Should we change it so that ρ maps from
-    ;; name to type?
     [(Let x ty xi bs)
-     (define decl (compile-decl ty x (compile-init ρ xi)))
-     (list* decl ind-nl
-            (compile-stmt γ (hash-set ρ x x) bs))]
+     (list* (compile-decl ty x (compile-init ρ xi)) ind-nl
+            (compile-stmt γ (hash-set ρ x (gensym 'var)) bs))]
     [(MetaS _ s)
      (compile-stmt γ ρ s)]))
 
