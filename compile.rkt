@@ -39,12 +39,12 @@
     [(Field path f)
      (define-values (pc pty) (rec path))
      (match-define (RecT f->ty f->c _) pty)
-     (values (list* "(" pc "." (hash-ref f->c f f) ")")
+     (values (list* "(" pc "." (hash-ref f->c f) ")")
              (hash-ref f->ty f))]
     [(Mode path m)
      (define-values (pc pty) (rec path))
      (match-define (UniT m->ty m->c) pty)
-     (values (list "(" pc "." (hash-ref m->c m m) ")")
+     (values (list "(" pc "." (hash-ref m->c m) ")")
              (hash-ref m->ty m))]
     [(ExtVar src n ty)
      ;; XXX register src

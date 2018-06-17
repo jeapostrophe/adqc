@@ -46,13 +46,18 @@
       [(_ ((~datum array) dim:nat elem))
        (syntax/loc stx (ArrT dim (T elem)))]
       [(_ ((~datum record) (~seq f:id ft) ...))
-       ;; XXX syntax for C stuff
+       ;; XXX syntax for choosing C stuff
+       ;; XXX smarter defaults
        (syntax/loc stx (RecT (make-immutable-hasheq (list (cons 'f (T ft)) ...))
-                             (hasheq) '()))]
+                             (make-immutable-hasheq
+                              (list (cons 'f (symbol->string (gensym 'field))) ...))
+                             '(f ...)))]
       [(_ ((~datum union) (~seq m:id mt) ...))
-       ;; XXX syntax for C stuff
+       ;; XXX syntax for choosing C stuff
+       ;; XXX smarter defaults
        (syntax/loc stx (UniT (make-immutable-hasheq (list (cons 'm (T mt)) ...))
-                             (hasheq)))]
+                             (make-immutable-hasheq
+                              (list (cons 'm (symbol->string (gensym 'mode))) ...))))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
        #:when (dict-has-key? T-free-macros #'macro-id)
        (record-disappeared-uses #'macro-id)
