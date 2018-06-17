@@ -169,7 +169,7 @@
             cl ":")]
     [(Let x ty xi bs)
      (list* (compile-decl ty x (compile-init ρ ty xi)) ind-nl
-            (compile-stmt γ (hash-set ρ x (gensym 'var)) bs))]
+            (compile-stmt γ (hash-set ρ x (symbol->string (gensym 'var))) bs))]
     [(MetaS _ s)
      (compile-stmt γ ρ s)]))
 
