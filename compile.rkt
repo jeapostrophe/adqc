@@ -83,6 +83,7 @@
      (list* (compile-type ty) #\space name assign ";")]
     [(ArrT dim ety)
      (list* (compile-type ety) #\space name "[" (~a dim) "]" assign ";")]
+    ;; XXX Lift unique RecT to top-level and give a name?
     [(RecT f->ty f->c c-order)
      (list* "struct {" ind++ ind-nl
             (add-between
@@ -90,6 +91,7 @@
                (compile-decl (hash-ref f->ty f) (hash-ref f->c f)))
              ind-nl)
             ind-- ind-nl "} " name assign ";")]
+    ;; XXX Lift unique UniT to top-level and give a name?
     [(UniT m->ty m->c)
      (list* "union {" ind++ ind-nl
             (add-between
@@ -141,8 +143,11 @@
   (define (rec s) (compile-stmt γ ρ s))
   (match s
     [(Skip c)
+     ;; XXX Ensure c is valid C comment
      (and c (list* "/* " c " */"))]
     [(Fail m)
+     ;; XXX Ensure (~v m) is valid C string (maybe turn into a literal
+     ;; array at top-level?)
      (list* "fprintf(stderr, " (~v m) ");" ind-nl
             "exit(1);")]
     [(Assign path e)
