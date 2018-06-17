@@ -50,14 +50,14 @@
        ;; XXX smarter defaults
        (syntax/loc stx (RecT (make-immutable-hasheq (list (cons 'f (T ft)) ...))
                              (make-immutable-hasheq
-                              (list (cons 'f (symbol->string (gensym 'field))) ...))
+                              (list (cons 'f (cify 'f)) ...))
                              '(f ...)))]
       [(_ ((~datum union) (~seq m:id mt) ...))
        ;; XXX syntax for choosing C stuff
        ;; XXX smarter defaults
        (syntax/loc stx (UniT (make-immutable-hasheq (list (cons 'm (T mt)) ...))
                              (make-immutable-hasheq
-                              (list (cons 'm (symbol->string (gensym 'mode))) ...))))]
+                              (list (cons 'm (cify 'm)) ...))))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
        #:when (dict-has-key? T-free-macros #'macro-id)
        (record-disappeared-uses #'macro-id)
@@ -135,7 +135,7 @@
        #:with (the-ty ...) (generate-temporaries #'(xty ...))
        (record-disappeared-uses #'let)
        (syntax/loc stx
-         (let ([x-id (gensym 'x)] ... [the-ty (T xty)] ...)
+         (let ([x-id 'x-id] ... [the-ty (T xty)] ...)
            (Let*E (list x-id ...)
                   (list the-ty ...)
                   (list (E xe) ...)
@@ -308,17 +308,19 @@
        (record-disappeared-uses #'if)
        (syntax/loc stx (If (E p) (S t) (S f)))]
       [(_ (let/ec k:id . b))
+       #:with k-id (generate-temporary #'k)
        (record-disappeared-uses #'let/ec)
        (syntax/loc stx
-         (let ([k-id (gensym 'k)])
+         (let ([k-id 'k-id])
            (Let/ec k-id
                    (let ([the-ret (Jump k-id)])
                      (let-syntax ([k (S-expander (syntax-parser [(_) #'the-ret]))])
                        (S (begin . b)))))))]
       [(_ (let ([x:id (~datum :) ty (~datum :=) xi]) . b))
+       #:with x-id (generate-temporary #'x)
        (record-disappeared-uses #'let)
        (syntax/loc stx
-         (let ([x-id (gensym 'x)]
+         (let ([x-id 'x-id]
                [the-ty (T ty)])
            (Let x-id the-ty (I xi)
                 (let ([the-x-ref (Var x-id the-ty)])
@@ -331,9 +333,10 @@
          (let ([the-ty (T ty)])
            (S (let ([x : #,the-ty := (undef #,the-ty)]) . b))))]
       [(_ (let ([x:id (~datum :) ty (~datum :=) f (~datum <-) a ...]) . b))
+       #:with x-id (generate-temporary #'x)
        (record-disappeared-uses #'let)
        (syntax/loc stx
-         (let ([x-id (gensym 'x)]
+         (let ([x-id 'x-id]
                [the-ty (T ty)])
            (Call x-id the-ty f (list (E a) ...)
                  (let ([the-x-ref (Var x-id the-ty)])
@@ -435,7 +438,7 @@
                  #:defaults ([mode #''read-only]))
       x:id (~datum :) ty)
      #:attr ref (generate-temporary #'x)
-     #:attr var (syntax/loc this-syntax (Var (gensym 'x) (T ty)))
+     #:attr var (syntax/loc this-syntax (Var 'ref (T ty)))
      #:attr arg (syntax/loc this-syntax (Arg (Var-x ref) (Var-ty ref) mode))])
   (define-syntax-class Fret
     #:attributes (x ref var)
@@ -443,12 +446,12 @@
     [pattern
      (x:id (~datum :) ty)
      #:attr ref (generate-temporary #'x)
-     #:attr var (syntax/loc this-syntax (Var (gensym 'x) (T ty)))]
+     #:attr var (syntax/loc this-syntax (Var 'ref (T ty)))]
     [pattern
      ty
      #:attr x (generate-temporary)
      #:attr ref (generate-temporary #'x)
-     #:attr var (syntax/loc this-syntax (Var (gensym 'x) (T ty)))]))
+     #:attr var (syntax/loc this-syntax (Var 'ref (T ty)))]))
 (define-syntax (F stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -458,12 +461,13 @@
           (~optional (~seq #:post post)
                      #:defaults ([post #'(S64 1)]))
           (~optional (~seq #:return ret-lab:id)
-                     #:defaults ([ret-lab (generate-temporary)]))
+                     #:defaults ([ret-lab (generate-temporary 'return)]))
           . bs)
        #:fail-when (check-duplicates (syntax->list #'(a.x ...)) bound-identifier=?)
        "All arguments must have unique identifiers"
+       #:with ret-lab-id (generate-temporary #'ret-lab)
        (syntax/loc stx
-         (let* ([ret-lab-id (gensym 'ret-lab)]
+         (let* ([ret-lab-id 'ret-lab-id]
                 [a.ref a.var] ...
                 [r.ref r.var])
            (let-syntax ([a.x (P-expander (syntax-parser [_ #'a.ref]))] ...)

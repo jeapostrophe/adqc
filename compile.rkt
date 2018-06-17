@@ -164,12 +164,12 @@
     [(Jump l)
      (list* "goto " (hash-ref γ l) ";")]
     [(Let/ec l b)
-     (define cl (~a (gensym 'label)))
+     (define cl (cify l))
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
             cl ":")]
     [(Let x ty xi bs)
      (list* (compile-decl ty x (compile-init ρ ty xi)) ind-nl
-            (compile-stmt γ (hash-set ρ x (symbol->string (gensym 'var))) bs))]
+            (compile-stmt γ (hash-set ρ x (cify x)) bs))]
     [(MetaS _ s)
      (compile-stmt γ ρ s)]))
 
@@ -185,9 +185,10 @@
 
 ;; Display code
 
-(define ind-nl (gensym))
-(define ind++ (gensym))
-(define ind-- (gensym))
+(struct ind-token ())
+(define ind-nl (ind-token))
+(define ind++ (ind-token))
+(define ind-- (ind-token))
 (define ind-lvl (box 0))
 
 (define (idisplay v)

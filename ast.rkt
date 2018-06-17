@@ -9,10 +9,30 @@
 ;; rules.
 (define (c-identifier-string? x)
   (regexp-match #rx"^[_a-zA-Z][a-zA-Z0-9_]*$" x))
+
+(define current-cify-counter (make-parameter (box 0)))
+(define-syntax-rule (with-cify-counter . b)
+  (parameterize ([current-cify-counter (box 0)]) . b))
+(define (cify s)
+  (define cify-counter (current-cify-counter))
+  (define which (unbox cify-counter))
+  (set-box! cify-counter (add1 cify-counter))
+  (format "_~a_~a"
+          (regexp-replace* #rx"[^a-zA-Z0-9_]" (symbol->string s) "_")
+          which))
+
 ;; Legal things the right of -l in cc
 (define c-library-string? string?)
 ;; Legal things inside the <>s of an #include
 (define c-header-string? string?)
+
+(provide
+ with-cify-counter
+ (contract-out
+  [c-identifier-string? (-> any/c boolean?)]
+  [c-library-string? (-> any/c boolean?)]
+  [c-header-string? (-> any/c boolean?)]
+  [cify (-> symbol? c-identifier-string?)]))
 
 ;; Extern Source
 (struct ExternSrc (ls hs) #:transparent)
