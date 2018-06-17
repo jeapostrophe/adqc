@@ -8,5 +8,7 @@ Things to implement:
 - Simple Scheme implementation (CEK machine w/ stop & copy GC)
 - Entity Component System (like Artemis or EntityX)
 - FSM language (like Embeddr)
+- Libraries (OpenGL, libretro, raart, mode-lambda, lux)
 - Basic games (2048, Tetris, Tic-Tac-Toe, etc)
+- 2048 --- https://github.com/mevdschee/2048.c/blob/master/2048.c
 - Complex games (Shooter, Platformer, Pacman, etc)
