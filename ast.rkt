@@ -16,7 +16,7 @@
 (define (cify s)
   (define cify-counter (current-cify-counter))
   (define which (unbox cify-counter))
-  (set-box! cify-counter (add1 cify-counter))
+  (set-box! cify-counter (add1 which))
   (format "_~a_~a"
           (regexp-replace* #rx"[^a-zA-Z0-9_]" (symbol->string s) "_")
           which))
