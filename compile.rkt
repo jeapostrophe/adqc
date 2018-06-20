@@ -139,12 +139,18 @@
     ;; XXX: ExtT
     ))
 
+(define (compile-comment cstr)
+  (add-between
+   (for/list ([c (in-list (string-split cstr "\n"))])
+     (list* "// " c))
+   ind-nl))
+
 (define (compile-stmt γ ρ s)
   (define (rec s) (compile-stmt γ ρ s))
   (match s
     [(Skip c)
      ;; XXX Ensure c is valid C comment
-     (and c (list* "/* " c " */"))]
+     (and c (compile-comment c))]
     [(Fail m)
      ;; XXX Ensure (~v m) is valid C string (maybe turn into a literal
      ;; array at top-level?)
