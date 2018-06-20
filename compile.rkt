@@ -149,7 +149,6 @@
   (define (rec s) (compile-stmt γ ρ s))
   (match s
     [(Skip c)
-     ;; XXX Ensure c is valid C comment
      (and c (compile-comment c))]
     [(Fail m)
      ;; XXX Ensure (~v m) is valid C string (maybe turn into a literal
