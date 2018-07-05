@@ -7,6 +7,11 @@
          racket/string
          "ast.rkt")
 
+;; XXX Read through https://queue.acm.org/detail.cfm?id=3212479 and
+;; see if there are any changes we should have to our language
+;; model. I think a lot of our choices are good because we don't make
+;; promises about memory.
+
 ;; XXX fill this in
 (define bin-op-table
   (hasheq 'iadd "+" 'isub "-" 'imul "*" 'iudiv "/" 'isdiv "/" 'iurem "%" 'isrem "%"
