@@ -1,7 +1,6 @@
 #lang racket/base
 (require racket/contract/base
          racket/format
-         racket/function
          racket/list
          racket/match
          racket/string
@@ -11,6 +10,8 @@
 ;; see if there are any changes we should have to our language
 ;; model. I think a lot of our choices are good because we don't make
 ;; promises about memory.
+
+(define current-fun-asts (make-parameter (make-hash)))
 
 ;; XXX fill this in
 (define bin-op-table
@@ -191,8 +192,21 @@
 ;; Σ is a renaming environment for public functions
 ;; ρ is a renaming environment for global variables
 (define (compile-fun Σ ρ f)
-  ;; XXX
-  (match f))
+  (match f
+    [(MetaFun _ f) (compile-fun Σ ρ f)]
+    ; XXX ret-x vs ret-lab?
+    [(IntFun as ret-x ret-ty ret-lab body)
+     (define args-ast
+       (add-between
+        (for/list ([arg (in-list as)])
+          (match-define (Arg x ty mode) arg)
+          (list* (compile-type ty) #\space x))
+        ", "))
+     (list* (compile-type ret-ty) #\space (gensym 'fun) "(" args-ast "){" ind++ ind-nl
+            (compile-decl ret-ty ret-lab) ind-nl
+            (compile-stmt (hasheq) ρ body) ind-nl
+            "return " ret-lab ";" ind-nl
+            ind-- ind-nl "}")]))
 
 (define (compile-program p)
   ;; XXX
