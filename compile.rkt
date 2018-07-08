@@ -11,7 +11,8 @@
 ;; model. I think a lot of our choices are good because we don't make
 ;; promises about memory.
 
-(define current-fun-asts (make-parameter (make-hash)))
+(define current-fun-asts (make-parameter (box #f)))
+(define current-fun-table (make-parameter (make-hash)))
 
 ;; XXX fill this in
 (define bin-op-table
@@ -187,25 +188,48 @@
      (list* (compile-decl ty x (compile-init ρ ty xi)) ind-nl
             (compile-stmt γ (hash-set ρ x (cify x)) bs))]
     [(MetaS _ s)
-     (compile-stmt γ ρ s)]))
+     (compile-stmt γ ρ s)]
+    [(Call x ty f as bs)
+     (define fun-table (current-fun-table))
+     (define fun-name
+       (cond [(hash-has-key? fun-table f)
+              (hash-ref fun-table f)]
+             [else
+              (define fun-asts (current-fun-asts))
+              ;; XXX: Σ from where?
+              (define fun-def (compile-fun (hasheq) ρ f))
+              (set-box! fun-asts (cons fun-def (unbox fun-asts)))
+              (define fun-name (cify 'fun))
+              (hash-set! fun-table f fun-name)
+              fun-name]))
+     (define args-ast
+       (add-between
+        (for/list ([arg (in-list as)])
+          (match arg
+            [(? Expr?) (compile-expr ρ arg)]
+            [(? Path?) (compile-path ρ arg)]))
+        ", "))
+     (list* fun-name "(" args-ast ");")]))
 
 ;; Σ is a renaming environment for public functions
 ;; ρ is a renaming environment for global variables
 (define (compile-fun Σ ρ f)
   (match f
     [(MetaFun _ f) (compile-fun Σ ρ f)]
-    ; XXX ret-x vs ret-lab?
+    ;; XXX: ret-lab?
     [(IntFun as ret-x ret-ty ret-lab body)
+     (define fun-name (hash-ref (current-fun-table) f))
      (define args-ast
        (add-between
         (for/list ([arg (in-list as)])
           (match-define (Arg x ty mode) arg)
           (list* (compile-type ty) #\space x))
         ", "))
-     (list* (compile-type ret-ty) #\space (gensym 'fun) "(" args-ast "){" ind++ ind-nl
-            (compile-decl ret-ty ret-lab) ind-nl
+     (define ret-name (cify ret-x))
+     (list* (compile-type ret-ty) #\space fun-name "(" args-ast "){" ind++ ind-nl
+            (compile-decl ret-ty ret-name) ind-nl
             (compile-stmt (hasheq) ρ body) ind-nl
-            "return " ret-lab ";" ind-nl
+            "return " ret-name ";"
             ind-- ind-nl "}")]))
 
 (define (compile-program p)
