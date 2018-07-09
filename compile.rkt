@@ -4,6 +4,7 @@
          racket/list
          racket/match
          racket/string
+         racket/system
          "ast.rkt")
 
 ;; XXX Read through https://queue.acm.org/detail.cfm?id=3212479 and
@@ -189,6 +190,8 @@
             (compile-stmt γ (hash-set ρ x (cify x)) bs))]
     [(MetaS _ s)
      (compile-stmt γ ρ s)]
+    ;; XXX: Does Call include the name of the variable to hold
+    ;; the return value? Is this 'x'?
     [(Call x ty f as bs)
      (define fun-table (current-fun-table))
      (define fun-name
@@ -233,8 +236,19 @@
             ind-- ind-nl "}")]))
 
 (define (compile-program p)
-  ;; XXX
-  (match p))
+  (parameterize ([current-fun-asts (box #f)]
+                 [current-fun-table (make-hash)])
+    (match-define (Program gs Σ n->f) p)
+    (define globals-ast
+      (for/list ([(x g) (in-hash gs)])
+        (match-define (Global ty xi) g)
+        (compile-decl ty x xi)))
+    (define pub-fun-asts
+      (for/list ([(x f) (in-hash n->f)])
+        (list* (compile-fun Σ (hasheq) f) ind-nl)))
+    (list* globals-ast ind-nl
+           (current-fun-asts) ind-nl
+           pub-fun-asts)))
 
 ;; Display code
 
@@ -269,6 +283,13 @@
 
 ;; XXX A function that actually really calls the C compiler with the
 ;; appropriate -l lines, etc.
+(define (compile-binary prog out-path)
+  ;; XXX: output C code to tmp file so we can read it to debug.
+  (define-values (in out) (make-pipe))
+  (parameterize ([current-output-port out])
+    (tree-for idisplay (compile-program prog)))
+  (parameterize ([current-input-port in])
+    (system (format "gcc -shared -o~a -xc -" out-path))))
 
 ;; XXX Maybe move to linker.rkt because we need to implement ffi stuff?
 (define (link-program p)
