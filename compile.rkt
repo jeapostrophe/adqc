@@ -291,12 +291,6 @@
   (parameterize ([current-input-port in])
     (system (format "gcc -shared -o~a -xc -" out-path))))
 
-;; XXX Maybe move to linker.rkt because we need to implement ffi stuff?
-(define (link-program p)
-  (error 'link-program "Not implemented"))
-
-(define (run-linked-program lp n args)
-  (error 'run-linked-program "Not implemented"))
-
-(provide link-program
-         run-linked-program)
+(provide
+ (contract-out
+  [compile-binary (-> Program? path? boolean?)]))

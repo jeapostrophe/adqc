@@ -1,6 +1,7 @@
 #lang info
 (define collection "adqc")
-(define deps '("reprovide-lang"
+(define deps '("libuuid"
+               "reprovide-lang"
                "threading-lib"
                "base"))
 (define build-deps '("chk-lib"))
