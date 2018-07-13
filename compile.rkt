@@ -12,7 +12,7 @@
 ;; model. I think a lot of our choices are good because we don't make
 ;; promises about memory.
 
-(define current-fun-asts (make-parameter (box #f)))
+(define current-fun-asts (make-parameter (box empty)))
 (define current-fun-table (make-parameter (make-hash)))
 
 ;; XXX fill this in
@@ -147,6 +147,8 @@
     ;; XXX: ExtT
     ))
 
+;; XXX make sure that comment lines don't end in backslash
+;; so that real code isn't accidentally commented out.
 (define (compile-comment cstr)
   (add-between
    (for/list ([c (in-list (string-split cstr "\n"))])
@@ -193,6 +195,7 @@
     ;; XXX: Does Call include the name of the variable to hold
     ;; the return value? Is this 'x'?
     [(Call x ty f as bs)
+     ;; XXX handle assignment of return value to x
      (define fun-table (current-fun-table))
      (define fun-name
        (cond [(hash-has-key? fun-table f)
@@ -236,7 +239,7 @@
             ind-- ind-nl "}")]))
 
 (define (compile-program p)
-  (parameterize ([current-fun-asts (box #f)]
+  (parameterize ([current-fun-asts (box empty)]
                  [current-fun-table (make-hash)])
     (match-define (Program gs Σ n->f) p)
     (define globals-ast
@@ -276,11 +279,6 @@
     [(cons a d) (tree-for f a) (tree-for f d)]
     [x (f x)]))
 
-(module+ test
-  ;; XXX Drop this function and just accept a Program from ast.rkt
-  (define (compile&emit ρ s)
-    (tree-for idisplay (compile-stmt (hasheq) ρ s))))
-
 ;; XXX A function that actually really calls the C compiler with the
 ;; appropriate -l lines, etc.
 (define (compile-binary prog out-path)
@@ -290,7 +288,22 @@
     (tree-for idisplay (compile-program prog)))
   (parameterize ([current-input-port in])
     (system (format "gcc -shared -o~a -xc -" out-path))))
-
+                               
 (provide
  (contract-out
   [compile-binary (-> Program? path? boolean?)]))
+
+(module+ test
+  ;; XXX Drop this function and just accept a Program from ast.rkt
+  (define simple-test-prog
+    (Program (hasheq) (hasheq)
+             (hash "foo" (IntFun (list (Arg 'x (IntT #t 32) 'copy)
+                                       (Arg 'y (IntT #t 32) 'copy))
+                                 'my-ret 
+                                 (IntT #t 32)
+                                 'dont-care
+                                 (Assign (Var 'my-ret (IntT #t 32))
+                                         (BinOp 'iadd
+                                                (Read (Var 'x (IntT #t 32)))
+                                                (Read (Var 'y (IntT #t 32)))))))))
+  (tree-for idisplay (compile-program simple-test-prog)))
