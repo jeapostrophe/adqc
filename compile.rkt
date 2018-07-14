@@ -3,6 +3,7 @@
          racket/format
          racket/list
          racket/match
+         racket/set
          racket/string
          racket/system
          "ast.rkt")
@@ -12,8 +13,12 @@
 ;; model. I think a lot of our choices are good because we don't make
 ;; promises about memory.
 
-(define current-fun-asts (make-parameter (box empty)))
-(define current-fun-table (make-parameter (make-hash)))
+(define headers-default (mutable-set "stdint.h"))
+
+(define current-headers (make-parameter headers-default))
+(define current-libs (make-parameter (mutable-set)))
+(define current-fun-queue (make-parameter (box empty)))
+(define current-Σ (make-parameter (make-hash)))
 
 ;; XXX fill this in
 (define bin-op-table
@@ -107,8 +112,12 @@
                (compile-decl ty (hash-ref m->c m)))
              ind-nl)
             ind-- ind-nl "} " name assign ";")]
-    ;; XXX: ExtT
-    ))
+    [(ExtT (ExternSrc ls hs) name)
+     (for ([l (in-list ls)])
+       (set-add! (current-libs) l))
+     (for ([h (in-list hs)])
+       (set-add! (current-headers) h))
+     (list* "void* " name ";")]))
 
 (define (compile-init ρ ty i)
   (define (rec i) (compile-init ρ ty i))
@@ -192,21 +201,16 @@
             (compile-stmt γ (hash-set ρ x (cify x)) bs))]
     [(MetaS _ s)
      (compile-stmt γ ρ s)]
-    ;; XXX: Does Call include the name of the variable to hold
-    ;; the return value? Is this 'x'?
     [(Call x ty f as bs)
-     ;; XXX handle assignment of return value to x
-     (define fun-table (current-fun-table))
+     (define Σ (current-Σ))
      (define fun-name
-       (cond [(hash-has-key? fun-table f)
-              (hash-ref fun-table f)]
+       (cond [(hash-has-key? Σ f)
+              (hash-ref Σ f)]
              [else
-              (define fun-asts (current-fun-asts))
-              ;; XXX: Σ from where?
-              (define fun-def (compile-fun (hasheq) ρ f))
-              (set-box! fun-asts (cons fun-def (unbox fun-asts)))
               (define fun-name (cify 'fun))
-              (hash-set! fun-table f fun-name)
+              (define fun-queue (current-fun-queue))
+              (set-box! fun-queue (cons f (unbox fun-queue)))
+              (hash-set! Σ f x)
               fun-name]))
      (define args-ast
        (add-between
@@ -215,44 +219,53 @@
             [(? Expr?) (compile-expr ρ arg)]
             [(? Path?) (compile-path ρ arg)]))
         ", "))
-     (list* fun-name "(" args-ast ");")]))
+     (list* (hash-ref ρ x) " = " fun-name "(" args-ast ");")]))
 
 ;; Σ is a renaming environment for public functions
 ;; ρ is a renaming environment for global variables
-(define (compile-fun Σ ρ f)
+(define (compile-fun ρ f)
   (match f
-    [(MetaFun _ f) (compile-fun Σ ρ f)]
-    ;; XXX: ret-lab?
+    [(MetaFun _ f) (compile-fun ρ f)]
     [(IntFun as ret-x ret-ty ret-lab body)
-     (define fun-name (hash-ref (current-fun-table) f))
-     (define args-ast
-       (add-between
-        (for/list ([arg (in-list as)])
-          (match-define (Arg x ty mode) arg)
-          (list* (compile-type ty) #\space x))
-        ", "))
+     (define fun-name (hash-ref (current-Σ) f))
+     (define ρ* (for/fold ([out ρ])
+                          ([arg (in-list as)])
+                  (define x (Arg-x arg))
+                  (hash-set out x (cify x))))
+     (define args-ast (add-between
+                       (for/list ([arg (in-list as)])
+                         (match-define (Arg x ty mode) arg)
+                         (list* (compile-type ty) #\space (hash-ref ρ* x)))
+                       ", "))
      (define ret-name (cify ret-x))
      (list* (compile-type ret-ty) #\space fun-name "(" args-ast "){" ind++ ind-nl
             (compile-decl ret-ty ret-name) ind-nl
-            (compile-stmt (hasheq) ρ body) ind-nl
+            (compile-stmt (hasheq) (hash-set ρ* ret-x ret-name) body) ind-nl
             "return " ret-name ";"
             ind-- ind-nl "}")]))
 
-(define (compile-program p)
-  (parameterize ([current-fun-asts (box empty)]
-                 [current-fun-table (make-hash)])
-    (match-define (Program gs Σ n->f) p)
-    (define globals-ast
-      (for/list ([(x g) (in-hash gs)])
-        (match-define (Global ty xi) g)
-        (compile-decl ty x xi)))
-    (define pub-fun-asts
-      (for/list ([(x f) (in-hash n->f)])
-        (list* (compile-fun Σ (hasheq) f) ind-nl)))
-    (list* globals-ast ind-nl
-           (current-fun-asts) ind-nl
-           pub-fun-asts)))
-
+(define (compile-program prog)
+  (match-define (Program gs ρ n->f) prog)
+  (define fun-queue (box empty))
+  (define Σ (make-hash (for/list ([(x f) (in-hash n->f)])
+                         (cons f (cify (string->symbol x))))))
+  (parameterize ([current-fun-queue fun-queue]
+                 [current-Σ Σ]
+                 [current-headers headers-default])
+    (define globals-ast (for/list ([(x g) (in-hash gs)])
+                        (match-define (Global ty xi) g)
+                        (compile-decl ty (hash-ref ρ x) xi)))
+    (define pub-funs-ast (for/list ([(f x) (in-hash Σ)])
+                           (list* (compile-fun ρ f) ind-nl)))
+    (define priv-funs-ast (for/list ([f (in-list (unbox fun-queue))])
+                            (list* (compile-fun ρ f) ind-nl)))
+    (define headers-ast (for/list ([h (in-set (current-headers))])
+                          (list* "#include<" h ">" ind-nl)))
+    (list* headers-ast ind-nl
+           globals-ast ind-nl
+           priv-funs-ast ind-nl
+           pub-funs-ast ind-nl)))
+    
 ;; Display code
 
 (struct ind-token ())
@@ -286,6 +299,7 @@
   (define-values (in out) (make-pipe))
   (parameterize ([current-output-port out])
     (tree-for idisplay (compile-program prog)))
+  (close-output-port out)
   (parameterize ([current-input-port in])
     (system (format "gcc -shared -o~a -xc -" out-path))))
                                
@@ -306,4 +320,5 @@
                                          (BinOp 'iadd
                                                 (Read (Var 'x (IntT #t 32)))
                                                 (Read (Var 'y (IntT #t 32)))))))))
-  (tree-for idisplay (compile-program simple-test-prog)))
+  (compile-binary simple-test-prog "/home/conor/adcqbin")
+  #;(tree-for idisplay (compile-program simple-test-prog)))
