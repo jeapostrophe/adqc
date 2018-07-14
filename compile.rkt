@@ -248,6 +248,10 @@
   (match-define (Program gs ρ n->f) prog)
   (define fun-queue (box empty))
   (define Σ (make-hash (for/list ([(x f) (in-hash n->f)])
+                         ;; XXX generate private name, but then how
+                         ;; can linker remap?
+                         (cons f (string->symbol x))
+                         #;
                          (cons f (cify (string->symbol x))))))
   (parameterize ([current-fun-queue fun-queue]
                  [current-Σ Σ]

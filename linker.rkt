@@ -1,6 +1,6 @@
 #lang racket/base
-(require libuuid
-         racket/contract/base
+(require racket/contract/base
+         racket/file
          racket/match
          (rename-in ffi/unsafe [-> ffi:->])
          "ast.rkt"
@@ -28,9 +28,10 @@
        [64 _double])]))
 
 (define (link-program p)
-  (define bin-path (build-path (find-system-path 'temp-dir) "adqc/bin" (uuid-generate)))
+  (define bin-path (make-temporary-file "adqc_bin_~a"))
   (unless (compile-binary p bin-path)
-    (error 'link-program "call to compile-binary failed (see stderr)"))
+    (error 'link-program "call to compile-binary failed (see stderr)")) 
+  (printf "wrote binary to ~a\n" bin-path)
   (define ffi-obj (ffi-lib bin-path))
   (match-define (Program _  _ name->fun) p)
   (define type-map
@@ -38,9 +39,7 @@
       (match-define (IntFun args _ ret-ty _ _) fun)
       (define c-args (map ty->ctype (map Arg-ty args)))
       (define c-ret (ty->ctype ret-ty))
-      ;; XXX instantiate actual function contract, not just
-      ;; cons together arg types and ret type.
-      (values name (cons c-args c-ret))))
+      (values name (_cprocedure c-args c-ret))))
   (linked-program ffi-obj type-map))
 
 (define (run-linked-program lp n args)
