@@ -251,10 +251,11 @@
                          (cons f (cify (string->symbol x))))))
   (parameterize ([current-fun-queue fun-queue]
                  [current-Σ Σ]
-                 [current-headers headers-default])
+                 [current-headers headers-default]
+                 [current-libs (mutable-set)])
     (define globals-ast (for/list ([(x g) (in-hash gs)])
-                        (match-define (Global ty xi) g)
-                        (compile-decl ty (hash-ref ρ x) xi)))
+                          (match-define (Global ty xi) g)
+                          (compile-decl ty (hash-ref ρ x) xi)))
     (define pub-funs-ast (for/list ([(f x) (in-hash Σ)])
                            (list* (compile-fun ρ f) ind-nl)))
     (define priv-funs-ast (for/list ([f (in-list (unbox fun-queue))])
@@ -302,7 +303,7 @@
   (close-output-port out)
   (parameterize ([current-input-port in])
     (system (format "gcc -shared -o~a -xc -" out-path))))
-                               
+
 (provide
  (contract-out
   [compile-binary (-> Program? path? boolean?)]))
