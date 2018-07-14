@@ -2,11 +2,11 @@
 (require racket/contract/base
          racket/file
          racket/match
-         (rename-in ffi/unsafe [-> ffi:->])
+         (except-in ffi/unsafe ->)
          "ast.rkt"
          "compile.rkt")
 
-(struct linked-program (ffi-obj type-map) #:transparent)
+(struct linked-program (lib type-map) #:transparent)
 
 (define (ty->ctype ty)
   (match ty
@@ -31,8 +31,8 @@
   (define bin-path (make-temporary-file "adqc_bin_~a"))
   (unless (compile-binary p bin-path)
     (error 'link-program "call to compile-binary failed (see stderr)")) 
-  (printf "wrote binary to ~a\n" bin-path)
-  (define ffi-obj (ffi-lib bin-path))
+  (eprintf "wrote binary to ~a\n" bin-path)
+  (define lib (ffi-lib bin-path))
   (match-define (Program _  _ name->fun) p)
   (define type-map
     (for/hasheq ([(name fun) (in-hash name->fun)])
@@ -40,14 +40,15 @@
       (define c-args (map ty->ctype (map Arg-ty args)))
       (define c-ret (ty->ctype ret-ty))
       (values name (_cprocedure c-args c-ret))))
-  (linked-program ffi-obj type-map))
+  (linked-program lib type-map))
 
 (define (run-linked-program lp n args)
-  (match-define (linked-program ffi-obj type-map) lp)
-  (define fun (get-ffi-obj n ffi-obj (hash-ref type-map n)))
+  (match-define (linked-program lib type-map) lp)
+  (define fun (get-ffi-obj n lib (hash-ref type-map n)))
   (apply fun args))
 
 (provide
  (contract-out
+  [struct linked-program ([lib ffi-lib?] [type-map (hash/c symbol? ctype?)])]
   [link-program (-> Program? linked-program?)]
   [run-linked-program (-> linked-program? symbol? list? any/c)]))
