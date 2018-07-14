@@ -251,8 +251,7 @@
                          (cons f (cify (string->symbol x))))))
   (parameterize ([current-fun-queue fun-queue]
                  [current-Σ Σ]
-                 [current-headers headers-default]
-                 [current-libs (mutable-set)])
+                 [current-headers headers-default])
     (define globals-ast (for/list ([(x g) (in-hash gs)])
                           (match-define (Global ty xi) g)
                           (compile-decl ty (hash-ref ρ x) xi)))
@@ -298,11 +297,15 @@
 (define (compile-binary prog out-path)
   ;; XXX: output C code to tmp file so we can read it to debug.
   (define-values (in out) (make-pipe))
-  (parameterize ([current-output-port out])
-    (tree-for idisplay (compile-program prog)))
-  (close-output-port out)
-  (parameterize ([current-input-port in])
-    (system (format "gcc -shared -o~a -xc -" out-path))))
+  (parameterize ([current-libs (mutable-set)])
+    (parameterize ([current-output-port out])
+      (tree-for idisplay (compile-program prog)))
+    (close-output-port out)
+    (define libs (for/list ([l (in-set (current-libs))])
+                   (format "-l~a" l)))
+    (define args (append (list "-shared" "-o" out-path "-xc") libs '("-")))
+    (parameterize ([current-input-port in])
+      (apply system* (find-executable-path "gcc") args))))
 
 (provide
  (contract-out
