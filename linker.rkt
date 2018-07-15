@@ -35,7 +35,7 @@
   (define lib (ffi-lib bin-path))
   (match-define (Program _  _ name->fun) p)
   (define type-map
-    (for/hasheq ([(name fun) (in-hash name->fun)])
+    (for/hash ([(name fun) (in-hash name->fun)])
       (match-define (IntFun args _ ret-ty _ _) fun)
       (define c-args (map ty->ctype (map Arg-ty args)))
       (define c-ret (ty->ctype ret-ty))
@@ -49,6 +49,6 @@
 
 (provide
  (contract-out
-  [struct linked-program ([lib ffi-lib?] [type-map (hash/c symbol? ctype?)])]
+  [struct linked-program ([lib ffi-lib?] [type-map (hash/c c-identifier-string? ctype?)])]
   [link-program (-> Program? linked-program?)]
-  [run-linked-program (-> linked-program? symbol? list? any/c)]))
+  [run-linked-program (-> linked-program? c-identifier-string? list? any/c)]))
