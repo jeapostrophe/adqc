@@ -29,7 +29,7 @@
 
 (define (link-program p)
   (define bin-path (make-temporary-file "adqc_bin_~a"))
-  (unless (compile-binary p bin-path)
+  (unless (compile-library p bin-path)
     (error 'link-program "call to compile-binary failed (see stderr)")) 
   (eprintf "wrote binary to ~a\n" bin-path)
   (define lib (ffi-lib bin-path))

@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/contract/base
+         racket/file
          racket/format
          racket/list
          racket/match
@@ -12,6 +13,7 @@
 ;; see if there are any changes we should have to our language
 ;; model. I think a lot of our choices are good because we don't make
 ;; promises about memory.
+
 
 (define headers-default (mutable-set "stdint.h"))
 
@@ -38,6 +40,13 @@
      (match bits
        [32 "float"]
        [64 "double"])]))
+
+(define (unpack-ExternSrc src)
+  (match-define (ExternSrc ls hs) src)
+  (for ([l (in-list ls)])
+    (set-add! (current-libs) l))
+  (for ([h (in-list hs)])
+    (set-add! (current-headers) h)))
 
 (define (compile-path ρ path)
   (define (rec path) (compile-path ρ path))
@@ -112,12 +121,9 @@
                (compile-decl ty (hash-ref m->c m)))
              ind-nl)
             ind-- ind-nl "} " name assign ";")]
-    [(ExtT (ExternSrc ls hs) name)
-     (for ([l (in-list ls)])
-       (set-add! (current-libs) l))
-     (for ([h (in-list hs)])
-       (set-add! (current-headers) h))
-     (list* "void* " name ";")]))
+    [(ExtT src name)
+     (unpack-ExternSrc src)
+     (list* "extern void* " name ";")]))
 
 (define (compile-init ρ ty i)
   (define (rec i) (compile-init ρ ty i))
@@ -210,7 +216,7 @@
               (define fun-name (cify 'fun))
               (define fun-queue (current-fun-queue))
               (set-box! fun-queue (cons f (unbox fun-queue)))
-              (hash-set! Σ f x)
+              (hash-set! Σ f (cify x))
               fun-name]))
      (define args-ast
        (add-between
@@ -247,22 +253,25 @@
 (define (compile-program prog)
   (match-define (Program gs ρ n->f) prog)
   (define fun-queue (box empty))
+  ;; XXX can we assume no duplicate fun defs?
   (define Σ (make-hash (for/list ([(x f) (in-hash n->f)])
-                         ;; XXX generate private name, but then how
-                         ;; can linker remap?
-                         (cons f (string->symbol x))
-                         #;
-                         (cons f (cify (string->symbol x))))))
+                         (cons f (string->symbol x)))))
   (parameterize ([current-fun-queue fun-queue]
                  [current-Σ Σ]
                  [current-headers headers-default])
     (define globals-ast (for/list ([(x g) (in-hash gs)])
                           (match-define (Global ty xi) g)
                           (compile-decl ty (hash-ref ρ x) xi)))
-    (define pub-funs-ast (for/list ([(f x) (in-hash Σ)])
+    (define pub-funs-ast (for/list ([f (in-hash-keys (hash-copy Σ))])
                            (list* (compile-fun ρ f) ind-nl)))
-    (define priv-funs-ast (for/list ([f (in-list (unbox fun-queue))])
-                            (list* (compile-fun ρ f) ind-nl)))
+    (define priv-funs-ast (let loop ([ast empty])
+                            (define queue (unbox fun-queue))
+                            (cond
+                              [(empty? queue) ast]
+                              [else
+                               (define next (first queue))
+                               (loop (list* ast ind-nl
+                                            "static " (compile-fun ρ next) ind-nl))])))
     (define headers-ast (for/list ([h (in-set (current-headers))])
                           (list* "#include<" h ">" ind-nl)))
     (list* headers-ast ind-nl
@@ -298,7 +307,7 @@
 
 ;; XXX A function that actually really calls the C compiler with the
 ;; appropriate -l lines, etc.
-(define (compile-binary prog out-path)
+(define (compile-binary prog out-path #:shared? [shared? #f])
   ;; XXX: output C code to tmp file so we can read it to debug.
   (define-values (in out) (make-pipe))
   (parameterize ([current-libs (mutable-set)])
@@ -307,13 +316,21 @@
     (close-output-port out)
     (define libs (for/list ([l (in-set (current-libs))])
                    (format "-l~a" l)))
-    (define args (append (list "-shared" "-o" out-path "-xc") libs '("-")))
+    (define args (flatten (list "-o" out-path libs "-xc" "-")))
+    (define args* (if shared? (cons "-shared" args) args))
     (parameterize ([current-input-port in])
-      (apply system* (find-executable-path "gcc") args))))
+      (apply system* (find-executable-path "cc") args*))))
+
+(define (compile-library prog out-path)
+  (compile-binary prog out-path #:shared? #t))
+
+(define (compile-exe prog out-path)
+  (compile-binary prog out-path))
 
 (provide
  (contract-out
-  [compile-binary (-> Program? path? boolean?)]))
+  [compile-library (-> Program? path? boolean?)]
+  [compile-exe (-> Program? path? boolean?)]))
 
 (module+ test
   ;; XXX Drop this function and just accept a Program from ast.rkt
@@ -328,5 +345,6 @@
                                          (BinOp 'iadd
                                                 (Read (Var 'x (IntT #t 32)))
                                                 (Read (Var 'y (IntT #t 32)))))))))
-  (compile-binary simple-test-prog "/home/conor/adcqbin")
+  (define out-path (build-path (find-system-path 'home-dir) "adqcbin"))
+  (compile-binary simple-test-prog out-path)
   #;(tree-for idisplay (compile-program simple-test-prog)))
