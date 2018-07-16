@@ -6,7 +6,7 @@
          chk)
 
 ;; XXX Remove this once compilation really exists
-(define TEST-COMPILATION? #f)
+(define TEST-COMPILATION? #t)
 
 (define (TProg1* stx the-p the-cp n args expect-ans)
   (define eval-ans #f)
