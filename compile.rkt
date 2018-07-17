@@ -1,6 +1,6 @@
 #lang racket/base
-(require racket/contract/base
-         racket/file
+(require data/queue
+         racket/contract/base
          racket/format
          racket/list
          racket/match
@@ -19,7 +19,7 @@
 
 (define current-headers (make-parameter headers-default))
 (define current-libs (make-parameter (mutable-set)))
-(define current-fun-queue (make-parameter (box empty)))
+(define current-fun-queue (make-parameter (make-queue)))
 (define current-Σ (make-parameter (make-hash)))
 
 ;; XXX fill this in
@@ -215,9 +215,8 @@
               (hash-ref Σ f)]
              [else
               (define fun-name (cify 'fun))
-              (define fun-queue (current-fun-queue))
-              (set-box! fun-queue (cons f (unbox fun-queue)))
-              (hash-set! Σ f (cify x))
+              (hash-set! Σ f fun-name)
+              (enqueue! (current-fun-queue) f)
               fun-name]))
      (define args-ast
        (add-between
@@ -235,8 +234,7 @@
     [(MetaFun _ f) (compile-fun ρ f)]
     [(IntFun as ret-x ret-ty ret-lab body)
      (define fun-name (hash-ref (current-Σ) f))
-     ;; XXX why is ρ mutable? Need to construct immutable ρ from given value.
-     (define ρ* (for/fold ([out (make-immutable-hash (hash->list ρ))])
+     (define ρ* (for/fold ([out ρ])
                           ([arg (in-list as)])
                   (define x (Arg-x arg))
                   (hash-set out x (cify x))))
@@ -256,34 +254,35 @@
             ind-- ind-nl "}")]))
 
 (define (compile-program prog)
-  (match-define (Program gs ρ n->f) prog)
-  (define fun-queue (box empty))
-  ;; XXX can we assume no duplicate fun defs?
+  (match-define (Program gs private->public n->f) prog)
+  ;; XXX Need to construct immutable ρ from given value?
+  (define ρ (make-immutable-hash (hash->list private->public)))
   (define Σ (make-hash (for/list ([(x f) (in-hash n->f)])
                          (cons (if (MetaFun? f) (MetaFun-f f) f) x))))
+  (define pub-funs (list->set (hash-keys Σ)))
+  (define fun-queue (make-queue))
+  (for ([f (in-hash-keys Σ)])
+    (enqueue! fun-queue f))
   (parameterize ([current-fun-queue fun-queue]
                  [current-Σ Σ]
                  [current-headers headers-default])
     (define globals-ast (for/list ([(x g) (in-hash gs)])
                           (match-define (Global ty xi) g)
                           (compile-decl ty (hash-ref ρ x) xi)))
-    (define pub-funs-ast (for/list ([f (in-hash-keys (hash-copy Σ))])
-                           (list* (compile-fun ρ f) ind-nl)))
-    (define priv-funs-ast (let loop ([ast empty])
-                            (define queue (unbox fun-queue))
-                            (cond
-                              [(empty? queue) ast]
-                              [else
-                               (define next (first queue))
-                               (set-box! fun-queue (rest queue))
-                               (loop (list* ast ind-nl
-                                            "static " (compile-fun ρ next) ind-nl))])))
+    (define funs-ast (let loop ([ast empty])
+                       (cond
+                         [(queue-empty? fun-queue) ast]
+                         [else
+                          (define next (dequeue! fun-queue))
+                          (define static? (not (set-member? pub-funs next)))
+                          (loop
+                           (list* (and static? "static ") (compile-fun ρ next) ind-nl
+                                  ast))])))
     (define headers-ast (for/list ([h (in-set (current-headers))])
                           (list* "#include<" h ">" ind-nl)))
     (list* headers-ast ind-nl
            globals-ast ind-nl
-           priv-funs-ast ind-nl
-           pub-funs-ast ind-nl)))
+           funs-ast ind-nl)))
     
 ;; Display code
 
@@ -337,20 +336,3 @@
  (contract-out
   [compile-library (-> Program? path? boolean?)]
   [compile-exe (-> Program? path? boolean?)]))
-
-(module+ test
-  ;; XXX Drop this function and just accept a Program from ast.rkt
-  (define simple-test-prog
-    (Program (hasheq) (hasheq)
-             (hash "foo" (IntFun (list (Arg 'x (IntT #t 32) 'copy)
-                                       (Arg 'y (IntT #t 32) 'copy))
-                                 'my-ret 
-                                 (IntT #t 32)
-                                 'dont-care
-                                 (Assign (Var 'my-ret (IntT #t 32))
-                                         (BinOp 'iadd
-                                                (Read (Var 'x (IntT #t 32)))
-                                                (Read (Var 'y (IntT #t 32)))))))))
-  (define out-path (build-path (find-system-path 'home-dir) "adqcbin"))
-  (compile-binary simple-test-prog out-path)
-  #;(tree-for idisplay (compile-program simple-test-prog)))
