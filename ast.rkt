@@ -8,7 +8,7 @@
 ;; http://en.cppreference.com/w/c/language/identifier for the complete
 ;; rules.
 (define (c-identifier-string? x)
-  (regexp-match #rx"^[_a-zA-Z][a-zA-Z0-9_]*$" x))
+  (regexp-match? #rx"^[_a-zA-Z][a-zA-Z0-9_]*$" x))
 
 (define current-cify-counter (make-parameter (box 0)))
 (define-syntax-rule (with-cify-counter . b)
