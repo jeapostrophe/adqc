@@ -203,8 +203,9 @@
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
             cl ":")]
     [(Let x ty xi bs)
-     (list* (compile-decl ty x (compile-init ρ ty xi)) ind-nl
-            (compile-stmt γ (hash-set ρ x (cify x)) bs))]
+     (define x* (cify x))
+     (list* (compile-decl ty x* (compile-init ρ ty xi)) ind-nl
+            (compile-stmt γ (hash-set ρ x x*) bs))]
     [(MetaS _ s)
      (compile-stmt γ ρ s)]
     [(Call x ty f as bs)
@@ -234,7 +235,8 @@
     [(MetaFun _ f) (compile-fun ρ f)]
     [(IntFun as ret-x ret-ty ret-lab body)
      (define fun-name (hash-ref (current-Σ) f))
-     (define ρ* (for/fold ([out ρ])
+     ;; XXX why is ρ mutable? Need to construct immutable ρ from given value.
+     (define ρ* (for/fold ([out (make-immutable-hash (hash->list ρ))])
                           ([arg (in-list as)])
                   (define x (Arg-x arg))
                   (hash-set out x (cify x))))
@@ -243,11 +245,14 @@
                          (match-define (Arg x ty mode) arg)
                          (list* (compile-type ty) #\space (hash-ref ρ* x)))
                        ", "))
-     (define ret-name (cify ret-x))
+     (define ret-x-name (cify ret-x))
+     (define ret-lab-name (cify ret-lab))
+     (define γ (hasheq ret-lab ret-lab-name))
      (list* (compile-type ret-ty) #\space fun-name "(" args-ast "){" ind++ ind-nl
-            (compile-decl ret-ty ret-name) ind-nl
-            (compile-stmt (hasheq) (hash-set ρ* ret-x ret-name) body) ind-nl
-            "return " ret-name ";"
+            (compile-decl ret-ty ret-x-name) ind-nl
+            (compile-stmt γ (hash-set ρ* ret-x ret-x-name) body) ind-nl
+            ret-lab-name ":" ind-nl
+            "return " ret-x-name ";"
             ind-- ind-nl "}")]))
 
 (define (compile-program prog)
@@ -255,7 +260,7 @@
   (define fun-queue (box empty))
   ;; XXX can we assume no duplicate fun defs?
   (define Σ (make-hash (for/list ([(x f) (in-hash n->f)])
-                         (cons f (string->symbol x)))))
+                         (cons (if (MetaFun? f) (MetaFun-f f) f) x))))
   (parameterize ([current-fun-queue fun-queue]
                  [current-Σ Σ]
                  [current-headers headers-default])
@@ -270,6 +275,7 @@
                               [(empty? queue) ast]
                               [else
                                (define next (first queue))
+                               (set-box! fun-queue (rest queue))
                                (loop (list* ast ind-nl
                                             "static " (compile-fun ρ next) ind-nl))])))
     (define headers-ast (for/list ([h (in-set (current-headers))])
