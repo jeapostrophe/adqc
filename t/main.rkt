@@ -3,10 +3,16 @@
                      racket/syntax
                      syntax/parse)
          adqc
-         chk)
+         chk
+         racket/match)
 
 ;; XXX Remove this once compilation really exists
 (define TEST-COMPILATION? #t)
+
+(define (raw-value v)
+  (match v
+    [(or (Int _ _ val) (Flo _ val))
+     val]))
 
 (define (TProg1* stx the-p the-cp n args expect-ans)
   (define eval-ans #f)
@@ -20,8 +26,8 @@
     (unless the-cp
       (chk #:t (set! the-cp (link-program the-p))))
     (when the-cp
-      (chk #:t (set! comp-ans (run-linked-program the-cp n args)))
-      (when comp-ans (chk #:= comp-ans eval-ans)))))
+      (chk #:t (set! comp-ans (run-linked-program the-cp n (map raw-value args))))
+      (when comp-ans (chk #:= comp-ans (raw-value eval-ans))))))
 (define-syntax (TProg1 stx)
   (syntax-parse stx
     [(_ the-p:id
