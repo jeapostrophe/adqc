@@ -258,7 +258,7 @@
   ;; XXX Need to construct immutable ρ from given value?
   (define ρ (make-immutable-hash (hash->list private->public)))
   (define Σ (make-hash (for/list ([(x f) (in-hash n->f)])
-                         (cons (if (MetaFun? f) (MetaFun-f f) f) x))))
+                         (cons (unpack-MetaFun f) x))))
   (define pub-funs (list->set (hash-keys Σ)))
   (define fun-queue (make-queue))
   (for ([f (in-hash-keys Σ)])

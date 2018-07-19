@@ -1,5 +1,6 @@
 #lang racket/base
-(require racket/contract/base)
+(require racket/contract/base
+         racket/match)
 
 (define float-bit-widths '(32 64))
 (define integer-bit-widths '(8 16 32 64))
@@ -189,6 +190,12 @@
 (struct MetaFun Fun (m f) #:transparent)
 (struct ExtFun Fun (src args ret-ty name) #:transparent)
 
+(define (unpack-MetaFun f)
+  (match f
+    [(MetaFun _ f)
+     (unpack-MetaFun f)]
+    [(? Fun?) f]))
+
 (provide
  (contract-out
   [struct Arg ([x symbol?] [ty Type?] [mode mode/c])]
@@ -200,7 +207,8 @@
   [struct ExtFun ([src ExternSrc?]
                   [args (listof Arg?)]
                   [ret-ty Type?]
-                  [name c-identifier-string?])]))
+                  [name c-identifier-string?])]
+  [unpack-MetaFun (-> Fun? Fun?)]))
 
 (define (IntFun*? x)
   (or (IntFun? x)
