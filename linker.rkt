@@ -6,7 +6,7 @@
          "ast.rkt"
          "compile.rkt")
 
-(struct linked-program (lib type-map) #:transparent)
+(struct linked-program (lib type-map src-path) #:transparent)
 
 (define (ty->ctype ty)
   (match ty
@@ -28,27 +28,29 @@
        [64 _double])]))
 
 (define (link-program p)
-  (define bin-path (make-temporary-file "adqc_bin_~a"))
-  (unless (compile-library p bin-path)
-    (error 'link-program "call to compile-binary failed (see stderr)")) 
-  (eprintf "wrote binary to ~a\n" bin-path)
+  (define c-path (make-temporary-file "adqc~a.c"))
+  (define bin-path (make-temporary-file "adqc~a"))
+  (unless (compile-binary* p c-path bin-path #:shared? #t)
+    (error 'link-program "call to compile-binary* failed (see stderr)"))
   (define lib (ffi-lib bin-path))
-  (match-define (Program _  _ name->fun) p)
+  (match-define (Program _ _ name->fun) p)
   (define type-map
     (for/hash ([(name fun) (in-hash name->fun)])
       (match-define (IntFun args _ ret-ty _ _) (unpack-MetaFun fun))
       (define c-args (map ty->ctype (map Arg-ty args)))
       (define c-ret (ty->ctype ret-ty))
       (values name (_cprocedure c-args c-ret))))
-  (linked-program lib type-map))
+  (linked-program lib type-map c-path))
 
 (define (run-linked-program lp n args)
-  (match-define (linked-program lib type-map) lp)
+  (match-define (linked-program lib type-map _) lp)
   (define fun (get-ffi-obj n lib (hash-ref type-map n)))
   (apply fun args))
 
 (provide
  (contract-out
-  [struct linked-program ([lib ffi-lib?] [type-map (hash/c c-identifier-string? ctype?)])]
+  [struct linked-program ([lib ffi-lib?]
+                          [type-map (hash/c c-identifier-string? ctype?)]
+                          [src-path path?])]
   [link-program (-> Program? linked-program?)]
   [run-linked-program (-> linked-program? c-identifier-string? list? any/c)]))

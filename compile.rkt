@@ -1,6 +1,7 @@
 #lang racket/base
 (require data/queue
          racket/contract/base
+         racket/file
          racket/format
          racket/list
          racket/match
@@ -283,6 +284,10 @@
     (list* headers-ast ind-nl
            globals-ast ind-nl
            funs-ast ind-nl)))
+
+(define (compile-program* prog out-path)
+  (with-output-to-file out-path #:mode 'text #:exists 'replace
+    (λ () (tree-for idisplay (compile-program prog)))))
     
 ;; Display code
 
@@ -326,6 +331,16 @@
     (parameterize ([current-input-port in])
       (apply system* (find-executable-path "cc") args*))))
 
+(define (compile-binary* prog c-path out-path #:shared? [shared? #f])
+  (parameterize ([current-libs (mutable-set)])
+    (compile-program* prog c-path)
+    (define in (open-input-file c-path))
+    (define libs (for/list ([l (in-set (current-libs))])
+                   (format "-l~a" l)))
+    (define args (flatten (list "-o" out-path libs "-xc" c-path)))
+    (define args* (if shared? (cons "-shared" args) args))
+    (apply system* (find-executable-path "cc") args*)))
+
 (define (compile-library prog out-path)
   (compile-binary prog out-path #:shared? #t))
 
@@ -334,5 +349,6 @@
 
 (provide
  (contract-out
+  [compile-binary* (->* (Program? path? path?) (#:shared? boolean?) boolean?)]
   [compile-library (-> Program? path? boolean?)]
   [compile-exe (-> Program? path? boolean?)]))
