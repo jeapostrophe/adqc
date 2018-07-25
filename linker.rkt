@@ -30,8 +30,8 @@
 (define (link-program p)
   (define c-path (make-temporary-file "adqc~a.c"))
   (define bin-path (make-temporary-file "adqc~a"))
-  (unless (compile-binary* p c-path bin-path #:shared? #t)
-    (error 'link-program "call to compile-binary* failed (see stderr)"))
+  (unless (compile-library p c-path bin-path)
+    (error 'link-program "call to compile-library failed (see stderr)"))
   (define lib (ffi-lib bin-path))
   (match-define (Program _ _ name->fun) p)
   (define type-map

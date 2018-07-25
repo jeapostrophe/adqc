@@ -280,8 +280,8 @@
                            (list* (and static? "static ") (compile-fun ρ next) ind-nl
                                   ast))])))
     (define headers-ast (for/list ([h (in-set (current-headers))])
-                          (list* "#include<" h ">" ind-nl)))
-    (list* headers-ast ind-nl
+                          (list* "#include <" h ">" ind-nl)))
+    (list* headers-ast
            globals-ast ind-nl
            funs-ast ind-nl)))
 
@@ -315,40 +315,22 @@
     [(cons a d) (tree-for f a) (tree-for f d)]
     [x (f x)]))
 
-;; XXX A function that actually really calls the C compiler with the
-;; appropriate -l lines, etc.
-(define (compile-binary prog out-path #:shared? [shared? #f])
-  ;; XXX: output C code to tmp file so we can read it to debug.
-  (define-values (in out) (make-pipe))
-  (parameterize ([current-libs (mutable-set)])
-    (parameterize ([current-output-port out])
-      (tree-for idisplay (compile-program prog)))
-    (close-output-port out)
-    (define libs (for/list ([l (in-set (current-libs))])
-                   (format "-l~a" l)))
-    (define args (flatten (list "-o" out-path libs "-xc" "-")))
-    (define args* (if shared? (cons "-shared" args) args))
-    (parameterize ([current-input-port in])
-      (apply system* (find-executable-path "cc") args*))))
-
-(define (compile-binary* prog c-path out-path #:shared? [shared? #f])
+(define (compile-binary prog c-path out-path #:shared? [shared? #f])
   (parameterize ([current-libs (mutable-set)])
     (compile-program* prog c-path)
-    (define in (open-input-file c-path))
     (define libs (for/list ([l (in-set (current-libs))])
                    (format "-l~a" l)))
     (define args (flatten (list "-o" out-path libs "-xc" c-path)))
     (define args* (if shared? (cons "-shared" args) args))
     (apply system* (find-executable-path "cc") args*)))
 
-(define (compile-library prog out-path)
-  (compile-binary prog out-path #:shared? #t))
+(define (compile-library prog c-path out-path)
+  (compile-binary prog c-path out-path #:shared? #t))
 
-(define (compile-exe prog out-path)
-  (compile-binary prog out-path))
+(define (compile-exe prog c-path out-path)
+  (compile-binary prog c-path out-path))
 
 (provide
  (contract-out
-  [compile-binary* (->* (Program? path? path?) (#:shared? boolean?) boolean?)]
-  [compile-library (-> Program? path? boolean?)]
-  [compile-exe (-> Program? path? boolean?)]))
+  [compile-library (-> Program? path? path? boolean?)]
+  [compile-exe (-> Program? path? path? boolean?)]))
