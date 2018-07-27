@@ -12,6 +12,13 @@
     [(or (Int _ _ val) (Flo _ val))
      val]))
 
+(define (val->type v)
+  (match v
+    [(Int signed? bits _)
+     (IntT signed? bits)]
+    [(Flo bits _)
+     (FloT bits)]))
+
 (define (TProg1* stx the-p the-cp n args expect-ans)
   (define eval-ans #f)
   (define comp-ans #f)
@@ -64,9 +71,10 @@
     [(_ the-s (~optional (~seq ans)
                          #:defaults ([ans #f])))
      #:with f (generate-temporary)
+     #:with the-ty #'(~? #,(val->type (E ans)) S64)
      (quasisyntax/loc stx
        ;; XXX Once type inference is implemented, just drop this S64
-       (TProg (define-fun (f) : S64 the-s)
+       (TProg (define-fun (f) : the-ty the-s)
               #:tests
               #,(syntax/loc stx
                   [(symbol->string 'f) (~@ . (~? (=> ans) ()))])))]))
