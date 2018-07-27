@@ -230,6 +230,7 @@
 
 ;; Σ is a renaming environment for public functions
 ;; ρ is a renaming environment for global variables
+#;
 (define (compile-fun ρ f)
   (match f
     [(MetaFun _ f) (compile-fun ρ f)]
@@ -253,6 +254,34 @@
             ret-lab-name ":" ind-nl
             "return " ret-x-name ";"
             ind-- ind-nl "}")]))
+
+(define (compile-fun ρ f)
+  (match f
+    [(MetaFun _ f) (compile-fun ρ f)]
+    [(or (IntFun as ret-x ret-ty ret-lab body)
+         (FloFun as ret-x ret-ty ret-lab body))
+     (define fun-name (hash-ref (current-Σ) f))
+     (compile-fun-def ρ fun-name as ret-x ret-ty ret-lab body)]))
+
+(define (compile-fun-def ρ fun-name as ret-x ret-ty ret-lab body)
+  (define ρ* (for/fold ([out ρ])
+                       ([arg (in-list as)])
+               (define x (Arg-x arg))
+               (hash-set out x (cify x))))
+  (define args-ast (add-between
+                    (for/list ([arg (in-list as)])
+                      (match-define (Arg x ty mode) arg)
+                      (list* (compile-type ty) #\space (hash-ref ρ* x)))
+                    ", "))
+  (define ret-x-name (cify ret-x))
+  (define ret-lab-name (cify ret-lab))
+  (define γ (hasheq ret-lab ret-lab-name))
+  (list* (compile-type ret-ty) #\space fun-name "(" args-ast "){" ind++ ind-nl
+         (compile-decl ret-ty ret-x-name) ind-nl
+         (compile-stmt γ (hash-set ρ* ret-x ret-x-name) body) ind-nl
+         ret-lab-name ":" ind-nl
+         "return " ret-x-name ";"
+         ind-- ind-nl "}"))
 
 (define (compile-program prog)
   (match-define (Program gs private->public n->f) prog)

@@ -183,6 +183,7 @@
 
 (struct Fun () #:transparent)
 (struct IntFun Fun (args ret-x ret-ty ret-lab body) #:transparent)
+(struct FloFun Fun (args ret-x ret-ty ret-lab body) #:transparent)
 ;; This definition is carefully chosen to be trivially inline-able.
 ;; but the compiler MAY turn it into an actual function call (perhaps
 ;; if it is used many times)
@@ -201,6 +202,9 @@
   [struct Arg ([x symbol?] [ty Type?] [mode mode/c])]
   [struct Fun ()]
   [struct IntFun ([args (listof Arg?)]
+                  [ret-x symbol?] [ret-ty Type?]
+                  [ret-lab symbol?] [body Stmt?])]
+  [struct FloFun ([args (listof Arg?)]
                   [ret-x symbol?] [ret-ty Type?]
                   [ret-lab symbol?] [body Stmt?])]
   [struct MetaFun ([m any/c] [f Fun?])]
