@@ -3,6 +3,7 @@
          racket/contract/base
          racket/file
          racket/format
+         racket/function
          racket/list
          racket/match
          racket/set
@@ -23,15 +24,58 @@
 (define current-fun-queue (make-parameter (make-queue)))
 (define current-Σ (make-parameter (make-hash)))
 
-;; XXX fill this in
+(define math-h (ExternSrc '("m") '("math.h")))
+
+(define ((c-op op) ρ a b)
+  (define a* (compile-expr ρ a))
+  (define b* (compile-expr ρ b))
+  (list* "(" a* " " op " " b* ")"))
+
+(define ((c-fun bits->name src) ρ a b)
+  (unpack-ExternSrc src)
+  (define a* (compile-expr ρ a))
+  (define b* (compile-expr ρ b))
+  ;; XXX dispatch on type
+  (define name* (hash-ref bits->name 64))
+  (list* "(" name* "(" a* ", " b* "))"))
+
 (define bin-op-table
-  (hasheq 'iadd "+" 'isub "-" 'imul "*" 'iudiv "/" 'isdiv "/" 'iurem "%" 'isrem "%"
-          'ishl "<<" 'ilshr ">>" 'iashr ">>" 'iand "&" 'ior "|" 'ixor "^"
-          'fadd "+" 'fsub "-" 'fmul "*" 'fdiv "/" 'frem "%"
-          'ieq "==" 'ine "!="
-          'iugt ">" 'iuge ">=" 'iult "<" 'iule "<="
-          'isgt ">" 'isge ">=" 'islt "<" 'isle "<="
-          'foeq "==" 'fogt ">" 'foge ">=" 'folt "<" 'fole "<="))
+  (hasheq 'iadd (c-op "+")
+          'isub (c-op "-")
+          'imul (c-op "*")
+          'iudiv (c-op "/")
+          'isdiv (c-op "/")
+          'iurem (c-op "%")
+          'isrem (c-op "%")
+          'ishl (c-op "<<")
+          'ilshr (c-op ">>")
+          'iashr (c-op ">>")
+          'iand (c-op "&")
+          'ior (c-op "|")
+          'ixor (c-op "^")
+          'fadd (c-op "+")
+          'fsub (c-op "-")
+          'fmul (c-op "*")
+          'fdiv (c-op "/")
+          'frem (c-fun (hasheq 32 "fmodf" 64 "fmod") math-h)
+          'ieq (c-op "==")
+          'ine (c-op "!=")
+          'iugt (c-op ">")
+          'iuge (c-op ">=")
+          'iult (c-op "<")
+          'iule (c-op "<=")
+          'isgt (c-op ">")
+          'isge (c-op ">=")
+          'islt (c-op "<")
+          'isle (c-op "<=")
+          'foeq (c-op "==")
+          'fogt (c-op ">")
+          'foge (c-op ">=")
+          'folt (c-op "<")
+          'fole (c-op "<=")
+          'ffalse (const "0")
+          'ftrue (const "1")
+          ))
 
 (define (compile-type ty)
   (match ty
@@ -79,7 +123,11 @@
     [(Int signed? bits val)
      (list* "((" (compile-type (IntT signed? bits)) ")" (~a val) ")")]
     [(Flo bits val)
-     (list* "((" (compile-type (FloT bits)) ")" (~a val) ")")]
+     (define val* (cond [(equal? val +nan.0)
+                         (unpack-ExternSrc math-h)
+                         "(NAN)"]
+                        [else (~a val)]))
+     (list* "((" (compile-type (FloT bits)) ")" val* ")")]
     [(Cast ty e)
      (list* "((" (compile-type ty) ")" (rec e) ")")]
     [(Read path)
@@ -87,8 +135,8 @@
        (compile-path ρ path))
      name]
     [(BinOp op L R)
-     (define op-str (hash-ref bin-op-table op))
-     (list* "(" (rec L) " " op-str " " (rec R) ")")]
+     (define op-fn (hash-ref bin-op-table op))
+     (op-fn ρ L  R)]
     [(LetE x _ xe be)
      ;; DESIGN: We ignore xt because x does not become a real thing in
      ;; C (because we can't make it.) If/when we compile to LLVM, we
@@ -320,8 +368,8 @@
     (compile-program* prog c-path)
     (define libs (for/list ([l (in-set (current-libs))])
                    (format "-l~a" l)))
-    (define args (flatten (list "-o" out-path libs "-xc" c-path)))
-    (define args* (if shared? (cons "-shared" args) args))
+    (define args (list* "-o" out-path "-xc" c-path libs))
+    (define args* (if shared? (list* "-shared" "-fPIC" args) args))
     (apply system* (find-executable-path "cc") args*)))
 
 (define (compile-library prog c-path out-path)

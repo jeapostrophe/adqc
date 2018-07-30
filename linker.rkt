@@ -2,6 +2,7 @@
 (require racket/contract/base
          racket/file
          racket/match
+         racket/port
          (except-in ffi/unsafe ->)
          "ast.rkt"
          "compile.rkt")
@@ -31,6 +32,8 @@
   (define c-path (make-temporary-file "adqc~a.c"))
   (define bin-path (make-temporary-file "adqc~a"))
   (unless (compile-library p c-path bin-path)
+    (newline (current-error-port))
+    (display (port->string (open-input-file c-path)) (current-error-port))
     (error 'link-program "call to compile-library failed (see stderr)"))
   (define lib (ffi-lib bin-path))
   (match-define (Program _ _ name->fun) p)
