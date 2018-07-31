@@ -17,9 +17,10 @@
 ;; promises about memory.
 
 
-(define headers-default (mutable-set "stdint.h"))
+(define (default-headers)
+  (mutable-set "stdint.h"))
 
-(define current-headers (make-parameter headers-default))
+(define current-headers (make-parameter (default-headers)))
 (define current-libs (make-parameter (mutable-set)))
 (define current-fun-queue (make-parameter (make-queue)))
 (define current-Σ (make-parameter (make-hash)))
@@ -327,26 +328,28 @@
   (define fun-queue (make-queue))
   (for ([f (in-hash-keys Σ)])
     (enqueue! fun-queue f))
-  (parameterize ([current-fun-queue fun-queue]
-                 [current-Σ Σ]
-                 [current-headers headers-default])
-    (define globals-ast (for/list ([(x g) (in-hash gs)])
-                          (match-define (Global ty xi) g)
-                          (compile-decl ty (hash-ref ρ x) xi)))
-    (define funs-ast (let loop ([ast empty])
-                       (cond
-                         [(queue-empty? fun-queue) ast]
-                         [else
-                          (define next (dequeue! fun-queue))
-                          (define static? (not (set-member? pub-funs next)))
-                          (loop
-                           (list* (and static? "static ") (compile-fun ρ next) ind-nl
-                                  ast))])))
-    (define headers-ast (for/list ([h (in-set (current-headers))])
-                          (list* "#include <" h ">" ind-nl)))
-    (list* headers-ast
-           globals-ast ind-nl
-           funs-ast ind-nl)))
+  (with-cify-counter
+    (parameterize ([current-fun-queue fun-queue]
+                   [current-Σ Σ]
+                   [current-headers (default-headers)])
+      (define globals-ast (for/list ([(x g) (in-hash gs)])
+                            (match-define (Global ty xi) g)
+                            (compile-decl ty (hash-ref ρ x) xi)))
+      (define funs-ast (let loop ([ast empty])
+                         (cond
+                           [(queue-empty? fun-queue) ast]
+                           [else
+                            (define next (dequeue! fun-queue))
+                            (define static? (not (set-member? pub-funs next)))
+                            (loop
+                             (list*
+                              (and static? "static ") (compile-fun ρ next) ind-nl
+                              ast))])))
+      (define headers-ast (for/list ([h (in-set (current-headers))])
+                            (list* "#include <" h ">" ind-nl)))
+      (list* headers-ast
+             globals-ast ind-nl
+             funs-ast ind-nl))))
 
 (define (compile-program* prog out-path)
   (with-output-to-file out-path #:mode 'text #:exists 'replace
