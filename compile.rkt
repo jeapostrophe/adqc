@@ -350,10 +350,6 @@
       (list* headers-ast
              globals-ast ind-nl
              funs-ast ind-nl))))
-
-(define (compile-program* prog out-path)
-  (with-output-to-file out-path #:mode 'text #:exists 'replace
-    (λ () (tree-for idisplay (compile-program prog)))))
     
 ;; Display code
 
@@ -383,7 +379,8 @@
 
 (define (compile-binary prog c-path out-path #:shared? [shared? #f])
   (parameterize ([current-libs (mutable-set)])
-    (compile-program* prog c-path)
+    (with-output-to-file c-path #:mode 'text #:exists 'replace
+      (λ () (tree-for idisplay (compile-program prog))))
     (define libs (for/list ([l (in-set (current-libs))])
                    (format "-l~a" l)))
     (define args (list* "-o" out-path "-xc" c-path libs))
