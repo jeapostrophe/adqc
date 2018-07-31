@@ -24,6 +24,13 @@
 (define current-fun-queue (make-parameter (make-queue)))
 (define current-Σ (make-parameter (make-hash)))
 
+(define (include-src src)
+  (match-define (ExternSrc ls hs) src)
+  (for ([l (in-list ls)])
+    (set-add! (current-libs) l))
+  (for ([h (in-list hs)])
+    (set-add! (current-headers) h)))
+
 (define math-h (ExternSrc '("m") '("math.h")))
 
 (define ((c-op op) ρ a b)
@@ -31,8 +38,15 @@
   (define b* (compile-expr ρ b))
   (list* "(" a* " " op " " b* ")"))
 
+
+(define ((c-unord-op op) ρ a b)
+  (include-src math-h)
+  (define a* (compile-expr ρ a))
+  (define b* (compile-expr ρ b))
+  (list* "(isnan(" a* ") || isnan(" b* ") || (" a* " " op " " b* "))"))
+
 (define ((c-fun bits->name src) ρ a b)
-  (unpack-ExternSrc src)
+  (include-src src)
   (define a* (compile-expr ρ a))
   (define b* (compile-expr ρ b))
   ;; XXX dispatch on type
@@ -69,12 +83,20 @@
           'islt (c-op "<")
           'isle (c-op "<=")
           'foeq (c-op "==")
+          'fone (c-op "!=")
           'fogt (c-op ">")
           'foge (c-op ">=")
           'folt (c-op "<")
           'fole (c-op "<=")
-          'ffalse (const "0")
-          'ftrue (const "1")
+          ;; XXX return true for unordered cmps when arg(s) are NAN.
+          'fueq (c-unord-op "==")
+          'fune (c-unord-op "!=")
+          'fugt (c-unord-op ">")
+          'fuge (c-unord-op ">=")
+          'fult (c-unord-op "<")
+          'fule (c-unord-op "<=")
+          'ffalse (const "(0)")
+          'ftrue (const "(1)")
           ))
 
 (define (compile-type ty)
@@ -85,13 +107,6 @@
      (match bits
        [32 "float"]
        [64 "double"])]))
-
-(define (unpack-ExternSrc src)
-  (match-define (ExternSrc ls hs) src)
-  (for ([l (in-list ls)])
-    (set-add! (current-libs) l))
-  (for ([h (in-list hs)])
-    (set-add! (current-headers) h)))
 
 (define (compile-path ρ path)
   (define (rec path) (compile-path ρ path))
@@ -124,7 +139,7 @@
      (list* "((" (compile-type (IntT signed? bits)) ")" (~a val) ")")]
     [(Flo bits val)
      (define val* (cond [(equal? val +nan.0)
-                         (unpack-ExternSrc math-h)
+                         (include-src math-h)
                          "(NAN)"]
                         [else (~a val)]))
      (list* "((" (compile-type (FloT bits)) ")" val* ")")]
@@ -171,7 +186,7 @@
              ind-nl)
             ind-- ind-nl "} " name assign ";")]
     [(ExtT src name)
-     (unpack-ExternSrc src)
+     (include-src src)
      (list* "extern void* " name ";")]))
 
 (define (compile-init ρ ty i)
