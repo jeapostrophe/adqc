@@ -25,7 +25,7 @@
 (define current-fun-queue (make-parameter (make-queue)))
 (define current-Σ (make-parameter (make-hash)))
 
-(define (include-src src)
+(define (include-src! src)
   (match-define (ExternSrc ls hs) src)
   (for ([l (in-list ls)])
     (set-add! (current-libs) l))
@@ -39,20 +39,37 @@
   (define b* (compile-expr ρ b))
   (list* "(" a* " " op " " b* ")"))
 
-
 (define ((c-unord-op op) ρ a b)
-  (include-src math-h)
+  (include-src! math-h)
   (define a* (compile-expr ρ a))
   (define b* (compile-expr ρ b))
   (list* "(isnan(" a* ") || isnan(" b* ") || (" a* " " op " " b* "))"))
 
 (define ((c-fun bits->name src) ρ a b)
-  (include-src src)
+  (include-src! src)
   (define a* (compile-expr ρ a))
   (define b* (compile-expr ρ b))
   ;; XXX dispatch on type
   (define name* (hash-ref bits->name 64))
   (list* "(" name* "(" a* ", " b* "))"))
+
+(define (compile-fone ρ a b)
+  (include-src! math-h)
+  (define a* (compile-expr ρ a))
+  (define b* (compile-expr ρ b))
+  (list* "(!isnan(" a* ") && !isnan(" b* ") && (" a* " != " b* "))"))
+
+(define (compile-ford ρ a b)
+  (include-src! math-h)
+  (define a* (compile-expr ρ a))
+  (define b* (compile-expr ρ b))
+  (list* "(!isnan(" a* ") && !isnan(" b* "))"))
+
+(define (compile-funo ρ a b)
+  (include-src! math-h)
+  (define a* (compile-expr ρ a))
+  (define b* (compile-expr ρ b))
+  (list* "(isnan(" a* ") || isnan(" b* "))"))
 
 (define bin-op-table
   (hasheq 'iadd (c-op "+")
@@ -84,20 +101,22 @@
           'islt (c-op "<")
           'isle (c-op "<=")
           'foeq (c-op "==")
-          'fone (c-op "!=")
+          'fone compile-fone
           'fogt (c-op ">")
           'foge (c-op ">=")
           'folt (c-op "<")
           'fole (c-op "<=")
-          ;; XXX return true for unordered cmps when arg(s) are NAN.
           'fueq (c-unord-op "==")
-          'fune (c-unord-op "!=")
+          ;; Note: behavior of C's != operator is unordered.
+          'fune (c-op "!=")
           'fugt (c-unord-op ">")
           'fuge (c-unord-op ">=")
           'fult (c-unord-op "<")
           'fule (c-unord-op "<=")
           'ffalse (const "(0)")
           'ftrue (const "(1)")
+          'ford compile-ford
+          'funo compile-funo
           ))
 
 (define (compile-type ty)
@@ -140,7 +159,7 @@
      (list* "((" (compile-type (IntT signed? bits)) ")" (~a val) ")")]
     [(Flo bits val)
      (define val* (cond [(equal? val +nan.0)
-                         (include-src math-h)
+                         (include-src! math-h)
                          "(NAN)"]
                         [else (~a val)]))
      (list* "((" (compile-type (FloT bits)) ")" val* ")")]
@@ -187,7 +206,7 @@
              ind-nl)
             ind-- ind-nl "} " name assign ";")]
     [(ExtT src name)
-     (include-src src)
+     (include-src! src)
      (list* "extern void* " name ";")]))
 
 (define (compile-init ρ ty i)
