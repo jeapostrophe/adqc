@@ -33,6 +33,8 @@
     (set-add! (current-headers) h)))
 
 (define math-h (ExternSrc '("m") '("math.h")))
+(define stdio-h (ExternSrc '() '("stdio.h")))
+(define stdlib-h (ExternSrc '() '("stdlib.h")))
 
 (define ((c-op op) ρ a b)
   (define a* (compile-expr ρ a))
@@ -262,6 +264,8 @@
     [(Fail m)
      ;; XXX Ensure (~v m) is valid C string (maybe turn into a literal
      ;; array at top-level?)
+     (include-src! stdio-h)
+     (include-src! stdlib-h)
      (list* "fprintf(stderr, " (~v m) ");" ind-nl
             "exit(1);")]
     [(Assign path e)
