@@ -35,8 +35,8 @@
       (display src (current-error-port)))
     (with-chk ([chk-inform! print-src])
       (chk #:t (set! comp-ans (run-linked-program the-cp n (map raw-value args))))
-      (when comp-ans (chk (#:src stx comp-ans)
-                          (#:src stx (raw-value eval-ans)))))))
+      (when comp-ans (chk #:eq = (#:src stx comp-ans)
+                                 (#:src stx (raw-value eval-ans)))))))
 (define-syntax (TProg1 stx)
   (syntax-parse stx
     [(_ the-p:id
