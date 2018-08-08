@@ -434,7 +434,8 @@
     #:attributes (x ref var arg)
     #:description "function argument"
     [pattern
-     ((~optional (~and #:const (~bind [mode #''copy]))
+     ((~optional (~or (~and #:copy (~bind [mode #''copy]))
+                      (~and #:ref (~bind [mode #''ref])))
                  #:defaults ([mode #''read-only]))
       x:id (~datum :) ty)
      #:attr ref (generate-temporary #'x)
