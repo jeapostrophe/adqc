@@ -17,10 +17,7 @@
 ;; promises about memory.
 
 
-(define (default-headers)
-  (mutable-set "stdint.h"))
-
-(define current-headers (make-parameter (default-headers)))
+(define current-headers (make-parameter (mutable-set)))
 (define current-libs (make-parameter (mutable-set)))
 (define current-fun-queue (make-parameter (make-queue)))
 (define current-Σ (make-parameter (make-hash)))
@@ -35,6 +32,7 @@
 (define math-h (ExternSrc '("m") '("math.h")))
 (define stdio-h (ExternSrc '() '("stdio.h")))
 (define stdlib-h (ExternSrc '() '("stdlib.h")))
+(define stdint-h (ExternSrc '() '("stdint.h")))
 
 (define ((c-op op) ρ a b)
   (define a* (compile-expr ρ a))
@@ -353,8 +351,7 @@
     (enqueue! fun-queue f))
   (with-cify-counter
     (parameterize ([current-fun-queue fun-queue]
-                   [current-Σ Σ]
-                   [current-headers (default-headers)])
+                   [current-Σ Σ])
       (define globals-ast (for/list ([(x g) (in-hash gs)])
                             (match-define (Global ty xi) g)
                             (compile-decl ty (hash-ref ρ x) xi)))
@@ -401,7 +398,9 @@
     [x (f x)]))
 
 (define (compile-binary prog c-path out-path #:shared? [shared? #f])
-  (parameterize ([current-libs (mutable-set)])
+  (parameterize ([current-libs (mutable-set)]
+                 [current-headers (mutable-set)])
+    (include-src! stdint-h)
     (with-output-to-file c-path #:mode 'text #:exists 'replace
       (λ () (tree-for idisplay (compile-program prog))))
     (define libs (for/list ([l (in-set (current-libs))])
