@@ -76,6 +76,7 @@
 (define-syntax (P stx)
   (with-disappeared-uses
     (syntax-parse stx
+      #:literals (unsyntax)
       [(_ (p ... (~datum @) e))
        (syntax/loc stx (Select (P (p ...)) (E e)))]
       [(_ (p ... (~datum ->) f:id))
