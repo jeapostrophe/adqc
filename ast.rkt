@@ -151,7 +151,7 @@
 ;; this is a mutually recursive definition. Alternatively, we could
 ;; treat functions like variables and have a name plus an environment
 ;; binding later in `Program`.
-(struct Call (x ty f as bs) #:transparent)
+(struct Call Stmt (x ty f as bs) #:transparent)
 
 (provide
  (contract-out
