@@ -296,13 +296,14 @@
      (compile-stmt γ ρ s)]
     [(Call x ty f as bs)
      (define Σ (current-Σ))
+     (define f* (unpack-MetaFun f))
      (define fun-name
-       (cond [(hash-has-key? Σ f)
-              (hash-ref Σ f)]
+       (cond [(hash-has-key? Σ f*)
+              (hash-ref Σ f*)]
              [else
               (define fun-name (cify 'fun))
-              (hash-set! Σ f fun-name)
-              (enqueue! (current-fun-queue) f)
+              (hash-set! Σ f* fun-name)
+              (enqueue! (current-fun-queue) f*)
               fun-name]))
      (define args-ast
        (add-between
@@ -311,7 +312,11 @@
             [(? Expr?) (compile-expr ρ arg)]
             [(? Path?) (compile-path ρ arg)]))
         ", "))
-     (list* (hash-ref ρ x) " = " fun-name "(" args-ast ");")]))
+     (define x* (cify x))
+     (define call-ast (compile-decl ty x* (list* fun-name "(" args-ast ")")))
+     (define body-ast (compile-stmt γ (hash-set ρ x x*) bs))
+     (list* call-ast ind-nl
+            body-ast)]))
 
 ;; Σ is a renaming environment for public functions
 ;; ρ is a renaming environment for global variables

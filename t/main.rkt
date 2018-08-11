@@ -289,6 +289,12 @@
               {y <- (iadd y (my-array @ (U32 2)))}
               y)
        (S32 5))
+   (TProg (define-fun (bar [m : S64]) : S64
+            (iadd m (S64 1)))
+          (define-fun (foo [n : S64]) : S64
+            (let ([a : S64 := bar <- n])
+              a))
+          #:tests ["foo" (S64 5) => (S64 6)])
    (TProg (define-fun (bar [#:ref m : S64]) : S64
             (set! m (iadd m (S64 1)))
             (void))
