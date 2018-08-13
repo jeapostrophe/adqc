@@ -299,7 +299,7 @@
             (set! m (iadd m (S64 1)))
             (void))
           (define-fun (foo [n : S64]) : S64
-            (let ([a : S64 := bar <- n])
-              n))
+            (define a : S64 := bar <- n)
+            n)
           #:tests ["foo" (S64 5) => (S64 6)])
    ))
