@@ -38,7 +38,8 @@
       (define src (port->string (open-input-file src-path)))
       (display src (current-error-port)))
     (with-chk ([chk-inform! print-src])
-      (chk #:t (set! comp-ans (run-linked-program the-cp n (map raw-value args))))
+      (chk #:t (#:src stx
+                (set! comp-ans (run-linked-program the-cp n (map raw-value args)))))
       (when comp-ans
         (if (current-invert?)
             (chk #:! (#:src stx comp-ans)

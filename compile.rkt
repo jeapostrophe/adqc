@@ -1,5 +1,6 @@
 #lang racket/base
 (require data/queue
+         graph
          racket/contract/base
          racket/file
          racket/format
@@ -20,6 +21,8 @@
 (define current-headers (make-parameter (mutable-set)))
 (define current-libs (make-parameter (mutable-set)))
 (define current-fun-queue (make-parameter (make-queue)))
+(define current-fun (make-parameter #f))
+(define current-fun-graph (make-parameter (unweighted-graph/directed empty)))
 (define current-Σ (make-parameter (make-hash)))
 
 (define (include-src! src)
@@ -304,6 +307,7 @@
               (define fun-name (cify 'fun))
               (hash-set! Σ f* fun-name)
               (enqueue! (current-fun-queue) f*)
+              (add-directed-edge! (current-fun-graph) f* (current-fun))
               fun-name]))
      (define args-ast
        (add-between
@@ -324,25 +328,26 @@
   (match f
     [(MetaFun _ f) (compile-fun ρ f)]
     [(IntFun as ret-x ret-ty ret-lab body)
-     (define fun-name (hash-ref (current-Σ) f))
-     (define ρ* (for/fold ([out ρ])
-                          ([arg (in-list as)])
-                  (define x (Arg-x arg))
-                  (hash-set out x (cify x))))
-     (define args-ast (add-between
-                       (for/list ([arg (in-list as)])
-                         (match-define (Arg x ty mode) arg)
-                         (list* (compile-type ty) #\space (hash-ref ρ* x)))
-                       ", "))
-     (define ret-x-name (cify ret-x))
-     (define ret-lab-name (cify ret-lab))
-     (define γ (hasheq ret-lab ret-lab-name))
-     (list* (compile-type ret-ty) #\space fun-name "(" args-ast "){" ind++ ind-nl
-            (compile-decl ret-ty ret-x-name) ind-nl
-            (compile-stmt γ (hash-set ρ* ret-x ret-x-name) body) ind-nl
-            ret-lab-name ":" ind-nl
-            "return " ret-x-name ";"
-            ind-- ind-nl "}")]))
+     (parameterize ([current-fun f])
+       (define fun-name (hash-ref (current-Σ) f))
+       (define ρ* (for/fold ([out ρ])
+                            ([arg (in-list as)])
+                    (define x (Arg-x arg))
+                    (hash-set out x (cify x))))
+       (define args-ast (add-between
+                         (for/list ([arg (in-list as)])
+                           (match-define (Arg x ty mode) arg)
+                           (list* (compile-type ty) #\space (hash-ref ρ* x)))
+                         ", "))
+       (define ret-x-name (cify ret-x))
+       (define ret-lab-name (cify ret-lab))
+       (define γ (hasheq ret-lab ret-lab-name))
+       (list* (compile-type ret-ty) #\space fun-name "(" args-ast "){" ind++ ind-nl
+              (compile-decl ret-ty ret-x-name) ind-nl
+              (compile-stmt γ (hash-set ρ* ret-x ret-x-name) body) ind-nl
+              ret-lab-name ":" ind-nl
+              "return " ret-x-name ";"
+              ind-- ind-nl "}"))]))
 
 (define (compile-program prog)
   (match-define (Program gs private->public n->f) prog)
@@ -356,20 +361,26 @@
     (enqueue! fun-queue f))
   (with-cify-counter
     (parameterize ([current-fun-queue fun-queue]
+                   [current-fun-graph (unweighted-graph/directed empty)]
                    [current-Σ Σ])
       (define globals-ast (for/list ([(x g) (in-hash gs)])
                             (match-define (Global ty xi) g)
                             (compile-decl ty (hash-ref ρ x) xi)))
-      (define funs-ast (let loop ([ast empty])
-                         (cond
-                           [(queue-empty? fun-queue) ast]
-                           [else
-                            (define next (dequeue! fun-queue))
-                            (define static? (not (set-member? pub-funs next)))
-                            (loop
-                             (list*
-                              (and static? "static ") (compile-fun ρ next) ind-nl
-                              ast))])))
+      (define fun-table
+        (let loop ([table (hash)])
+          (cond [(queue-empty? fun-queue) table]
+                [else
+                 (define f (dequeue! fun-queue))
+                 (define static? (not (set-member? pub-funs f)))
+                 (define ast (list* (and static? "static ") (compile-fun ρ f) ind-nl))
+                 (loop (hash-set table f ast))])))
+      (define fun-graph (current-fun-graph))
+      (define funs-ast (list*
+                        (for/list ([f (in-list (tsort fun-graph))])
+                          (hash-ref fun-table f))
+                        (for/list ([f (in-set pub-funs)]
+                                   #:when (not (has-vertex? fun-graph f)))
+                          (hash-ref fun-table f))))
       (define headers-ast (for/list ([h (in-set (current-headers))])
                             (list* "#include <" h ">" ind-nl)))
       (list* headers-ast
