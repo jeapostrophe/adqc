@@ -18,6 +18,9 @@
 ;; promises about memory.
 
 
+;; modes are 'copy, 'ref, or 'const-ref
+(struct var-info (exp mode) #:transparent)
+
 (define current-headers (make-parameter (mutable-set)))
 (define current-libs (make-parameter (mutable-set)))
 (define current-fun-queue (make-parameter (make-queue)))
@@ -135,7 +138,7 @@
   (define (rec path) (compile-path ρ path))
   (match path
     [(Var x ty)
-     (values (hash-ref ρ x) ty)]
+     (values (var-info-exp (hash-ref ρ x)) ty)]
     [(Select path ie)
      (define-values (pc pty) (rec path))
      (match-define (ArrT _ ety) pty)
@@ -179,7 +182,8 @@
      ;; DESIGN: We ignore xt because x does not become a real thing in
      ;; C (because we can't make it.) If/when we compile to LLVM, we
      ;; will be able to make it something and it will be useful.
-     (compile-expr (hash-set ρ x (compile-expr ρ xe)) be)]
+     (define xe-info (var-info (compile-expr ρ xe) 'copy))
+     (compile-expr (hash-set ρ x xe-info) be)]
     [(IfE ce te fe)
      (list* "(" (rec ce) " ? " (rec te) " : " (rec fe) ")")]
     [(MetaE _ e)
@@ -294,7 +298,7 @@
     [(Let x ty xi bs)
      (define x* (cify x))
      (list* (compile-decl ty x* (compile-init ρ ty xi)) ind-nl
-            (compile-stmt γ (hash-set ρ x x*) bs))]
+            (compile-stmt γ (hash-set ρ x (var-info x* 'copy)) bs))]
     [(MetaS _ s)
      (compile-stmt γ ρ s)]
     [(Call x ty f as bs)
@@ -318,7 +322,7 @@
         ", "))
      (define x* (cify x))
      (define call-ast (compile-decl ty x* (list* fun-name "(" args-ast ")")))
-     (define body-ast (compile-stmt γ (hash-set ρ x x*) bs))
+     (define body-ast (compile-stmt γ (hash-set ρ x (var-info x* 'copy)) bs))
      (list* call-ast ind-nl
             body-ast)]))
 
@@ -332,27 +336,38 @@
        (define fun-name (hash-ref (current-Σ) f))
        (define ρ* (for/fold ([out ρ])
                             ([arg (in-list as)])
-                    (define x (Arg-x arg))
-                    (hash-set out x (cify x))))
+                    (match-define (Arg x ty mode) arg)
+                    (define var-mode
+                      (cond [(eq? mode 'ref) 'ref]
+                            [(or (eq? mode 'copy)
+                                 (and (eq? mode 'read-only)
+                                      (or (IntT? ty) (FloT? ty))))
+                             'copy]
+                            [(eq? mode 'read-only) 'const-ref]))
+                    (hash-set out x (var-info (cify x) var-mode))))
        (define args-ast (add-between
                          (for/list ([arg (in-list as)])
-                           (match-define (Arg x ty mode) arg)
-                           (list* (compile-type ty) #\space (hash-ref ρ* x)))
+                           (match-define (Arg x ty _) arg)
+                           (match-define (var-info x* mode) (hash-ref ρ* x))
+                           (list* (compile-type ty) #\space x*))
                          ", "))
-       (define ret-x-name (cify ret-x))
-       (define ret-lab-name (cify ret-lab))
-       (define γ (hasheq ret-lab ret-lab-name))
+       (define ret-x* (cify ret-x))
+       (define ret-x-info (var-info ret-x* 'copy))
+       (define ret-lab* (cify ret-lab))
+       (define γ (hasheq ret-lab ret-lab*))
        (list* (compile-type ret-ty) #\space fun-name "(" args-ast "){" ind++ ind-nl
-              (compile-decl ret-ty ret-x-name) ind-nl
-              (compile-stmt γ (hash-set ρ* ret-x ret-x-name) body) ind-nl
-              ret-lab-name ":" ind-nl
-              "return " ret-x-name ";"
+              (compile-decl ret-ty ret-x*) ind-nl
+              (compile-stmt γ (hash-set ρ* ret-x ret-x-info) body) ind-nl
+              ret-lab* ":" ind-nl
+              "return " ret-x* ";"
               ind-- ind-nl "}"))]))
 
 (define (compile-program prog)
   (match-define (Program gs private->public n->f) prog)
   ;; XXX Need to construct immutable ρ from given value?
-  (define ρ (make-immutable-hash (hash->list private->public)))
+  (define ρ (make-immutable-hash
+             (for/list ([(priv pub) (in-hash private->public)])
+               (cons priv (var-info pub 'copy)))))
   (define Σ (make-hash (for/list ([(x f) (in-hash n->f)])
                          (cons (unpack-MetaFun f) x))))
   (define pub-funs (list->set (hash-keys Σ)))
