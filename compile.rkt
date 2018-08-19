@@ -125,20 +125,41 @@
           'funo compile-funo
           ))
 
-(define (compile-type ty)
-  (match ty
-    [(IntT signed? bits)
-     (list* (if signed? "" "u") "int" (~a bits) "_t")]
-    [(FloT bits)
-     (match bits
-       [32 "float"]
-       [64 "double"])]))
+(define (compile-type ty [mode 'copy])
+  (define ty-ast (match ty
+                   [(IntT signed? bits)
+                    (list* (if signed? "" "u") "int" (~a bits) "_t")]
+                   [(FloT bits)
+                    (match bits
+                      [32 "float"]
+                      [64 "double"])]))
+  (match mode
+    ['copy ty-ast]
+    ['ref (list* ty-ast "*")]
+    ['const-ref (list* "const " ty-ast "*")]))
 
-(define (compile-path ρ path)
-  (define (rec path) (compile-path ρ path))
+(define (path-x path)
+  (match path
+    [(Var x _) x]
+    [(or (Select path _)
+         (Field path _)
+         (Mode path _))
+     (path-x path)]
+    ;; XXX ExtVar
+    ))
+
+(define (path-deref? ρ path)
+  (match (var-info-mode (hash-ref ρ (path-x path)))
+    ['copy #f]
+    [(or 'ref 'const-ref) #t]))
+
+(define (compile-path ρ path deref-root?)
+  (define (rec path) (compile-path ρ path deref-root?))
   (match path
     [(Var x ty)
-     (values (var-info-exp (hash-ref ρ x)) ty)]
+     (define exp (var-info-exp (hash-ref ρ x)))
+     (define ast (if deref-root? (list* "(*" exp ")") exp))
+     (values ast ty)]
     [(Select path ie)
      (define-values (pc pty) (rec path))
      (match-define (ArrT _ ety) pty)
@@ -173,7 +194,7 @@
      (list* "((" (compile-type ty) ")" (rec e) ")")]
     [(Read path)
      (match-define-values (name _)
-       (compile-path ρ path))
+       (compile-path ρ path (path-deref? ρ path)))
      name]
     [(BinOp op L R)
      (define op-fn (hash-ref bin-op-table op))
@@ -275,7 +296,7 @@
             "exit(1);")]
     [(Assign path e)
      (match-define-values (name _)
-       (compile-path ρ path))
+       (compile-path ρ path (path-deref? ρ path)))
      (list* name " = " (compile-expr ρ e) ";")]
     [(Begin f s)
      (list* (rec f) ind-nl (rec s))]
@@ -315,16 +336,46 @@
               fun-name]))
      (define args-ast
        (add-between
-        (for/list ([arg (in-list as)])
-          (match arg
-            [(? Expr?) (compile-expr ρ arg)]
-            [(? Path?) (compile-path ρ arg)]))
+        ;; var-* is argument being passed
+        ;; arg-* relates to what the function expects of its arguments
+        (for/list ([var (in-list as)]
+                   [arg (in-list (Fun-args f*))])
+          (match var
+            [(or (Read path) (? Path? path))
+             (define var-mode (var-info-mode (hash-ref ρ (path-x path))))
+             (define arg-mode (Arg->var-mode arg))
+             (define var-is-ref? (or (eq? var-mode 'ref)
+                                     (eq? var-mode 'const-ref)))
+             (define arg-is-ref? (or (eq? arg-mode 'ref)
+                                     (eq? arg-mode 'const-ref)))
+             (define-values (deref-var? take-var-addr?)
+               (cond [(eq? var-is-ref? arg-is-ref?)
+                      (values #f #f)]
+                     [(and var-is-ref? (not (arg-is-ref?)))
+                      (values #t #f)]
+                     [(and (not var-is-ref?) arg-is-ref?)
+                      (values #f #t)]))
+             (match-define-values (var-ast _)
+               (compile-path ρ path deref-var?))
+             (if take-var-addr?
+                 (list* "(&" var-ast ")")
+                 var-ast)]
+            [(? Expr?) (compile-expr ρ var)]))
         ", "))
      (define x* (cify x))
      (define call-ast (compile-decl ty x* (list* fun-name "(" args-ast ")")))
      (define body-ast (compile-stmt γ (hash-set ρ x (var-info x* 'copy)) bs))
      (list* call-ast ind-nl
             body-ast)]))
+
+(define (Arg->var-mode arg)
+  (match-define (Arg _ ty mode) arg)
+  (cond [(eq? mode 'ref) 'ref]
+        [(or (eq? mode 'copy)
+             (and (eq? mode 'read-only)
+                  (or (IntT? ty) (FloT? ty))))
+         'copy]
+        [(eq? mode 'read-only) 'const-ref]))
 
 ;; Σ is a renaming environment for public functions
 ;; ρ is a renaming environment for global variables
@@ -337,19 +388,13 @@
        (define ρ* (for/fold ([out ρ])
                             ([arg (in-list as)])
                     (match-define (Arg x ty mode) arg)
-                    (define var-mode
-                      (cond [(eq? mode 'ref) 'ref]
-                            [(or (eq? mode 'copy)
-                                 (and (eq? mode 'read-only)
-                                      (or (IntT? ty) (FloT? ty))))
-                             'copy]
-                            [(eq? mode 'read-only) 'const-ref]))
+                    (define var-mode (Arg->var-mode arg))
                     (hash-set out x (var-info (cify x) var-mode))))
        (define args-ast (add-between
                          (for/list ([arg (in-list as)])
                            (match-define (Arg x ty _) arg)
                            (match-define (var-info x* mode) (hash-ref ρ* x))
-                           (list* (compile-type ty) #\space x*))
+                           (list* (compile-type ty mode) #\space x*))
                          ", "))
        (define ret-x* (cify ret-x))
        (define ret-x-info (var-info ret-x* 'copy))

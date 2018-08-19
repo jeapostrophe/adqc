@@ -196,6 +196,13 @@
      (unpack-MetaFun f)]
     [(? Fun?) f]))
 
+(define (Fun-args f)
+  (match (unpack-MetaFun f)
+    [(? IntFun? f)
+     (IntFun-args f)]
+    [(? ExtFun? f)
+     (ExtFun-args f)]))
+
 (provide
  (contract-out
   [struct Arg ([x symbol?] [ty Type?] [mode mode/c])]
@@ -208,7 +215,8 @@
                   [args (listof Arg?)]
                   [ret-ty Type?]
                   [name c-identifier-string?])]
-  [unpack-MetaFun (-> Fun? Fun?)]))
+  [unpack-MetaFun (-> Fun? Fun?)]
+  [Fun-args (-> (or/c IntFun? ExtFun? MetaFun?) (listof Arg?))]))
 
 (define (IntFun*? x)
   (or (IntFun? x)
