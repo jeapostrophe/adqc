@@ -325,6 +325,7 @@
     [(Call x ty f as bs)
      (define Σ (current-Σ))
      (define f* (unpack-MetaFun f))
+     (add-directed-edge! (current-fun-graph) f* (current-fun))
      (define fun-name
        (cond [(hash-has-key? Σ f*)
               (hash-ref Σ f*)]
@@ -332,7 +333,6 @@
               (define fun-name (cify 'fun))
               (hash-set! Σ f* fun-name)
               (enqueue! (current-fun-queue) f*)
-              (add-directed-edge! (current-fun-graph) f* (current-fun))
               fun-name]))
      (define args-ast
        (add-between
@@ -435,6 +435,7 @@
                  (define ast (list* (and static? "static ") (compile-fun ρ f) ind-nl))
                  (loop (hash-set table f ast))])))
       (define fun-graph (current-fun-graph))
+      (eprintf "fun-graph: ~v\n" (get-vertices fun-graph))
       (define funs-ast (list*
                         (for/list ([f (in-list (tsort fun-graph))])
                           (hash-ref fun-table f))
