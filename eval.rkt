@@ -152,28 +152,34 @@
      (Flo bits (cast val))]))
 
 (define (path-read σ p)
-  (define (rec p) (path-read σ p))
+  (define (rec p) (unbox (path-read σ p)))
   (match p
-    [(Var x _) (unbox (hash-ref σ x))]
+    [(Var x _) (hash-ref σ x)]
     [(Select p ie) (vector-ref (rec p) (Int-val (eval-expr σ ie)))]
     [(Field p f) (hash-ref (rec p) f)]
     [(Mode p m) (hash-ref (rec p) m)]
-    [(? ExtVar?) (error 'path-read "XXX Cannot interp external variables yet: ~e" p)]))
+    [(? ExtVar?)
+     (error 'path-read/ref "XXX Cannot interp external variables yet: ~e" p)]))
 
 (define (path-write! σ p v)
   (match p
-    [(Var x _) (set-box! (hash-ref σ x) v)]
-    [(Select p ie) (vector-set! (path-read σ p) (eval-expr σ ie) v)]
-    [(Field p f) (hash-set! (path-read σ p) f v)]
-    [(Mode p m) (hash-set! (path-read σ p) m v)]
-    [(? ExtVar?) (error 'path-write "XXX Cannot interp external variables yet: ~e" p)]))
+    [(Var x _)
+     (set-box! (hash-ref σ x) v)]
+    [(Select p ie)
+     (set-box! (vector-ref (unbox (path-read σ p)) (eval-expr σ ie)) v)]
+    [(Field p f)
+     (set-box! (hash-ref (unbox (path-read σ p)) f) v)]
+    [(Mode p m)
+     (set-box! (hash-ref (unbox (path-read σ p)) m) v)]
+    [(? ExtVar?)
+     (error 'path-read/ref "XXX Cannot interp external variables yet: ~e" p)]))
 
 (define (eval-expr σ e)
   (define (rec e) (eval-expr σ e))
   (match e
     [(? Int?) e]
     [(? Flo?) e]
-    [(Read p) (path-read σ p)]
+    [(Read p) (unbox (path-read σ p))]
     [(Cast ty e) (type-cast ty (rec e))]
     [(BinOp op L R)
      ((hash-ref bin-op-table op) (rec L) (rec R))]
@@ -200,19 +206,19 @@
     [(IntT signed? bits) (Int signed? bits 0)]
     [(FloT 32) (Flo 32 (real->single-flonum 0.0))]
     [(FloT 64) (Flo 64 (real->double-flonum 0.0))]
-    [(ArrT dim ety) (build-vector dim (λ (_) (type-zero ety)))]
-    [(RecT f->ty _ _) (hash-map-ht f->ty type-zero)]
-    [(UniT mode->ty _) (hash-map-ht mode->ty type-zero)]
+    [(ArrT dim ety) (build-vector dim (λ (_) (box (type-zero ety))))]
+    [(RecT f->ty _ _) (hash-map-ht f->ty (λ (ty) (box (type-zero ty))))]
+    [(UniT mode->ty _) (hash-map-ht mode->ty (λ (ty) (box (type-zero ty))))]
     [(? ExtT?) (error 'type-zero "XXX Cannot interp external types yet: ~e" ty)]))
 
 (define (eval-init σ i)
   (match i
-    [(UndI ty) (type-zero ty)]
-    [(ConI e) (eval-expr σ e)]
-    [(ZedI ty) (type-zero ty)]
-    [(ArrI is) (list->vector (map (λ (i) (eval-init σ i)) is))]
-    [(RecI f->i) (hash-map-ht f->i (λ (i) (eval-init σ i)))]
-    [(UniI m i) (make-hasheq (list (cons m (eval-init σ i))))]))
+    [(UndI ty) (box (type-zero ty))]
+    [(ConI e) (box (eval-expr σ e))]
+    [(ZedI ty) (box (type-zero ty))]
+    [(ArrI is) (box (list->vector (map (λ (i) (eval-init σ i)) is)))]
+    [(RecI f->i) (box (hash-map-ht f->i (λ (i) (eval-init σ i))))]
+    [(UniI m i) (box (make-hasheq (list (cons m (eval-init σ i)))))]))
 
 (define (eval-stmt Σ γ σ s)
   (match s
@@ -236,12 +242,12 @@
        (eval-stmt Σ (hash-set γ l this-return) σ b))]
     [(Let x ty xi bs)
      (define xv (eval-init σ xi))
-     (eval-stmt Σ γ (hash-set σ x (box xv)) bs)]
+     (eval-stmt Σ γ (hash-set σ x xv) bs)]
     [(MetaS _ bs)
      (eval-stmt Σ γ σ bs)]
     [(Call x ty f as bs)
-     ;; XXX handle Path as and ref args
-     (define xv (eval-fun Σ f (map (λ (e) (eval-expr σ e)) as)))
+     ;; Σ vs σ?
+     (define xv (eval-fun σ f as))
      (eval-stmt Σ γ (hash-set σ x (box xv)) bs)]))
 
 (define (eval-fun Σ f vs)
@@ -249,16 +255,20 @@
     [(? ExtFun?) (error 'eval-fun "XXX Cannot interp external functions yet: ~e" f)]
     [(MetaFun _ f) (eval-fun Σ f vs)]
     [(IntFun as ret-x ret-ty ret-lab body)
-     ;; XXX handle Path vs and ref args
-     (define ret-x-b (box (eval-init (hasheq) (UndI ret-ty))))
+     (define ret-x-b (eval-init (hasheq) (UndI ret-ty)))
+     (define σ (for/fold ([σ Σ]) ([a (in-list as)] [v (in-list vs)])
+                 (match-define (Arg x ty m) a)
+                 (match v
+                   [(or (Read p) (? Path? p))
+                    (match m
+                      ['copy
+                       (hash-set σ x (box (unbox (path-read Σ p))))]
+                      [(or 'ref 'read-only)
+                       (hash-set σ x (path-read Σ p))])]
+                   [(? Expr? e)
+                    (hash-set σ x (box (eval-expr Σ e)))])))
      (let/ec this-return
-       (eval-stmt Σ (hasheq ret-lab this-return)
-                  (hash-set (for/fold ([σ Σ]) ([a (in-list as)] [v (in-list vs)])
-                              (match-define (Arg x ty m) a)
-                              (hash-set σ x (box v)))
-                            ret-x
-                            ret-x-b)
-                  body))
+       (eval-stmt Σ (hasheq ret-lab this-return) (hash-set σ ret-x ret-x-b) body))
      (unbox ret-x-b)]))
 
 (define (eval-program p n vs)
