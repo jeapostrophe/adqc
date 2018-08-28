@@ -426,13 +426,10 @@
                             (match-define (Global ty xi) g)
                             (compile-decl ty (hash-ref ρ x) xi)))
       (define fun-table
-        (let loop ([table (hash)])
-          (cond [(queue-empty? fun-queue) table]
-                [else
-                 (define f (dequeue! fun-queue))
-                 (define static? (not (set-member? pub-funs f)))
-                 (define ast (list* (and static? "static ") (compile-fun ρ f) ind-nl))
-                 (loop (hash-set table f ast))])))
+        (for/hash ([f (in-queue fun-queue)])
+          (define static? (not (set-member? pub-funs f)))
+          (define ast (list* (and static? "static ") (compile-fun ρ f) ind-nl))
+          (values f ast)))
       (define fun-graph (current-fun-graph))
       (define funs-ast (list*
                         (for/list ([f (in-list (tsort fun-graph))])
