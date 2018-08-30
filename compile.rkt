@@ -369,7 +369,8 @@
 
 (define (Arg->var-mode arg)
   (match-define (Arg _ ty mode) arg)
-  (cond [(eq? mode 'ref) 'ref]
+  (cond [(or (eq? mode 'ref) (ArrT? ty) (RecT? ty) (UniT? ty))
+         'ref]
         [(or (eq? mode 'copy)
              (and (eq? mode 'read-only)
                   (or (IntT? ty) (FloT? ty))))
