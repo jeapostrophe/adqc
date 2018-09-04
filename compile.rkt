@@ -328,13 +328,12 @@
      (define Σ (current-Σ))
      (define f* (unpack-MetaFun f))
      (add-directed-edge! (current-fun-graph) f* (current-fun))
-     (define fun-name (cond [(hash-has-key? Σ f*)
-                             (hash-ref Σ f*)]
-                            [else
-                             (define fun-name (cify 'fun))
-                             (hash-set! Σ f* fun-name)
-                             (enqueue! (current-fun-queue) f*)
-                             fun-name]))
+     (define (new-fun!)
+       (define fun-name (cify 'fun))
+       (hash-set! Σ f* fun-name)
+       (enqueue! (current-fun-queue) f*)
+       fun-name)
+     (define fun-name (hash-ref Σ f* new-fun!))
      (define args-ast
        (add-between
         ;; var-* is argument being passed
@@ -433,7 +432,7 @@
                             (match-define (Global ty xi) g)
                             (compile-decl ty (hash-ref ρ x) xi)))
       ;; Functions
-      (define fun-table
+      (define f->ast
         (for/hash ([f (in-queue fun-queue)])
           (define static? (not (set-member? pub-funs f)))
           (define ast (list* (and static? "static ") (compile-fun ρ f) ind-nl))
@@ -441,10 +440,10 @@
       (define fun-graph (current-fun-graph))
       (define funs-ast (list*
                         (for/list ([f (in-list (tsort fun-graph))])
-                          (hash-ref fun-table f))
+                          (hash-ref f->ast f))
                         (for/list ([f (in-set pub-funs)]
                                    #:when (not (has-vertex? fun-graph f)))
-                          (hash-ref fun-table f))))
+                          (hash-ref f->ast f))))
       ;; Types
       (define root-types (queue->list (current-type-queue)))
       (define ty->ast
