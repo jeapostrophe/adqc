@@ -213,20 +213,6 @@
     [(MetaE _ e)
      (rec e)]))
 
-#|
-(define (discover-types! ty)
-  (match-define (or (RecT ?->ty _ _) (UniT ?->ty _)) ty)
-  (define type-table (current-type-table))
-    (unless (hash-has-key? type-table ty)
-      (for ([ty* (in-hash-values ?->ty)]
-            #:when (or (RecT? ty*) (UniT? ty*)))
-        (discover-types! ty*))
-      (define ty-x (cify (match ty
-                            [(? RecT?) 'rec]
-                            [(? UniT?) 'uni])))
-      (enqueue! (current-type-queue) ty)
-      (hash-set! type-table ty ty-x)))|#
-
 (define (compile-decl ty name [val #f])
   (define assign (and val (list* " = " val)))
   (match ty
@@ -235,11 +221,6 @@
     [(ArrT dim ety)
      (list* (compile-type ety) #\space name "[" (~a dim) "]" assign ";")]
     [(or (? RecT?) (? UniT?))
-     #|
-     (define type-table (current-type-table))
-     (unless (hash-has-key? type-table ty)
-       (discover-types! ty))
-     (define x (hash-ref type-table ty))|#
      (define type-table (current-type-table))
      (define (new-type!)
        (match-define (or (RecT ?->ty _ _) (UniT ?->ty _)) ty)
