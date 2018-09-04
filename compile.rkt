@@ -28,6 +28,7 @@
 (define current-fun-graph (make-parameter (unweighted-graph/directed empty)))
 (define current-Σ (make-parameter (make-hash)))
 (define current-type-queue (make-parameter (make-queue)))
+(define current-type-graph (make-parameter (unweighted-graph/directed empty)))
 (define current-type-table (make-parameter (make-hash)))
 
 (define (include-src! src)
@@ -212,6 +213,7 @@
     [(MetaE _ e)
      (rec e)]))
 
+#|
 (define (discover-types! ty)
   (match-define (or (RecT ?->ty _ _) (UniT ?->ty _)) ty)
   (define type-table (current-type-table))
@@ -223,7 +225,7 @@
                             [(? RecT?) 'rec]
                             [(? UniT?) 'uni])))
       (enqueue! (current-type-queue) ty)
-      (hash-set! type-table ty ty-x)))
+      (hash-set! type-table ty ty-x)))|#
 
 (define (compile-decl ty name [val #f])
   (define assign (and val (list* " = " val)))
@@ -233,10 +235,24 @@
     [(ArrT dim ety)
      (list* (compile-type ety) #\space name "[" (~a dim) "]" assign ";")]
     [(or (? RecT?) (? UniT?))
+     #|
      (define type-table (current-type-table))
      (unless (hash-has-key? type-table ty)
        (discover-types! ty))
-     (define x (hash-ref type-table ty))
+     (define x (hash-ref type-table ty))|#
+     (define type-table (current-type-table))
+     (define (new-type!)
+       (match-define (or (RecT ?->ty _ _) (UniT ?->ty _)) ty)
+       (for ([ty* (in-hash-values ?->ty)]
+             #:when (or (RecT? ty*) (UniT? ty*)))
+         (add-directed-edge! (current-type-graph) ty* ty))
+       (define x (cify (match ty
+                            [(? RecT?) 'rec]
+                            [(? UniT?) 'uni])))
+       (enqueue! (current-type-queue) ty)
+       (hash-set! type-table ty x)
+       x)
+     (define x (hash-ref type-table ty new-type!))
      (list* x " " name assign ";")]
     [(ExtT src name)
      (include-src! src)
@@ -429,6 +445,7 @@
                    [current-fun-graph (unweighted-graph/directed empty)]
                    [current-Σ Σ]
                    [current-type-queue (make-queue)]
+                   [current-type-graph (unweighted-graph/directed empty)]
                    [current-type-table (make-hash)])
       ;; Globals
       (define globals-ast (for/list ([(x g) (in-hash gs)])
@@ -448,24 +465,33 @@
                                    #:when (not (has-vertex? fun-graph f)))
                           (hash-ref fun-table f))))
       ;; Types
-      (define types-ast
-        (for/list ([ty (in-queue (current-type-queue))])
+      (define root-types (queue->list (current-type-queue)))
+      (define ty->ast
+        (for/hash ([ty (in-queue (current-type-queue))])
           (define x (hash-ref (current-type-table) ty))
-          (match ty
-            [(RecT f->ty f->c c-order)
-             (list* "typedef struct {" ind++ ind-nl
-                    (add-between
-                     (for/list ([f (in-list c-order)])
-                       (compile-decl (hash-ref f->ty f) (hash-ref f->c f)))
-                     ind-nl)
-                    ind-- ind-nl "} " x ";" ind-nl)]
-            [(UniT m->ty m->c)
-             (list* "typedef union {" ind++ ind-nl
-                    (add-between
-                     (for/list ([(m ty) (in-hash m->ty)])
-                       (compile-decl ty (hash-ref m->c m)))
-                     ind-nl)
-                    ind-- ind-nl "} " x ";" ind-nl)])))
+          (define ast
+            (match ty
+              [(RecT f->ty f->c c-order)
+               (list* "typedef struct {" ind++ ind-nl
+                      (add-between
+                       (for/list ([f (in-list c-order)])
+                         (compile-decl (hash-ref f->ty f) (hash-ref f->c f)))
+                       ind-nl)
+                      ind-- ind-nl "} " x ";" ind-nl)]
+              [(UniT m->ty m->c)
+               (list* "typedef union {" ind++ ind-nl
+                      (add-between
+                       (for/list ([(m ty) (in-hash m->ty)])
+                         (compile-decl ty (hash-ref m->c m)))
+                       ind-nl)
+                      ind-- ind-nl "} " x ";" ind-nl)]))
+          (values ty ast)))
+      (define types-ast
+        (list* (for/list ([ty (in-list (tsort (current-type-graph)))])
+                 (hash-ref ty->ast ty))
+               (for/list ([ty (in-list root-types)]
+                          #:when (not (has-vertex? (current-type-graph) ty)))
+                 (hash-ref ty->ast ty))))
       ;; Headers
       (define headers-ast (for/list ([h (in-set (current-headers))])
                             (list* "#include <" h ">" ind-nl)))
