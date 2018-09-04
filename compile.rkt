@@ -23,10 +23,12 @@
 
 (define current-headers (make-parameter (mutable-set)))
 (define current-libs (make-parameter (mutable-set)))
-(define current-fun-queue (make-parameter (make-queue)))
 (define current-fun (make-parameter #f))
+(define current-fun-queue (make-parameter (make-queue)))
 (define current-fun-graph (make-parameter (unweighted-graph/directed empty)))
 (define current-Σ (make-parameter (make-hash)))
+(define current-type-queue (make-parameter (make-queue)))
+(define current-type-table (make-parameter (make-hash)))
 
 (define (include-src! src)
   (match-define (ExternSrc ls hs) src)
@@ -210,6 +212,19 @@
     [(MetaE _ e)
      (rec e)]))
 
+(define (discover-types! ty)
+  (match-define (or (RecT ?->ty _ _) (UniT ?->ty _)) ty)
+  (define type-table (current-type-table))
+    (unless (hash-has-key? type-table ty)
+      (for ([ty* (in-hash-values ?->ty)]
+            #:when (or (RecT? ty*) (UniT? ty*)))
+        (discover-types! ty*))
+      (define ty-x (cify (match ty
+                            [(? RecT?) 'rec]
+                            [(? UniT?) 'uni])))
+      (enqueue! (current-type-queue) ty)
+      (hash-set! type-table ty ty-x)))
+
 (define (compile-decl ty name [val #f])
   (define assign (and val (list* " = " val)))
   (match ty
@@ -217,22 +232,12 @@
      (list* (compile-type ty) #\space name assign ";")]
     [(ArrT dim ety)
      (list* (compile-type ety) #\space name "[" (~a dim) "]" assign ";")]
-    ;; XXX Lift unique RecT to top-level and give a name?
-    [(RecT f->ty f->c c-order)
-     (list* "struct {" ind++ ind-nl
-            (add-between
-             (for/list ([f (in-list c-order)])
-               (compile-decl (hash-ref f->ty f) (hash-ref f->c f)))
-             ind-nl)
-            ind-- ind-nl "} " name assign ";")]
-    ;; XXX Lift unique UniT to top-level and give a name?
-    [(UniT m->ty m->c)
-     (list* "union {" ind++ ind-nl
-            (add-between
-             (for/list ([(m ty) (in-hash m->ty)])
-               (compile-decl ty (hash-ref m->c m)))
-             ind-nl)
-            ind-- ind-nl "} " name assign ";")]
+    [(or (? RecT?) (? UniT?))
+     (define type-table (current-type-table))
+     (unless (hash-has-key? type-table ty)
+       (discover-types! ty))
+     (define x (hash-ref type-table ty))
+     (list* x " " name assign ";")]
     [(ExtT src name)
      (include-src! src)
      (list* "extern void* " name ";")]))
@@ -422,10 +427,14 @@
   (with-cify-counter
     (parameterize ([current-fun-queue fun-queue]
                    [current-fun-graph (unweighted-graph/directed empty)]
-                   [current-Σ Σ])
+                   [current-Σ Σ]
+                   [current-type-queue (make-queue)]
+                   [current-type-table (make-hash)])
+      ;; Globals
       (define globals-ast (for/list ([(x g) (in-hash gs)])
                             (match-define (Global ty xi) g)
                             (compile-decl ty (hash-ref ρ x) xi)))
+      ;; Functions
       (define fun-table
         (for/hash ([f (in-queue fun-queue)])
           (define static? (not (set-member? pub-funs f)))
@@ -438,9 +447,30 @@
                         (for/list ([f (in-set pub-funs)]
                                    #:when (not (has-vertex? fun-graph f)))
                           (hash-ref fun-table f))))
+      ;; Types
+      (define types-ast
+        (for/list ([ty (in-queue (current-type-queue))])
+          (define x (hash-ref (current-type-table) ty))
+          (match ty
+            [(RecT f->ty f->c c-order)
+             (list* "typedef struct {" ind++ ind-nl
+                    (add-between
+                     (for/list ([f (in-list c-order)])
+                       (compile-decl (hash-ref f->ty f) (hash-ref f->c f)))
+                     ind-nl)
+                    ind-- ind-nl "} " x ";" ind-nl)]
+            [(UniT m->ty m->c)
+             (list* "typedef union {" ind++ ind-nl
+                    (add-between
+                     (for/list ([(m ty) (in-hash m->ty)])
+                       (compile-decl ty (hash-ref m->c m)))
+                     ind-nl)
+                    ind-- ind-nl "} " x ";" ind-nl)])))
+      ;; Headers
       (define headers-ast (for/list ([h (in-set (current-headers))])
                             (list* "#include <" h ">" ind-nl)))
       (list* headers-ast
+             types-ast ind-nl
              globals-ast ind-nl
              funs-ast ind-nl))))
     
