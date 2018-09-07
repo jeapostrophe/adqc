@@ -26,7 +26,11 @@
     [(FloT bits)
      (match bits
        [32 _float]
-       [64 _double])]))
+       [64 _double])]
+    [(RecT f->ty _ c-order)
+     (make-cstruct-type
+      (for/list ([f (in-list c-order)])
+        (ty->ctype (hash-ref f->ty f))))]))
 
 (define (link-program p)
   (define c-path (make-temporary-file "adqc~a.c"))

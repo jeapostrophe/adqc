@@ -129,13 +129,28 @@
           ))
 
 (define (compile-type ty [mode 'copy])
-  (define ty-ast (match ty
-                   [(IntT signed? bits)
-                    (list* (if signed? "" "u") "int" (~a bits) "_t")]
-                   [(FloT bits)
-                    (match bits
-                      [32 "float"]
-                      [64 "double"])]))
+  (define ty-ast
+    (match ty
+      [(IntT signed? bits)
+       (list* (if signed? "" "u") "int" (~a bits) "_t")]
+      [(FloT bits)
+       (match bits
+         [32 "float"]
+         [64 "double"])]
+      [(or (? RecT?) (? UniT?))
+       (define type-table (current-type-table))
+       (define (new-type!)
+         (match-define (or (RecT ?->ty _ _) (UniT ?->ty _)) ty)
+         (for ([ty* (in-hash-values ?->ty)]
+               #:when (or (RecT? ty*) (UniT? ty*)))
+           (add-directed-edge! (current-type-graph) ty* ty))
+         (define x (cify (match ty
+                           [(? RecT?) 'rec]
+                           [(? UniT?) 'uni])))
+         (enqueue! (current-type-queue) ty)
+         (hash-set! type-table ty x)
+         x)
+       (hash-ref type-table ty new-type!)]))
   (match mode
     ['copy ty-ast]
     ['ref (list* ty-ast "*")]
@@ -216,25 +231,10 @@
 (define (compile-decl ty name [val #f])
   (define assign (and val (list* " = " val)))
   (match ty
-    [(or (? IntT?) (? FloT?))
-     (list* (compile-type ty) #\space name assign ";")]
+    [(or (? IntT?) (? FloT?) (? RecT?) (? UniT?))
+     (list* (compile-type ty) " " name assign ";")]
     [(ArrT dim ety)
-     (list* (compile-type ety) #\space name "[" (~a dim) "]" assign ";")]
-    [(or (? RecT?) (? UniT?))
-     (define type-table (current-type-table))
-     (define (new-type!)
-       (match-define (or (RecT ?->ty _ _) (UniT ?->ty _)) ty)
-       (for ([ty* (in-hash-values ?->ty)]
-             #:when (or (RecT? ty*) (UniT? ty*)))
-         (add-directed-edge! (current-type-graph) ty* ty))
-       (define x (cify (match ty
-                            [(? RecT?) 'rec]
-                            [(? UniT?) 'uni])))
-       (enqueue! (current-type-queue) ty)
-       (hash-set! type-table ty x)
-       x)
-     (define x (hash-ref type-table ty new-type!))
-     (list* x " " name assign ";")]
+     (list* (compile-type ety) " " name "[" (~a dim) "]" assign ";")]
     [(ExtT src ext)
      (include-src! src)
      (list* ext " " name assign ";")]))

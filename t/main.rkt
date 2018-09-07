@@ -303,4 +303,15 @@
             (define a : S64 := bar <- n)
             n)
           #:tests ["foo" (S64 5) => (S64 6)])
+   (let ([Coord (T (record x S64 y S64))])
+     (TS (begin (define c : #,Coord := (record x (S64 5) y (S64 4)))
+                (c -> x))
+         (S64 5))
+     (TProg (define-fun (bar [c : #,Coord]) : S64
+              (c -> y))
+            (define-fun (foo [n : S64]) : S64
+              (define p : #,Coord := (record x (S64 0) y n))
+              (define m : S64 := bar <- p)
+              m)
+            #:tests ["foo" (S64 4) => (S64 4)]))
    ))
