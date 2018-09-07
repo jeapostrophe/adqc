@@ -235,9 +235,9 @@
        x)
      (define x (hash-ref type-table ty new-type!))
      (list* x " " name assign ";")]
-    [(ExtT src name)
+    [(ExtT src ext)
      (include-src! src)
-     (list* "extern void* " name ";")]))
+     (list* ext " " name assign ";")]))
 
 (define (compile-init ρ ty i)
   (define (rec i) (compile-init ρ ty i))
