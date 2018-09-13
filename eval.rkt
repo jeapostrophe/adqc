@@ -285,6 +285,8 @@
 (provide
  (contract-out
   [Value/c contract?]
+  [eval-init
+   (-> hash? Init? (box/c Value/c))]
   [eval-program
    (-> Program? string? (listof Value/c)
        Value/c)]))

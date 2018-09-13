@@ -28,13 +28,12 @@
        [32 _float]
        [64 _double])]
     [(ArrT dim ety)
-     (make-array-type (ty->ctype ety) dim)]
+     (_array (ty->ctype ety) dim)]
     [(RecT f->ty _ c-order)
-     (make-cstruct-type
-      (for/list ([f (in-list c-order)])
-        (ty->ctype (hash-ref f->ty f))))]
+     (apply _list-struct (for/list ([f (in-list c-order)])
+                           (ty->ctype (hash-ref f->ty f))))]
     [(UniT m->ty _)
-     (apply make-union-type (map ty->ctype (hash-values m->ty)))]))
+     (apply _union (map ty->ctype (hash-values m->ty)))]))
 
 (define (link-program p)
   (define c-path (make-temporary-file "adqc~a.c"))

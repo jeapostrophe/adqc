@@ -12,6 +12,24 @@
     [(or (Int _ _ val) (Flo _ val))
      val]))
 
+;; This assumes the same representation used by the evaluator for data types.
+(define (raw-value* ty v)
+  (match ty
+    [(? IntT?) (Int-val v)]
+    [(? FloT?) (Flo-val v)]
+    [(RecT f->ty _ c-order)
+     (for/list ([f (in-list c-order)])
+       (raw-value* (hash-ref f->ty f) (hash-ref v f)))]))
+
+;; XXX Maybe instead of having this function we should just
+;; call eval-init on i, then raw-value* on the result?
+(define (init->val i)
+  (match i
+    [(ConI e) e]
+    [(RecI f->i)
+     (error 'init->val "coming soon")]
+    ))
+
 (define (val->type v)
   (match v
     [(Int signed? bits _)
@@ -23,7 +41,24 @@
 (define-syntax-rule (! . b)
   (parameterize ([current-invert? #t]) . b))
 
-(define (TProg1* stx the-p the-cp n args expect-ans)
+(define ((print-src! lp) _)
+  (match-define (linked-program _ _ src-path) lp)
+  (define src (port->string (open-input-file src-path)))
+  (display src (current-error-port)))
+
+(define (TProg1* stx the-p the-cp n args expect-ans-i)
+  ;; Get type info for args and ans.
+  (match-define (IntFun (list (Arg _ arg-tys _) ...) _ ans-ty _ _)
+    (unpack-MetaFun (hash-ref (Program-name->fun the-p) n)))
+  ;; XXX Not sure what to do here... We'll get the "raw" value which
+  ;; represents the answer we expect from the native code. But we also get
+  ;; an answer from the evaluator. Should we simply convert eval-ans to be
+  ;; "raw" so we can trivially compare it with the "raw" expected value?
+  ;; Or do we construct a second expected value which is directly from
+  ;; eval-init and can be compared with eval-ans without needing to convert
+  ;; eval-ans to the same format we use for values returned from native code?
+  (define eval-expect-ans (unbox (eval-init (hash) expect-ans-i)))
+  (define expect-ans (init->val expect-ans-i))
   (define eval-ans #f)
   (define comp-ans #f)
   (chk #:t (#:src stx (set! eval-ans (eval-program the-p n args))))
@@ -33,11 +68,7 @@
   (unless the-cp
     (chk #:t (set! the-cp (link-program the-p))))
   (when the-cp
-    (define (print-src _)
-      (match-define (linked-program _ _ src-path) the-cp)
-      (define src (port->string (open-input-file src-path)))
-      (display src (current-error-port)))
-    (with-chk ([chk-inform! print-src])
+    (with-chk ([chk-inform! (print-src! the-cp)])
       (chk #:t (#:src stx
                 (set! comp-ans (run-linked-program the-cp n (map raw-value args)))))
       (when comp-ans
@@ -53,7 +84,7 @@
                    #:defaults ([compiled-p #''#f]))
         . t)
      #:with (n:expr (~and arg-e (~not (~datum =>))) ...
-                    (~optional (~seq (~datum =>) ans (~bind [ans-e #'(E ans)]))
+                    (~optional (~seq (~datum =>) ans (~bind [ans-e #'(I ans)]))
                                #:defaults ([ans-e #'#f]))) #'t
      (quasisyntax/loc stx
        (TProg1* #'t the-p compiled-p n (list (E arg-e) ...) ans-e))]))
@@ -313,5 +344,10 @@
               (define p : #,Coord := (record x (S64 0) y n))
               (define m : S64 := bar <- p)
               m)
-            #:tests ["foo" (S64 4) => (S64 4)]))
+            #:tests ["foo" (S64 4) => (S64 4)])
+     #;(TProg (define-fun (foo) : #,Coord
+              (define c : #,Coord := (record x (S64 1) y (S64 2)))
+              c)
+            #:tests ["foo" => (record x (S64 1) y (S64 2))])
+     )
    ))
