@@ -61,6 +61,7 @@
                      (#:src stx comp-expect-ans))
             (chk (#:src stx comp-ans)
                  (#:src stx comp-expect-ans)))))))
+
 (define-syntax (TProg1 stx)
   (syntax-parse stx
     [(_ the-p:id
@@ -72,6 +73,7 @@
                                #:defaults ([ans-e #'#f]))) #'t
      (quasisyntax/loc stx
        (TProg1* #'t the-p compiled-p n (list (E arg-e) ...) ans-e))]))
+
 (define-syntax (TProgN stx)
   (syntax-parse stx
     [(_ the-p:id
@@ -81,6 +83,7 @@
      (syntax/loc stx
        (begin (TProg1 the-p (~@ . (~? (#:compiled compiled-p) ())) . t)
               ...))]))
+
 (define-syntax (TProg stx)
   (syntax-parse stx
     [(_ p-body ... #:tests t ...)
@@ -90,18 +93,22 @@
          (chk #:t (set! the-p (Prog p-body ...)))
          (chk #:t (set! the-cp (link-program the-p)))
          (TProgN the-p #:compiled the-cp t ...)))]))
+
 (define-syntax (TS stx)
   (syntax-parse stx
     [(_ the-s (~optional (~seq ans)
                          #:defaults ([ans #f])))
      #:with f (generate-temporary)
+     ;; XXX Right now TS & TE only work when returning Int/Flo types
+     ;; because the 'ans' must be a value which can be initialized with 'E'.
+     ;; Eventually replace this with type inference. 
      #:with the-ty #'(~? #,(val->type (E ans)) S64)
      (quasisyntax/loc stx
-       ;; XXX Once type inference is implemented, just drop this S64
        (TProg (define-fun (f) : the-ty the-s)
               #:tests
               #,(syntax/loc stx
                   [(symbol->string 'f) (~@ . (~? (=> ans) ()))])))]))
+
 (define-syntax (TE stx)
   (syntax-parse stx
     [(_ the-e (~optional ans
@@ -109,6 +116,7 @@
      #:with f (generate-temporary)
      (syntax/loc stx
        (TS the-e (~@ . (~? (ans) ()))))]))
+
 (provide TProg1 TProgN TProg TS TE)
 
 (module+ test
