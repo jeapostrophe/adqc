@@ -19,16 +19,7 @@
     [(? FloT?) (Flo-val v)]
     [(RecT f->ty _ c-order)
      (for/list ([f (in-list c-order)])
-       (raw-value* (hash-ref f->ty f) (hash-ref v f)))]))
-
-;; XXX Maybe instead of having this function we should just
-;; call eval-init on i, then raw-value* on the result?
-(define (init->val i)
-  (match i
-    [(ConI e) e]
-    [(RecI f->i)
-     (error 'init->val "coming soon")]
-    ))
+       (raw-value* (hash-ref f->ty f) (unbox (hash-ref v f))))]))
 
 (define (val->type v)
   (match v
@@ -50,21 +41,13 @@
   ;; Get type info for args and ans.
   (match-define (IntFun (list (Arg _ arg-tys _) ...) _ ans-ty _ _)
     (unpack-MetaFun (hash-ref (Program-name->fun the-p) n)))
-  ;; XXX Not sure what to do here... We'll get the "raw" value which
-  ;; represents the answer we expect from the native code. But we also get
-  ;; an answer from the evaluator. Should we simply convert eval-ans to be
-  ;; "raw" so we can trivially compare it with the "raw" expected value?
-  ;; Or do we construct a second expected value which is directly from
-  ;; eval-init and can be compared with eval-ans without needing to convert
-  ;; eval-ans to the same format we use for values returned from native code?
   (define eval-expect-ans (unbox (eval-init (hash) expect-ans-i)))
-  (define expect-ans (init->val expect-ans-i))
   (define eval-ans #f)
   (define comp-ans #f)
   (chk #:t (#:src stx (set! eval-ans (eval-program the-p n args))))
-  (when (and expect-ans eval-ans)
+  (when eval-ans
     (chk (#:src stx eval-ans)
-         (#:src stx expect-ans)))
+         (#:src stx eval-expect-ans)))
   (unless the-cp
     (chk #:t (set! the-cp (link-program the-p))))
   (when the-cp
@@ -72,11 +55,12 @@
       (chk #:t (#:src stx
                 (set! comp-ans (run-linked-program the-cp n (map raw-value args)))))
       (when comp-ans
+        (define comp-expect-ans (raw-value* ans-ty eval-ans))
         (if (current-invert?)
             (chk #:! (#:src stx comp-ans)
-                     (#:src stx (raw-value eval-ans)))
+                     (#:src stx comp-expect-ans))
             (chk (#:src stx comp-ans)
-                 (#:src stx (raw-value eval-ans))))))))
+                 (#:src stx comp-expect-ans)))))))
 (define-syntax (TProg1 stx)
   (syntax-parse stx
     [(_ the-p:id
@@ -345,7 +329,7 @@
               (define m : S64 := bar <- p)
               m)
             #:tests ["foo" (S64 4) => (S64 4)])
-     #;(TProg (define-fun (foo) : #,Coord
+     (TProg (define-fun (foo) : #,Coord
               (define c : #,Coord := (record x (S64 1) y (S64 2)))
               c)
             #:tests ["foo" => (record x (S64 1) y (S64 2))])
