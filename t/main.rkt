@@ -37,13 +37,29 @@
   (define src (port->string (open-input-file src-path)))
   (display src (current-error-port)))
 
-(define (TProg1* stx the-p the-cp n args expect-ans-i)
+(define (TProg1* stx the-p the-cp n args-i expect-ans-i)
   ;; Get type info for args and ans.
   (match-define (IntFun (list (Arg _ arg-tys _) ...) _ ans-ty _ _)
     (unpack-MetaFun (hash-ref (Program-name->fun the-p) n)))
+  (define args (for/list ([ai (in-list args-i)])
+                 (unbox (eval-init (hash) ai))))
   (define eval-expect-ans (unbox (eval-init (hash) expect-ans-i)))
   (define eval-ans #f)
   (define comp-ans #f)
+  ;; XXX Using records as test args is broken atm becasue of the way eval-fun
+  ;; is specified. The args provided to eval-fun must be either a path
+  ;; or expression, but a record provided to eval-program will be neither.
+  ;;
+  ;; If types like records and arrays could be initialized inside of
+  ;; expressions, (perhaps with LetE), then we could construct such an
+  ;; expression and provide it to the evaluator.
+  ;;
+  ;; Alternatively, we could try to invoke eval-fun directly and manually
+  ;; construct the function's σ. This seems messy.
+  ;;
+  ;; A third option could be to change the contract of eval-fun so that
+  ;; each arg can be a path, expression, or initializer, which eval-fun
+  ;; would initialize itself.
   (chk #:t (#:src stx (set! eval-ans (eval-program the-p n args))))
   (when eval-ans
     (chk (#:src stx eval-ans)
@@ -52,8 +68,11 @@
     (chk #:t (set! the-cp (link-program the-p))))
   (when the-cp
     (with-chk ([chk-inform! (print-src! the-cp)])
+      (define comp-args (for/list ([a (in-list args)]
+                                   [ty (in-list arg-tys)])
+                          (raw-value* ty a)))
       (chk #:t (#:src stx
-                (set! comp-ans (run-linked-program the-cp n (map raw-value args)))))
+                (set! comp-ans (run-linked-program the-cp n comp-args))))
       (when comp-ans
         (define comp-expect-ans (raw-value* ans-ty eval-ans))
         (if (current-invert?)
@@ -72,7 +91,7 @@
                     (~optional (~seq (~datum =>) ans (~bind [ans-e #'(I ans)]))
                                #:defaults ([ans-e #'#f]))) #'t
      (quasisyntax/loc stx
-       (TProg1* #'t the-p compiled-p n (list (E arg-e) ...) ans-e))]))
+       (TProg1* #'t the-p compiled-p n (list (I arg-e) ...) ans-e))]))
 
 (define-syntax (TProgN stx)
   (syntax-parse stx
@@ -341,5 +360,10 @@
               (define c : #,Coord := (record x (S64 1) y (S64 2)))
               c)
             #:tests ["foo" => (record x (S64 1) y (S64 2))])
+     ;; Fails (see note in TProg1*)
+     #;
+     (TProg (define-fun (foo [c : #,Coord]) : S64
+              (c -> x))
+            #:tests ["foo" (record x (S64 1) y (S64 2)) => (S64 1)])
      )
    ))
