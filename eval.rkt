@@ -166,7 +166,7 @@
     [(Var x _)
      (set-box! (hash-ref σ x) v)]
     [(Select p ie)
-     (set-box! (vector-ref (unbox (path-read σ p)) (eval-expr σ ie)) v)]
+     (set-box! (vector-ref (unbox (path-read σ p)) (Int-val (eval-expr σ ie))) v)]
     [(Field p f)
      (set-box! (hash-ref (unbox (path-read σ p)) f) v)]
     [(Mode p m)

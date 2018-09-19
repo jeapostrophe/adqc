@@ -327,6 +327,10 @@
                     (iadd (my-array @ (U32 1))
                           (my-array @ (U32 2)))))
        (U32 (+ 0 1 2)))
+   (TS (begin (define a : (array 3 U32) := (array (U32 0) (U32 1) (U32 2)))
+              ((a @ (U32 0)) <- (U32 3))
+              (a @ (U32 0)))
+       (U32 3))
    (TS (begin (define y : S32 := (S32 5))
               (define my-array : (array 3 S32) := (zero (array 3 S32)))
               {y <- (iadd y (my-array @ (U32 2)))}
@@ -349,6 +353,10 @@
      (TS (begin (define c : #,Coord := (record x (S64 5) y (S64 4)))
                 (c -> x))
          (S64 5))
+     (TS (begin (define c : #,Coord := (record x (S64 1) y (S64 2)))
+                ((c -> x) <- (S64 3))
+                (c -> x))
+         (S64 3))
      (TProg (define-fun (bar [c : #,Coord]) : S64
               (c -> y))
             (define-fun (foo [n : S64]) : S64
