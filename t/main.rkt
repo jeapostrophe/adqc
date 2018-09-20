@@ -336,6 +336,14 @@
               {y <- (iadd y (my-array @ (U32 2)))}
               y)
        (S32 5))
+   (TProg (define-fun (bar [arr : (array 3 S64)]) : S64
+            ((arr @ (U32 0)) <- (S64 3))
+            (S64 0))
+          (define-fun (foo) : S64
+            (define arr : (array 3 S64) := (array (S64 0) (S64 1) (S64 2)))
+            (define z : S64 := bar <- arr)
+            (arr @ (U32 0)))
+          #:tests ["foo" => (S64 3)])
    (TProg (define-fun (bar [m : S64]) : S64
             (iadd m (S64 1)))
           (define-fun (foo [n : S64]) : S64

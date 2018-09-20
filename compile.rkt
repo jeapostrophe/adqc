@@ -137,6 +137,9 @@
        (match bits
          [32 "float"]
          [64 "double"])]
+      [(ArrT _ ety)
+       ;; Note: Array types are compiled as pointers, except in declarations.
+       (list* (compile-type ety) "*")]
       [(or (? RecT?) (? UniT?))
        (define type-table (current-type-table))
        (define (new-type!)
@@ -370,12 +373,22 @@
 
 (define (Arg->var-mode arg)
   (match-define (Arg _ ty mode) arg)
-  (cond [(or (eq? mode 'ref) (ArrT? ty) (RecT? ty) (UniT? ty))
-         'ref]
-        [(or (eq? mode 'copy)
+  (cond [(or (eq? mode 'copy)
+             ;; We treat arrays as a "copy" type because arrays decay to
+             ;; pointers in C. Even though we don't want to actually copy the
+             ;; array, we mark it as a "copy" type because we don't want to
+             ;; dereference the array before indexing it, nor to take its address
+             ;; before passing it as a function.
+             (ArrT? ty)
+             ;; Read-only Int and Flo types are treated as copies because it's
+             ;; faster than passing them by reference.
              (and (eq? mode 'read-only)
                   (or (IntT? ty) (FloT? ty))))
          'copy]
+        ;; Records and unions are passed by reference, even when they are
+        ;; not marked as pass-by-copy arguments.
+        [(or (eq? mode 'ref) (RecT? ty) (UniT? ty))
+         'ref]
         [(eq? mode 'read-only) 'const-ref]))
 
 ;; Σ is a renaming environment for public functions
