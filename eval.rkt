@@ -257,13 +257,13 @@
                         (hash-set σ* x (path-read σ p))])]
                     [(? Expr? e)
                      (hash-set σ* x (box (eval-expr σ e)))])))
-     (define xv (eval-fun Σ σ* f '()))
+     (define xv (eval-fun Σ σ* f))
      (eval-stmt Σ γ (hash-set σ x (box xv)) bs)]))
 
-(define (eval-fun Σ σ f vs)
+(define (eval-fun Σ σ f)
   (match f
     [(? ExtFun?) (error 'eval-fun "XXX Cannot interp external functions yet: ~e" f)]
-    [(MetaFun _ f) (eval-fun Σ σ f vs)]
+    [(MetaFun _ f) (eval-fun Σ σ f)]
     [(IntFun as ret-x ret-ty ret-lab body)
      (define ret-x-b (eval-init (hasheq) (UndI ret-ty)))
      (let/ec this-return
@@ -279,7 +279,7 @@
   (define f (hash-ref n->f n))
   (define σ (for/hasheq ([v (in-list vs)] [a (in-list (Fun-args f))])
               (values (Arg-x a) (box v))))
-  (eval-fun Σ σ f '()))
+  (eval-fun Σ σ f))
 
 (define Value/c
   (or/c Int? Flo? vector? hash?))
