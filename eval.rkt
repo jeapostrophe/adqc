@@ -246,27 +246,26 @@
     [(MetaS _ bs)
      (eval-stmt Σ γ σ bs)]
     [(Call x ty f as bs)
-     ;; Σ vs σ?
-     (define xv (eval-fun σ f as))
+     (define σ* (for/fold ([σ* Σ]) ([a (in-list as)] [fa (in-list (Fun-args f))])
+                  (match-define (Arg x ty m) fa)
+                  (match a
+                    [(or (Read p) (? Path? p))
+                     (match m
+                       ['copy
+                        (hash-set σ* x (box (unbox (path-read σ p))))]
+                       [(or 'ref 'read-only)
+                        (hash-set σ* x (path-read σ p))])]
+                    [(? Expr? e)
+                     (hash-set σ* x (box (eval-expr σ e)))])))
+     (define xv (eval-fun Σ σ* f '()))
      (eval-stmt Σ γ (hash-set σ x (box xv)) bs)]))
 
-(define (eval-fun Σ f vs)
+(define (eval-fun Σ σ f vs)
   (match f
     [(? ExtFun?) (error 'eval-fun "XXX Cannot interp external functions yet: ~e" f)]
-    [(MetaFun _ f) (eval-fun Σ f vs)]
+    [(MetaFun _ f) (eval-fun Σ σ f vs)]
     [(IntFun as ret-x ret-ty ret-lab body)
      (define ret-x-b (eval-init (hasheq) (UndI ret-ty)))
-     (define σ (for/fold ([σ Σ]) ([a (in-list as)] [v (in-list vs)])
-                 (match-define (Arg x ty m) a)
-                 (match v
-                   [(or (Read p) (? Path? p))
-                    (match m
-                      ['copy
-                       (hash-set σ x (box (unbox (path-read Σ p))))]
-                      [(or 'ref 'read-only)
-                       (hash-set σ x (path-read Σ p))])]
-                   [(? Expr? e)
-                    (hash-set σ x (box (eval-expr Σ e)))])))
      (let/ec this-return
        (eval-stmt Σ (hasheq ret-lab this-return) (hash-set σ ret-x ret-x-b) body))
      (unbox ret-x-b)]))
@@ -277,7 +276,10 @@
     (for/hasheq ([(x g) (in-hash gs)])
       (match-define (Global ty xi) g)
       (values x (eval-init (hasheq) xi))))
-  (eval-fun Σ (hash-ref n->f n) vs))
+  (define f (hash-ref n->f n))
+  (define σ (for/hasheq ([v (in-list vs)] [a (in-list (Fun-args f))])
+              (values (Arg-x a) (box v))))
+  (eval-fun Σ σ f '()))
 
 (define Value/c
   (or/c Int? Flo? vector? hash?))
