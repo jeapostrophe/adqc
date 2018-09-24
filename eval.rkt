@@ -270,15 +270,15 @@
        (eval-stmt Σ (hasheq ret-lab this-return) (hash-set σ ret-x ret-x-b) body))
      (unbox ret-x-b)]))
 
-(define (eval-program p n vs)
+(define (eval-program p n is)
   (match-define (Program gs _ n->f) p)
   (define Σ
     (for/hasheq ([(x g) (in-hash gs)])
       (match-define (Global ty xi) g)
       (values x (eval-init (hasheq) xi))))
   (define f (hash-ref n->f n))
-  (define σ (for/hasheq ([v (in-list vs)] [a (in-list (Fun-args f))])
-              (values (Arg-x a) (box v))))
+  (define σ (for/fold ([σ Σ]) ([i (in-list is)] [a (in-list (Fun-args f))])
+              (hash-set σ (Arg-x a) (eval-init (hasheq) i))))
   (eval-fun Σ σ f))
 
 (define Value/c
@@ -290,5 +290,5 @@
   [eval-init
    (-> hash? Init? (box/c Value/c))]
   [eval-program
-   (-> Program? string? (listof Value/c)
+   (-> Program? string? (listof Init?)
        Value/c)]))

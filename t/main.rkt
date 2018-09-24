@@ -46,21 +46,7 @@
   (define eval-expect-ans (unbox (eval-init (hash) expect-ans-i)))
   (define eval-ans #f)
   (define comp-ans #f)
-  ;; XXX Using records as test args is broken atm becasue of the way eval-fun
-  ;; is specified. The args provided to eval-fun must be either a path
-  ;; or expression, but a record provided to eval-program will be neither.
-  ;;
-  ;; If types like records and arrays could be initialized inside of
-  ;; expressions, (perhaps with LetE), then we could construct such an
-  ;; expression and provide it to the evaluator.
-  ;;
-  ;; Alternatively, we could try to invoke eval-fun directly and manually
-  ;; construct the function's σ. This seems messy.
-  ;;
-  ;; A third option could be to change the contract of eval-fun so that
-  ;; each arg can be a path, expression, or initializer, which eval-fun
-  ;; would initialize itself.
-  (chk #:t (#:src stx (set! eval-ans (eval-program the-p n args))))
+  (chk #:t (#:src stx (set! eval-ans (eval-program the-p n args-i))))
   (when eval-ans
     (chk (#:src stx eval-ans)
          (#:src stx eval-expect-ans)))
