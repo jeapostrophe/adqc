@@ -7,19 +7,14 @@
          racket/match
          racket/port)
 
-(define (raw-value v)
-  (match v
-    [(or (Int _ _ val) (Flo _ val))
-     val]))
-
 ;; This assumes the same representation used by the evaluator for data types.
-(define (raw-value* ty v)
+(define (raw-value ty v)
   (match ty
     [(? IntT?) (Int-val v)]
     [(? FloT?) (Flo-val v)]
     [(RecT f->ty _ c-order)
      (for/list ([f (in-list c-order)])
-       (raw-value* (hash-ref f->ty f) (unbox (hash-ref v f))))]))
+       (raw-value (hash-ref f->ty f) (unbox (hash-ref v f))))]))
 
 (define (val->type v)
   (match v
@@ -56,11 +51,11 @@
     (with-chk ([chk-inform! (print-src! the-cp)])
       (define comp-args (for/list ([a (in-list args)]
                                    [ty (in-list arg-tys)])
-                          (raw-value* ty a)))
+                          (raw-value ty a)))
       (chk #:t (#:src stx
                 (set! comp-ans (run-linked-program the-cp n comp-args))))
       (when comp-ans
-        (define comp-expect-ans (raw-value* ans-ty eval-ans))
+        (define comp-expect-ans (raw-value ans-ty eval-ans))
         (if (current-invert?)
             (chk #:! (#:src stx comp-ans)
                      (#:src stx comp-expect-ans))
