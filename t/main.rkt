@@ -362,7 +362,12 @@
               (define c : #,Coord := (record x (S64 1) y (S64 2)))
               c)
             #:tests ["foo" => (record x (S64 1) y (S64 2))])
-     ;; Fails (see note in TProg1*)
+     ;; Fails with following sterr:
+     ;;
+     ;; SIGSEGV MAPPER si_code 1 fault on addr 0x1
+     ;; Aborted (core dumped)
+     ;;
+     ;; Cause seems to be passing a record (struct) as an argument.
      #;
      (TProg (define-fun (foo [c : #,Coord]) : S64
               (c -> x))
