@@ -21,6 +21,9 @@
 ;; modes are 'copy, 'ref, or 'const-ref
 (struct var-info (exp mode) #:transparent)
 
+(struct ret-info (x lab) #:transparent)
+
+(define current-ret-info (make-parameter #f))
 (define current-headers (make-parameter (mutable-set)))
 (define current-libs (make-parameter (mutable-set)))
 (define current-fun (make-parameter #f))
@@ -316,7 +319,11 @@
             (rec b)
             ind-- ind-nl "}")]
     [(Jump l)
-     (list* "goto " (hash-ref γ l) ";")]
+     (define ret-info (current-ret-info))
+     (define l* (hash-ref γ l))
+     (if (and ret-info (equal? l* (ret-info-lab ret-info)))
+         (list* "return " (ret-info-x ret-info) ";")
+         (list* "goto " l* ";"))]
     [(Let/ec l b)
      (define cl (cify l))
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
@@ -408,18 +415,17 @@
                          (for/list ([arg (in-list as)])
                            (match-define (Arg x ty _) arg)
                            (match-define (var-info x* mode) (hash-ref ρ* x))
-                           (list* (compile-type ty mode) #\space x*))
+                           (list* (compile-type ty mode) " " x*))
                          ", "))
        (define ret-x* (cify ret-x))
        (define ret-x-info (var-info ret-x* 'copy))
        (define ret-lab* (cify ret-lab))
        (define γ (hasheq ret-lab ret-lab*))
-       (list* (compile-type ret-ty) #\space fun-name "(" args-ast "){" ind++ ind-nl
-              (compile-decl ret-ty ret-x*) ind-nl
-              (compile-stmt γ (hash-set ρ* ret-x ret-x-info) body) ind-nl
-              ret-lab* ":" ind-nl
-              "return " ret-x* ";"
-              ind-- ind-nl "}"))]))
+       (parameterize ([current-ret-info (ret-info ret-x* ret-lab*)])
+         (list* (compile-type ret-ty) " " fun-name "(" args-ast "){" ind++ ind-nl
+                (compile-decl ret-ty ret-x*) ind-nl
+                (compile-stmt γ (hash-set ρ* ret-x ret-x-info) body) ind-nl
+                ind-- ind-nl "}")))]))
 
 (define (compile-program prog)
   (match-define (Program gs private->public n->f) prog)
