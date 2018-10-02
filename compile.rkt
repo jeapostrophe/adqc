@@ -236,9 +236,7 @@
      (include-src! src)
      (list* ext " " name assign ";")]))
 
-#;
 (define (compile-storage ty name [val #f])
-  ;; XXX fix
   (define assign (and val (list* " = " val)))
   (match ty
     [(or (? IntT?) (? FloT?) (? RecT?) (? UniT?))
@@ -331,9 +329,19 @@
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
             cl ":")]
     [(Let x ty xi bs)
-     ;; XXX declare memory for complex types.
+     (define-values (storage-ast x-init-ast)
+       (match xi
+         [(or (? ZedI?) (? ArrI?) (? RecI?) (? UniI?))
+          ;; XXX Better name?
+          (define st-x (cify 'mem))
+          (values (list* (compile-storage ty st-x (compile-init ρ ty xi)))
+                  (cond [(ArrT? ty) st-x]
+                        [else (list* "(&" st-x ")")]))]
+         [(or (? UndI?) (? ConI?))
+          (values #f (compile-init ρ ty xi))]))
      (define x* (cify x))
-     (list* (compile-decl ty x* (compile-init ρ ty xi)) ind-nl
+     (list* (and storage-ast (list* storage-ast ind-nl))
+            (compile-decl ty x* x-init-ast) ind-nl
             (compile-stmt γ (hash-set ρ x x*) bs))]
     [(MetaS _ s)
      (compile-stmt γ ρ s)]
@@ -527,7 +535,7 @@
       (λ () (tree-for idisplay (compile-program prog))))
     (define libs (for/list ([l (in-set (current-libs))])
                    (format "-l~a" l)))
-    (define args (list* "-o" out-path "-xc" c-path libs))
+    (define args (list* "-Werror" "-o" out-path "-xc" c-path libs))
     (define args* (if shared? (list* "-shared" "-fPIC" args) args))
     (apply system* (find-executable-path "cc") args*)))
 
