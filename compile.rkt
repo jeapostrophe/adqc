@@ -18,11 +18,9 @@
 ;; promises about memory.
 
 
-;; modes are 'copy, 'ref, or 'const-ref
-(struct var-info (exp mode) #:transparent)
-
 (struct ret-info (x lab) #:transparent)
 
+(define current-ref-vars (make-parameter (set)))
 (define current-ret-info (make-parameter #f))
 (define current-headers (make-parameter (mutable-set)))
 (define current-libs (make-parameter (mutable-set)))
@@ -131,77 +129,72 @@
           'funo compile-funo
           ))
 
-(define (compile-type ty [mode 'copy])
-  (define ty-ast
-    (match ty
-      [(IntT signed? bits)
-       (list* (if signed? "" "u") "int" (~a bits) "_t")]
-      [(FloT bits)
-       (match bits
-         [32 "float"]
-         [64 "double"])]
-      [(ArrT _ ety)
-       ;; Note: Array types are compiled as pointers, except in declarations.
-       (list* (compile-type ety) "*")]
-      [(or (? RecT?) (? UniT?))
-       (define type-table (current-type-table))
-       (define (new-type!)
-         (match-define (or (RecT ?->ty _ _) (UniT ?->ty _)) ty)
-         (for ([ty* (in-hash-values ?->ty)]
-               #:when (or (RecT? ty*) (UniT? ty*)))
-           (add-directed-edge! (current-type-graph) ty* ty))
-         (define x (cify (match ty
-                           [(? RecT?) 'rec]
-                           [(? UniT?) 'uni])))
-         (enqueue! (current-type-queue) ty)
-         (hash-set! type-table ty x)
-         x)
-       (hash-ref type-table ty new-type!)]))
-  (match mode
-    ['copy ty-ast]
-    ['ref (list* ty-ast "*")]
-    ['const-ref (list* "const " ty-ast "*")]))
+(define (compile-type ty)
+  (define (rec ty) (compile-type ty))
+  (match ty
+    [(IntT signed? bits)
+     (list* (if signed? "" "u") "int" (~a bits) "_t")]
+    [(FloT bits)
+     (match bits
+       [32 "float"]
+       [64 "double"])]
+    [(ArrT dim ety)
+     (list* (rec ety) "*")]
+    [(or (? RecT?) (? UniT?))
+     (define type-table (current-type-table))
+     (define (new-type!)
+       (match-define (or (RecT ?->ty _ _) (UniT ?->ty _)) ty)
+       (for ([ty* (in-hash-values ?->ty)])
+         (when (or (RecT? ty*) (UniT? ty*))
+           (add-directed-edge! (current-type-graph) ty* ty)))
+       (define x (cify (match ty
+                         [(? RecT?) 'rec]
+                         [(? UniT?) 'uni])))
+       (enqueue! (current-type-queue) ty)
+       (hash-set! type-table ty x)
+       x)
+     (hash-ref type-table ty new-type!)]))
 
-(define (path-x path)
-  (match path
-    [(Var x _) x]
-    [(or (Select path _)
-         (Field path _)
-         (Mode path _))
-     (path-x path)]
-    ;; XXX ExtVar
-    ))
+(define (compile-type/ref ty x)
+  (match ty
+    [(or (? IntT?) (? FloT?))
+     (list* (compile-type ty)
+            (and (set-member? (current-ref-vars) x) "*"))]
+    [(ArrT dim ety)
+     (compile-type ty)]
+    [(or (? RecT?) (? UniT?) (? ArrT?))
+     (list* (compile-type ty) "*")]))
 
-(define (path-deref? ρ path)
-  (match (var-info-mode (hash-ref ρ (path-x path)))
-    ['copy #f]
-    [(or 'ref 'const-ref) #t]))
-
-(define (compile-path ρ path deref-root?)
-  (define (rec path) (compile-path ρ path deref-root?))
+(define (compile-path ρ path)
+  (define (rec path) (compile-path ρ path))
   (match path
     [(Var x ty)
-     (define exp (var-info-exp (hash-ref ρ x)))
-     (define ast (if deref-root? (list* "(*" exp ")") exp))
-     (values ast ty)]
+     (values (hash-ref ρ x) ty)]
     [(Select path ie)
-     (define-values (pc pty) (rec path))
+     (define-values (p-ast pty) (rec path))
      (match-define (ArrT _ ety) pty)
-     (values (list* "(" pc "[" (compile-expr ρ ie) "])")
+     (values (list* "(" p-ast "[" (compile-expr ρ ie) "])")
              ety)]
     [(Field path f)
-     (define-values (pc pty) (rec path))
+     (define-values (p-ast pty) (rec path))
      (match-define (RecT f->ty f->c _) pty)
-     (values (list* "(" pc "." (hash-ref f->c f) ")")
+     (values (list* "(" p-ast "->" (hash-ref f->c f) ")")
              (hash-ref f->ty f))]
     [(Mode path m)
-     (define-values (pc pty) (rec path))
+     (define-values (p-ast pty) (rec path))
      (match-define (UniT m->ty m->c) pty)
-     (values (list "(" pc "." (hash-ref m->c m) ")")
+     (values (list* "(" p-ast "->" (hash-ref m->c m) ")")
              (hash-ref m->ty m))]
     [(ExtVar src n ty)
-     ;; XXX register src
+     (include-src! src)
      (values n ty)]))
+
+(define (compile-path/deref ρ path)
+  (define-values (ast ty) (compile-path ρ path))
+  ;; ast will be x* if path is an int or float ref.
+  (define ref? (set-member? (current-ref-vars) ast))
+  (values (if ref? (list* "(*" ast ")") ast)
+          ty))
 
 (define (compile-expr ρ e)
   (define (rec e) (compile-expr ρ e))
@@ -215,11 +208,12 @@
                         [else (~a val)]))
      (list* "((" (compile-type (FloT bits)) ")" val* ")")]
     [(Cast ty e)
+     ;; XXX Only for int/float types?
      (list* "((" (compile-type ty) ")" (rec e) ")")]
     [(Read path)
-     (match-define-values (name _)
-       (compile-path ρ path (path-deref? ρ path)))
-     name]
+     (match-define-values (ast _)
+       (compile-path/deref ρ path))
+     ast]
     [(BinOp op L R)
      (define op-fn (hash-ref bin-op-table op))
      (op-fn ρ L  R)]
@@ -227,8 +221,7 @@
      ;; DESIGN: We ignore xt because x does not become a real thing in
      ;; C (because we can't make it.) If/when we compile to LLVM, we
      ;; will be able to make it something and it will be useful.
-     (define xe-info (var-info (compile-expr ρ xe) 'copy))
-     (compile-expr (hash-set ρ x xe-info) be)]
+     (compile-expr (hash-set ρ x (compile-expr ρ xe)) be)]
     [(IfE ce te fe)
      (list* "(" (rec ce) " ? " (rec te) " : " (rec fe) ")")]
     [(MetaE _ e)
@@ -237,13 +230,23 @@
 (define (compile-decl ty name [val #f])
   (define assign (and val (list* " = " val)))
   (match ty
+    [(or (? IntT?) (? FloT?) (? ArrT?) (? RecT?) (? UniT?))
+     (list* (compile-type/ref ty name) " " name assign ";")]
+    [(ExtT src ext)
+     (include-src! src)
+     (list* ext " " name assign ";")]))
+
+#;
+(define (compile-storage ty name [val #f])
+  ;; XXX fix
+  (define assign (and val (list* " = " val)))
+  (match ty
     [(or (? IntT?) (? FloT?) (? RecT?) (? UniT?))
      (list* (compile-type ty) " " name assign ";")]
     [(ArrT dim ety)
      (list* (compile-type ety) " " name "[" (~a dim) "]" assign ";")]
-    [(ExtT src ext)
-     (include-src! src)
-     (list* ext " " name assign ";")]))
+    ;; XXX Can we compile storage for ExtT?
+    ))
 
 (define (compile-init ρ ty i)
   (define (rec i) (compile-init ρ ty i))
@@ -303,9 +306,8 @@
      (list* "fprintf(stderr, " (~v m) ");" ind-nl
             "exit(1);")]
     [(Assign path e)
-     (match-define-values (name _)
-       (compile-path ρ path (path-deref? ρ path)))
-     (list* name " = " (compile-expr ρ e) ";")]
+     (match-define-values (path-ast _) (compile-path/deref ρ path))
+     (list* path-ast " = " (compile-expr ρ e) ";")]
     [(Begin f s)
      (list* (rec f) ind-nl (rec s))]
     [(If p t f)
@@ -329,9 +331,10 @@
      (list* (compile-stmt (hash-set γ l cl) ρ b) ind-nl
             cl ":")]
     [(Let x ty xi bs)
+     ;; XXX declare memory for complex types.
      (define x* (cify x))
      (list* (compile-decl ty x* (compile-init ρ ty xi)) ind-nl
-            (compile-stmt γ (hash-set ρ x (var-info x* 'copy)) bs))]
+            (compile-stmt γ (hash-set ρ x x*) bs))]
     [(MetaS _ s)
      (compile-stmt γ ρ s)]
     [(Call x ty f as bs)
@@ -344,6 +347,14 @@
        (enqueue! (current-fun-queue) f*)
        fun-name)
      (define fun-name (hash-ref Σ f* new-fun!))
+     ;; XXX Awkward to calculate these for each function call as well as
+     ;;     inside of compile-fun.
+     (define ref-args
+       (for/fold ([out (set)]) ([a (in-list (Fun-args f*))])
+         (match-define (Arg x ty mode) a)
+         (if (and (or (IntT? ty) (FloT? ty)) (eq? mode 'ref))
+             (set-add out x)
+             out)))
      (define args-ast
        (add-between
         ;; var-* is argument being passed
@@ -352,12 +363,10 @@
                    [arg (in-list (Fun-args f*))])
           (match var
             [(or (Read path) (? Path? path))
-             (define var-mode (var-info-mode (hash-ref ρ (path-x path))))
-             (define arg-mode (Arg->var-mode arg))
-             (define var-is-ref? (or (eq? var-mode 'ref)
-                                     (eq? var-mode 'const-ref)))
-             (define arg-is-ref? (or (eq? arg-mode 'ref)
-                                     (eq? arg-mode 'const-ref)))
+             (match-define-values (var-ast _)
+               (compile-path ρ path))
+             (define var-is-ref? (set-member? (current-ref-vars) var-ast))
+             (define arg-is-ref? (set-member? ref-args (Arg-x arg)))
              (define-values (deref-var? take-var-addr?)
                (cond [(eq? var-is-ref? arg-is-ref?)
                       (values #f #f)]
@@ -365,38 +374,18 @@
                       (values #t #f)]
                      [(and (not var-is-ref?) arg-is-ref?)
                       (values #f #t)]))
-             (match-define-values (var-ast _)
-               (compile-path ρ path deref-var?))
-             (if take-var-addr?
-                 (list* "(&" var-ast ")")
-                 var-ast)]
+             (cond [deref-var?
+                    (list* "(*" var-ast ")")]
+                   [take-var-addr?
+                    (list* "(&" var-ast ")")]
+                   [else var-ast])]
             [(? Expr?) (compile-expr ρ var)]))
         ", "))
      (define x* (cify x))
      (define call-ast (compile-decl ty x* (list* fun-name "(" args-ast ")")))
-     (define body-ast (compile-stmt γ (hash-set ρ x (var-info x* 'copy)) bs))
+     (define body-ast (compile-stmt γ (hash-set ρ x x*) bs))
      (list* call-ast ind-nl
             body-ast)]))
-
-(define (Arg->var-mode arg)
-  (match-define (Arg _ ty mode) arg)
-  (cond [(or (eq? mode 'copy)
-             ;; We treat arrays as a "copy" type because arrays decay to
-             ;; pointers in C. Even though we don't want to actually copy the
-             ;; array, we mark it as a "copy" type because we don't want to
-             ;; dereference the array before indexing it, nor to take its address
-             ;; before passing it as a function.
-             (ArrT? ty)
-             ;; Read-only Int and Flo types are treated as copies because it's
-             ;; faster than passing them by reference.
-             (and (eq? mode 'read-only)
-                  (or (IntT? ty) (FloT? ty))))
-         'copy]
-        ;; Records and unions are passed by reference, even when they are
-        ;; not marked as pass-by-copy arguments.
-        [(or (eq? mode 'ref) (RecT? ty) (UniT? ty))
-         'ref]
-        [(eq? mode 'read-only) 'const-ref]))
 
 ;; Σ is a renaming environment for public functions
 ;; ρ is a renaming environment for global variables
@@ -406,25 +395,30 @@
     [(IntFun as ret-x ret-ty ret-lab body)
      (parameterize ([current-fun f])
        (define fun-name (hash-ref (current-Σ) f))
-       (define ρ* (for/fold ([out ρ])
-                            ([arg (in-list as)])
-                    (match-define (Arg x ty mode) arg)
-                    (define var-mode (Arg->var-mode arg))
-                    (hash-set out x (var-info (cify x) var-mode))))
-       (define args-ast (add-between
-                         (for/list ([arg (in-list as)])
-                           (match-define (Arg x ty _) arg)
-                           (match-define (var-info x* mode) (hash-ref ρ* x))
-                           (list* (compile-type ty mode) " " x*))
-                         ", "))
+       (define-values (ρ* ref-args)
+         (for/fold ([ρ* ρ] [ref-args (set)])
+                   ([a (in-list as)])
+           (match-define (Arg x ty mode) a)
+           (define x* (cify x))
+           (values (hash-set ρ* x x*)
+                   (cond [(and (or (IntT? ty) (FloT? ty)) (eq? mode 'ref))
+                          (set-add ref-args x*)]
+                         [else ref-args]))))
        (define ret-x* (cify ret-x))
-       (define ret-x-info (var-info ret-x* 'copy))
        (define ret-lab* (cify ret-lab))
        (define γ (hasheq ret-lab ret-lab*))
-       (parameterize ([current-ret-info (ret-info ret-x* ret-lab*)])
-         (list* (compile-type ret-ty) " " fun-name "(" args-ast "){" ind++ ind-nl
+       (parameterize ([current-ret-info (ret-info ret-x* ret-lab*)]
+                      [current-ref-vars ref-args])
+         (define args-ast
+           (add-between
+            (for/list ([a (in-list as)])
+              (match-define (Arg x ty _) a)
+              (define x* (hash-ref ρ* x))
+              (list* (compile-type/ref ty x*) " " (hash-ref ρ* x)))
+            ", "))
+         (list* (compile-type/ref ret-ty ret-x*) " " fun-name "(" args-ast "){" ind++ ind-nl
                 (compile-decl ret-ty ret-x*) ind-nl
-                (compile-stmt γ (hash-set ρ* ret-x ret-x-info) body) ind-nl
+                (compile-stmt γ (hash-set ρ* ret-x ret-x*) body) ind-nl
                 ind-- ind-nl "}")))]))
 
 (define (compile-program prog)
@@ -432,7 +426,7 @@
   ;; XXX Need to construct immutable ρ from given value?
   (define ρ (make-immutable-hash
              (for/list ([(priv pub) (in-hash private->public)])
-               (cons priv (var-info pub 'copy)))))
+               (cons priv pub))))
   (define Σ (make-hash (for/list ([(x f) (in-hash n->f)])
                          (cons (unpack-MetaFun f) x))))
   (define pub-funs (list->set (hash-keys Σ)))
