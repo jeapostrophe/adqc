@@ -14,7 +14,11 @@
     [(? FloT?) (Flo-val v)]
     [(RecT f->ty _ c-order)
      (for/list ([f (in-list c-order)])
-       (raw-value (hash-ref f->ty f) (unbox (hash-ref v f))))]))
+       (raw-value (hash-ref f->ty f) (unbox (hash-ref v f))))]
+    [(ArrT _ ety)
+     (for/vector ([v* (in-vector v)])
+       (raw-value ety (unbox v*)))]
+    ))
 
 (define (val->type v)
   (match v
@@ -318,6 +322,14 @@
               {y <- (iadd y (my-array @ (U32 2)))}
               y)
        (S32 5))
+   ;; ABI for array arguments
+   (TProg (define-fun (foo [arr : (array 3 S64)]) : S64
+            (define a : S64 := (arr @ (U32 0)))
+            (define b : S64 := (arr @ (U32 1)))
+            (define c : S64 := (arr @ (U32 2)))
+            (iadd a (iadd b c)))
+          #:tests ["foo" (array (S64 2) (S64 3) (S64 4)) => (S64 9)])
+   ;; Callee takes an array as an argument, assigns to it
    (TProg (define-fun (bar [arr : (array 3 S64)]) : S64
             ((arr @ (U32 0)) <- (S64 3))
             (S64 0))
@@ -332,6 +344,7 @@
             (define a : S64 := bar <- n)
             a)
           #:tests ["foo" (S64 5) => (S64 6)])
+   ;; Callee takes an integer argument by reference, assigns to it
    (TProg (define-fun (bar [#:ref m : S64]) : S64
             (set! m (iadd m (S64 1)))
             (void))

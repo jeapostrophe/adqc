@@ -28,7 +28,7 @@
        [32 _float]
        [64 _double])]
     [(ArrT dim ety)
-     (_array (ty->ctype ety) dim)]
+     (_array/vector (ty->ctype ety) dim)]
     [(RecT f->ty _ c-order)
      (apply _list-struct (for/list ([f (in-list c-order)])
                            (ty->ctype (hash-ref f->ty f))))]
