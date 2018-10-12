@@ -15,8 +15,8 @@
     [(RecT f->ty _ c-order)
      (for/list ([f (in-list c-order)])
        (raw-value (hash-ref f->ty f) (unbox (hash-ref v f))))]
-    [(ArrT _ ety)
-     (for/vector #:length (vector-length v) ([v* (in-vector v)])
+    [(ArrT dim ety)
+     (for/vector #:length dim ([v* (in-vector v)])
        (raw-value ety (unbox v*)))]
     ))
 
