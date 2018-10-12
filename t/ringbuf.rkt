@@ -3,10 +3,15 @@
                      syntax/parse)
          adqc)
 
-;; XXX The following things should be compile-time parameters
-;; * The size of buf (right now hard coded at 10)
-;; * The type contained in buf (right now hard coded as S32)
+(define (specify-ringbuf max-count ty)
+  (define ringbuf_t (T (record buf (array #,max-count #,ty)
+                               count U32
+                               spaces U32
+                               inptr U32
+                               outptr U32)))
+  ringbuf_t)
 
+#|
 (define ringbuf_t (T (record buf (array 10 S32)
                              count U32
                              spaces U32
@@ -84,4 +89,4 @@
                          ((rb -> count) <- (isub (rb -> count) (U32 1)))
                          ((rb -> spaces) <- (iadd (rb -> spaces) (U32 1)))
                          v)))))
-         (values ringbuf_t prog)))]))
+         (values ringbuf_t prog)))]))|#
