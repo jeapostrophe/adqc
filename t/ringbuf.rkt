@@ -33,6 +33,10 @@
   (define ringbuf-pop
     (F ([rb : #,ringbuf_t]) : #,ty
        (if (ieq (rb -> count) (U32 0))
+           ;; XXX This actually is broken - how can we return -1 if the return
+           ;; type is user-specified? Eventually, we'll probably want to
+           ;; support either multiple return values, or some higher-kinded type
+           ;; like Option or Maybe.
            (S32 -1)
            (begin
              (define buf : (array 10 S32) := (rb -> buf))
