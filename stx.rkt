@@ -43,7 +43,7 @@
     (syntax-parse stx
       #:literals (unsyntax)
       ;; XXX should array, record, and union be literals?
-      [(_ ((~datum array) dim:nat elem))
+      [(_ ((~datum array) dim elem))
        (syntax/loc stx (ArrT dim (T elem)))]
       [(_ ((~datum record) (~seq f:id ft) ...))
        ;; XXX syntax for choosing C stuff
