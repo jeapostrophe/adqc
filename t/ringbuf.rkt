@@ -31,20 +31,18 @@
              ((rb -> count) <- (iadd (rb -> count) (U32 1)))
              (S32 0)))))
   (define ringbuf-pop
-    (F ([rb : #,ringbuf_t]) : #,ty
+    ;; XXX It would be nice to have syntax that made returning values
+    ;; through reference arguments more ergonomic.
+    (F ([rb : #,ringbuf_t] [#:ref out : #,ty]) : S32
        (if (ieq (rb -> count) (U32 0))
-           ;; XXX This actually is broken - how can we return -1 if the return
-           ;; type is user-specified? Eventually, we'll probably want to
-           ;; support either multiple return values, or some higher-kinded type
-           ;; like Option or Maybe.
            (S32 -1)
            (begin
              (define buf : (array 10 S32) := (rb -> buf))
-             (define v : #,ty := (buf @ (rb -> outptr)))
+             (out <- (buf @ (rb -> outptr)))
              ((rb -> outptr) <- (iadd (rb -> outptr) (U32 1)))
              ((rb -> outptr) <- (iurem (rb -> outptr) (U32 10)))
              ((rb -> count) <- (isub (rb -> count) (U32 1)))
-             v))))
+             (S32 0)))))
   (ringbuf-spec ringbuf_t make-ringbuf ringbuf-push ringbuf-pop))
 
 (provide
