@@ -521,6 +521,19 @@
       [(_ #:maybe x:id)
        (syntax/loc stx (include-fun #:maybe (symbol->string 'x) x))])))
 
+(define-syntax (include-ty stx)
+  (with-disappeared-uses
+    (syntax-parse stx
+      [(_ #:maybe n:expr ty:expr)
+       (if (syntax-parameter-value #'current-Prog)
+           (syntax/loc stx
+             (hash-set! (Program-name->ty current-Prog) n ty))
+           #'(void))]
+      [(_ n:expr ty:expr)
+       #:fail-unless (syntax-parameter-value #'current-Prog)
+       "Cannot include type outside of Prog"
+       (syntax/loc stx (include-ty #:maybe n ty))])))
+
 (define-syntax (define-fun stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -588,7 +601,7 @@
          while assert! return S
          define-S-free-syntax define-S-expander
          F
-         define-fun include-fun define-extern-fun define-global
+         define-fun include-fun include-ty define-extern-fun define-global
          Prog)
 
 ;; XXX Array Slice
