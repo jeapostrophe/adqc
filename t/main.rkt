@@ -352,6 +352,13 @@
             (define a : S64 := bar <- n)
             n)
           #:tests ["foo" (S64 5) => (S64 6)])
+   ;; Private function
+   (let ([c-add1 (F ([n : S32]) : S32 (iadd n (S32 1)))])
+     (TProg (define-fun (foo [x : S32]) : S32
+              (define r : S32 := c-add1 <- x)
+              r)
+            #:tests ["foo" (S32 5) => (S32 6)]))
+   ;; Structs
    (let ([Coord (T (record x S64 y S64))])
      (TS (begin (define c : #,Coord := (record x (S64 5) y (S64 4)))
                 (c -> x))
