@@ -430,7 +430,7 @@
                 ind-- ind-nl "}")))]))
 
 (define (compile-program prog)
-  (match-define (Program gs private->public n->f) prog)
+  (match-define (Program gs private->public n->ty n->f) prog)
   ;; XXX Need to construct immutable ρ from given value?
   (define ρ (make-immutable-hash
              (for/list ([(priv pub) (in-hash private->public)])

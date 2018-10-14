@@ -579,7 +579,7 @@
     (syntax-parse stx
       [(_ pf ...)
        (syntax/loc stx
-         (let ([the-prog (Program (make-hasheq) (make-hasheq) (make-hash))])
+         (let ([the-prog (Program (make-hasheq) (make-hasheq) (make-hash) (make-hash))])
            (syntax-parameterize ([current-Prog (make-rename-transformer #'the-prog)])
              pf ...)
            the-prog))])))

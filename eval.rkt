@@ -271,7 +271,7 @@
      (unbox ret-x-b)]))
 
 (define (eval-program p n is)
-  (match-define (Program gs _ n->f) p)
+  (match-define (Program gs _ _ n->f) p)
   (define Σ
     (for/hasheq ([(x g) (in-hash gs)])
       (match-define (Global ty xi) g)

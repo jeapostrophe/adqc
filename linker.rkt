@@ -43,7 +43,7 @@
     (display (port->string (open-input-file c-path)) (current-error-port))
     (error 'link-program "call to compile-library failed (see stderr)"))
   (define lib (ffi-lib bin-path))
-  (match-define (Program _ _ name->fun) p)
+  (match-define (Program _ _ _ name->fun) p)
   (define type-map
     (for/hash ([(name fun) (in-hash name->fun)])
       (match-define (IntFun args _ ret-ty _ _) (unpack-MetaFun fun))
