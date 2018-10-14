@@ -435,19 +435,26 @@
   (define ρ (make-immutable-hash
              (for/list ([(priv pub) (in-hash private->public)])
                (cons priv pub))))
+  ;; Setup Σ and fun-queue
   (define Σ (make-hash (for/list ([(x f) (in-hash n->f)])
                          (cons (unpack-MetaFun f) x))))
   (define pub-funs (list->set (hash-keys Σ)))
   (define fun-queue (make-queue))
   (for ([f (in-hash-keys Σ)])
     (enqueue! fun-queue f))
+  ;; Setup type-table and type-queue
+  (define type-table (make-hash (for/list ([(n ty) (in-hash n->ty)])
+                                  (cons ty n))))
+  (define type-queue (make-queue))
+  (for ([ty (in-hash-keys type-table)])
+    (enqueue! type-queue ty))
   (with-cify-counter
     (parameterize ([current-fun-queue fun-queue]
                    [current-fun-graph (unweighted-graph/directed empty)]
                    [current-Σ Σ]
-                   [current-type-queue (make-queue)]
+                   [current-type-queue type-queue]
                    [current-type-graph (unweighted-graph/directed empty)]
-                   [current-type-table (make-hash)])
+                   [current-type-table type-table])
       ;; Globals
       (define globals-ast (for/list ([(x g) (in-hash gs)])
                             (match-define (Global ty xi) g)
