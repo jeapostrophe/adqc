@@ -32,7 +32,7 @@
   (parameterize ([current-invert? #t]) . b))
 
 (define ((print-src! lp) _)
-  (match-define (linked-program _ _ src-path) lp)
+  (define src-path (linked-program-src-path lp))
   (define src (port->string (open-input-file src-path)))
   (display src (current-error-port)))
 
@@ -323,6 +323,8 @@
               y)
        (S32 5))
    ;; ABI for array arguments
+   ;; XXX Can't trivially convert vector -> array for ABI right now.
+   #;
    (TProg (define-fun (foo [arr : (array 3 S64)]) : S64
             (define a : S64 := (arr @ (U32 0)))
             (define b : S64 := (arr @ (U32 1)))
