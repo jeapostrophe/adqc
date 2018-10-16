@@ -3,9 +3,11 @@
          racket/file
          racket/match
          racket/port
+         syntax/parse/define
          (except-in ffi/unsafe ->)
          "ast.rkt"
-         "compile.rkt")
+         "compile.rkt"
+         "stx.rkt")
 
 (struct linked-program (lib type-map src-path alloc) #:transparent)
 
@@ -37,8 +39,16 @@
        (define tag (gensym 'tag))
        (hash-set! tags ty tag)
        tag)
-     (define tag (hash-ref tags ty new-type!))
-     (_cpointer tag)]))
+     (_cpointer (hash-ref tags ty new-type!))]))
+
+(define (Arg->ctype tags arg)
+  (match-define (Arg _ ty mode) arg)
+  (match ty
+    [(or (? IntT?) (? FloT?))
+     (if (eq? mode 'ref)
+         (_cpointer (hash-ref tags ty))
+         (Int/Flo->ctype ty))]
+    [_ (ty->ctype tags ty)]))
 
 (define (ty->untagged-ctype ty)
   (match ty
@@ -57,6 +67,14 @@
     [(UniT m->ty _)
      (apply make-union-type
             (map ty->untagged-ctype (hash-values m->ty)))]))
+
+(define-simple-macro (mutable-hash (~seq k v) ...)
+  (make-hash (list (cons k v) ...)))
+
+(define (default-tags)
+  (mutable-hash (T S8) 'sint8 (T S16) 'sint16 (T S32) 'sint32 (T S64) 'sint64
+                (T U8) 'uint8 (T U16) 'uint16 (T U32) 'uint32 (T U64) 'uint64
+                (T F32) 'float (T F64) 'double))
        
 (define (link-program p)
   (define c-path (make-temporary-file "adqc~a.c"))
@@ -67,12 +85,12 @@
     (error 'link-program "call to compile-library failed (see stderr)"))
   (define lib (ffi-lib bin-path))
   (define name->fun (Program-name->fun p))
-  (define tags (make-hash))
+  (define tags (default-tags))
   (define type-map
     (for/hash ([(name fun) (in-hash name->fun)])
       (match-define (IntFun args _ ret-ty _ _) (unpack-MetaFun fun))
-      (define c-args (for/list ([ty (in-list (map Arg-ty args))])
-                       (ty->ctype tags ty)))
+      (define c-args (for/list ([a (in-list args)])
+                       (Arg->ctype tags a)))
       (define c-ret (ty->ctype tags ret-ty))
       (values name (_cprocedure c-args c-ret))))
   (define (alloc ty)
