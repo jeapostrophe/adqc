@@ -9,7 +9,7 @@
          "compile.rkt"
          "stx.rkt")
 
-(struct linked-program (lib type-map src-path tags) #:transparent)
+(struct linked-program (lib type-map src-path ty->tag tag->ty) #:transparent)
 (struct typed-pointer (ty ptr) #:transparent)
 
 (define (Int/Flo->ctype ty)
@@ -31,25 +31,26 @@
        [32 _float]
        [64 _double])]))
 
-(define (ty->ctype tags ty)
+(define (ty->ctype ty->tag tag->ty ty)
   (match ty
     [(or (? IntT?) (? FloT?))
      (Int/Flo->ctype ty)]
     [(or (? ArrT?) (? RecT?) (? UniT?))
      (define (new-type!)
        (define tag (gensym 'tag))
-       (hash-set! tags ty tag)
+       (hash-set! ty->tag ty tag)
+       (hash-set! tag->ty tag ty)
        tag)
-     (_cpointer (hash-ref tags ty new-type!))]))
+     (_cpointer (hash-ref ty->tag ty new-type!))]))
 
-(define (Arg->ctype tags arg)
+(define (Arg->ctype ty->tag tag->ty arg)
   (match-define (Arg _ ty mode) arg)
   (match ty
     [(or (? IntT?) (? FloT?))
      (if (eq? mode 'ref)
-         (_cpointer (hash-ref tags ty))
+         (_cpointer (hash-ref ty->tag ty))
          (Int/Flo->ctype ty))]
-    [_ (ty->ctype tags ty)]))
+    [_ (ty->ctype ty->tag tag->ty ty)]))
 
 (define (ty->untagged-ctype ty)
   (match ty
@@ -69,25 +70,25 @@
      (apply make-union-type
             (map ty->untagged-ctype (hash-values m->ty)))]))
 
-(define (ty->read-ctype tags ty)
+(define (ty->read-ctype ty->tag tag->ty ty)
   (match ty
     [(or (? IntT?) (? FloT?))
      (Int/Flo->ctype ty)]
     [(ArrT dim ety)
-     (_array/vector (ty->ctype tags ety) dim)]
+     (_array/vector (ty->ctype ty->tag tag->ty ety) dim)]
     [(RecT f->ty _ c-order)
      (apply _list-struct (for/list ([f (in-list c-order)])
-                           (ty->ctype tags (hash-ref f->ty f))))]
+                           (ty->ctype ty->tag tag->ty (hash-ref f->ty f))))]
     ;; XXX Read for unions?
     ))
 
-(define-simple-macro (mutable-hash (~seq k v) ...)
-  (make-hash (list (cons k v) ...)))
-
-(define (default-tags)
-  (mutable-hash (T S8) 'sint8 (T S16) 'sint16 (T S32) 'sint32 (T S64) 'sint64
-                (T U8) 'uint8 (T U16) 'uint16 (T U32) 'uint32 (T U64) 'uint64
-                (T F32) 'float (T F64) 'double))
+(define (default-tag-tables)
+  (define-simple-macro (make-tag-tables (~seq k v) ...)
+    (values (make-hash (list (cons k v) ...))
+            (make-hasheq (list (cons v k) ...))))
+  (make-tag-tables (T S8) 'sint8 (T S16) 'sint16 (T S32) 'sint32 (T S64) 'sint64
+                   (T U8) 'uint8 (T U16) 'uint16 (T U32) 'uint32 (T U64) 'uint64
+                   (T F32) 'float (T F64) 'double))
        
 (define (link-program p)
   (define c-path (make-temporary-file "adqc~a.c"))
@@ -98,18 +99,18 @@
     (error 'link-program "call to compile-library failed (see stderr)"))
   (define lib (ffi-lib bin-path))
   (define name->fun (Program-name->fun p))
-  (define tags (default-tags))
+  (define-values (ty->tag tag->ty) (default-tag-tables))
   (define type-map
     (for/hash ([(name fun) (in-hash name->fun)])
       (match-define (IntFun args _ ret-ty _ _) (unpack-MetaFun fun))
       (define c-args (for/list ([a (in-list args)])
-                       (Arg->ctype tags a)))
-      (define c-ret (ty->ctype tags ret-ty))
+                       (Arg->ctype ty->tag tag->ty a)))
+      (define c-ret (ty->ctype ty->tag tag->ty ret-ty))
       (values name (_cprocedure c-args c-ret))))
-  (linked-program lib type-map c-path tags))
+  (linked-program lib type-map c-path ty->tag tag->ty))
 
 (define (run-linked-program lp n args)
-  (match-define (linked-program lib type-map _ _) lp)
+  (match-define (linked-program lib type-map _ _ _) lp)
   (define fun (get-ffi-obj n lib (hash-ref type-map n)))
   (define args* (for/list ([a (in-list args)])
                   (cond [(typed-pointer? a)
@@ -119,16 +120,32 @@
 
 (define (linked-program-alloc lp ty)
   (define p (malloc (ty->alloc-ctype ty)))
-  (cpointer-push-tag! p (hash-ref (linked-program-tags lp) ty))
+  (cpointer-push-tag! p (hash-ref (linked-program-ty->tag lp) ty))
   (typed-pointer ty p))
 
 (define (linked-program-read lp maybe-tp)
   (match maybe-tp
     [(typed-pointer ty ptr)
-     ;; If result of ref is a list or vector, we need to transform
-     ;; the tagged pointers within into `typed-pointer`s by referencing
-     ;; `tag->ty` (which is the inverse of `tags` and does not exist yet).
-     (ptr-ref ptr (ty->read-ctype (linked-program-tags lp) ty))]
+     (define ty->tag (linked-program-ty->tag lp))
+     (define tag->ty (linked-program-tag->ty lp))
+     (define r (ptr-ref ptr (ty->read-ctype ty->tag tag->ty ty)))
+     (match ty
+       [(ArrT dim ety)
+        ;; XXX Maybe use _array instead of _array/vector to avoid extra copy.
+        (for/vector #:length dim ([e (in-vector r)])
+          (cond [(or (ArrT? ety) (RecT? ety) (UniT? ety))
+                 (typed-pointer (ty->read-ctype ty->tag tag->ty ety) e)]
+                [else e]))]
+       [(RecT f->ty _ c-order)
+        ;; XXX Maybe use make-cstruct-type instead of _list-struct to avoid extra copy.
+        (for/list ([e (in-list r)]
+                   [f (in-list c-order)])
+          (define ety (hash-ref f->ty f))
+          (cond [(or (ArrT? ety) (RecT? ety) (UniT? ety)) 
+                 (typed-pointer (ty->read-ctype ty->tag tag->ty ety) e)]
+                [else e]))]
+       ;; XXX UniT?
+       [_ r])]
     [_ maybe-tp]))
 
 (provide
@@ -136,7 +153,8 @@
   [struct linked-program ([lib ffi-lib?]
                           [type-map (hash/c c-identifier-string? ctype?)]
                           [src-path path?]
-                          [tags (hash/c Type? symbol?)])]
+                          [ty->tag (hash/c Type? symbol?)]
+                          [tag->ty (hash/c symbol? Type?)])]
   [struct typed-pointer ([ty Type?] [ptr cpointer?])]
   [link-program (-> Program? linked-program?)]
   [run-linked-program (-> linked-program? c-identifier-string? list? any/c)]

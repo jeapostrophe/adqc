@@ -18,6 +18,7 @@
     [(ArrT dim ety)
      (for/vector #:length dim ([v* (in-vector v)])
        (raw-value ety (unbox v*)))]
+    ;; XXX Structs and Unions.
     ))
 
 (define (val->type v)
@@ -53,6 +54,8 @@
     (chk #:t (set! the-cp (link-program the-p))))
   (when the-cp
     (with-chk ([chk-inform! (print-src! the-cp)])
+      ;; XXX Once linked-program-write exists, we can automatically
+      ;; convert arguments into the data layout expected by linked-program-run.
       (define comp-args (for/list ([a (in-list args)]
                                    [ty (in-list arg-tys)])
                           (raw-value ty a)))
@@ -60,12 +63,11 @@
                 (set! comp-ans (run-linked-program the-cp n comp-args))))
       (when comp-ans
         (define comp-expect-ans (raw-value ans-ty eval-ans))
-        ;; XXX Use linked-program-read to unbox value which could
-        ;; possibly be non-primitive.
+        (define comp-ans* (linked-program-read the-cp comp-ans))
         (if (current-invert?)
-            (chk #:! (#:src stx comp-ans)
+            (chk #:! (#:src stx comp-ans*)
                      (#:src stx comp-expect-ans))
-            (chk (#:src stx comp-ans)
+            (chk (#:src stx comp-ans*)
                  (#:src stx comp-expect-ans)))))))
 
 (define-syntax (TProg1 stx)
