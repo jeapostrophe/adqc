@@ -109,7 +109,7 @@
       (values name (_cprocedure c-args c-ret))))
   (linked-program lib type-map c-path ty->tag tag->ty))
 
-(define (run-linked-program lp n args)
+(define (linked-program-run lp n args)
   (match-define (linked-program lib type-map _ _ _) lp)
   (define fun (get-ffi-obj n lib (hash-ref type-map n)))
   (define args* (for/list ([a (in-list args)])
@@ -157,6 +157,6 @@
                           [tag->ty (hash/c symbol? Type?)])]
   [struct typed-pointer ([ty Type?] [ptr cpointer?])]
   [link-program (-> Program? linked-program?)]
-  [run-linked-program (-> linked-program? c-identifier-string? list? any/c)]
+  [linked-program-run (-> linked-program? c-identifier-string? list? any/c)]
   [linked-program-alloc (-> linked-program? Type? typed-pointer?)]
   [linked-program-read (-> linked-program? any/c any/c)]))

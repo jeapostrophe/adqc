@@ -63,9 +63,9 @@
   (define rb (lp-alloc ringbuf_t))
   (define i (lp-alloc (T S32)))
   (chk*
-   (chk (run-linked-program lp "make_ringbuf" (list rb buf)) 0)
-   (chk (run-linked-program lp "ringbuf_push" (list rb 5)) 0)
-   (chk (run-linked-program lp "ringbuf_pop" (list rb i)) 0)
+   (chk (linked-program-run lp "make_ringbuf" (list rb buf)) 0)
+   (chk (linked-program-run lp "ringbuf_push" (list rb 5)) 0)
+   (chk (linked-program-run lp "ringbuf_pop" (list rb i)) 0)
    (chk (linked-program-read lp i) 5)
-   (chk (run-linked-program lp "ringbuf_pop" (list rb i)) -1)
+   (chk (linked-program-run lp "ringbuf_pop" (list rb i)) -1)
   ))

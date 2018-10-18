@@ -60,7 +60,7 @@
                                    [ty (in-list arg-tys)])
                           (raw-value ty a)))
       (chk #:t (#:src stx
-                (set! comp-ans (run-linked-program the-cp n comp-args))))
+                (set! comp-ans (linked-program-run the-cp n comp-args))))
       (when comp-ans
         (define comp-expect-ans (raw-value ans-ty eval-ans))
         (define comp-ans* (linked-program-read the-cp comp-ans))
