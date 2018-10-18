@@ -116,6 +116,7 @@
                   (cond [(typed-pointer? a)
                          (typed-pointer-ptr a)]
                         [else a])))
+  ;; XXX If return type is cpointer, marshal into typed-pointer.
   (apply fun args*))
 
 (define (linked-program-alloc lp ty)
