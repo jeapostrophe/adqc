@@ -60,6 +60,8 @@
                 (set! comp-ans (run-linked-program the-cp n comp-args))))
       (when comp-ans
         (define comp-expect-ans (raw-value ans-ty eval-ans))
+        ;; XXX Use linked-program-read to unbox value which could
+        ;; possibly be non-primitive.
         (if (current-invert?)
             (chk #:! (#:src stx comp-ans)
                      (#:src stx comp-expect-ans))

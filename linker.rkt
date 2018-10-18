@@ -9,7 +9,8 @@
          "compile.rkt"
          "stx.rkt")
 
-(struct linked-program (lib type-map src-path alloc) #:transparent)
+(struct linked-program (lib type-map src-path tags) #:transparent)
+(struct typed-pointer (ty ptr) #:transparent)
 
 (define (Int/Flo->ctype ty)
   (match ty
@@ -68,6 +69,18 @@
      (apply make-union-type
             (map ty->untagged-ctype (hash-values m->ty)))]))
 
+(define (ty->read-ctype tags ty)
+  (match ty
+    [(or (? IntT?) (? FloT?))
+     (Int/Flo->ctype ty)]
+    [(ArrT dim ety)
+     (_array/vector (ty->ctype tags ety) dim)]
+    [(RecT f->ty _ c-order)
+     (apply _list-struct (for/list ([f (in-list c-order)])
+                           (ty->ctype tags (hash-ref f->ty f))))]
+    ;; XXX Read for unions?
+    ))
+
 (define-simple-macro (mutable-hash (~seq k v) ...)
   (make-hash (list (cons k v) ...)))
 
@@ -93,22 +106,39 @@
                        (Arg->ctype tags a)))
       (define c-ret (ty->ctype tags ret-ty))
       (values name (_cprocedure c-args c-ret))))
-  (define (alloc ty)
-    (define p (malloc (ty->alloc-ctype ty)))
-    (cpointer-push-tag! p (hash-ref tags ty))
-    p)
-  (linked-program lib type-map c-path alloc))
+  (linked-program lib type-map c-path tags))
 
 (define (run-linked-program lp n args)
   (match-define (linked-program lib type-map _ _) lp)
   (define fun (get-ffi-obj n lib (hash-ref type-map n)))
-  (apply fun args))
+  (define args* (for/list ([a (in-list args)])
+                  (cond [(typed-pointer? a)
+                         (typed-pointer-ptr a)]
+                        [else a])))
+  (apply fun args*))
+
+(define (linked-program-alloc lp ty)
+  (define p (malloc (ty->alloc-ctype ty)))
+  (cpointer-push-tag! p (hash-ref (linked-program-tags lp) ty))
+  (typed-pointer ty p))
+
+(define (linked-program-read lp maybe-tp)
+  (match maybe-tp
+    [(typed-pointer ty ptr)
+     ;; If result of ref is a list or vector, we need to transform
+     ;; the tagged pointers within into `typed-pointer`s by referencing
+     ;; `tag->ty` (which is the inverse of `tags` and does not exist yet).
+     (ptr-ref ptr (ty->read-ctype (linked-program-tags lp) ty))]
+    [_ maybe-tp]))
 
 (provide
  (contract-out
   [struct linked-program ([lib ffi-lib?]
                           [type-map (hash/c c-identifier-string? ctype?)]
                           [src-path path?]
-                          [alloc (-> Type? cpointer?)])]
+                          [tags (hash/c Type? symbol?)])]
+  [struct typed-pointer ([ty Type?] [ptr cpointer?])]
   [link-program (-> Program? linked-program?)]
-  [run-linked-program (-> linked-program? c-identifier-string? list? any/c)]))
+  [run-linked-program (-> linked-program? c-identifier-string? list? any/c)]
+  [linked-program-alloc (-> linked-program? Type? typed-pointer?)]
+  [linked-program-read (-> linked-program? any/c any/c)]))

@@ -51,14 +51,14 @@
   [struct ringbuf-spec ([ty Type?] [make Fun?] [push Fun?] [pop Fun?])]))
 
 (module+ test
-  (require chk ffi/unsafe)
+  (require chk)
   (define spec (specify-ringbuf 10 (T S32)))
   (define ringbuf_t (ringbuf-spec-ty spec))
   (define p (Prog (include-fun "make_ringbuf" (ringbuf-spec-make spec))
                   (include-fun "ringbuf_push" (ringbuf-spec-push spec))
                   (include-fun "ringbuf_pop" (ringbuf-spec-pop spec))))
   (define lp (link-program p))
-  (define lp-alloc (linked-program-alloc lp))
+  (define (lp-alloc ty) (linked-program-alloc lp ty))
   (define buf (lp-alloc (T (array 10 S32))))
   (define rb (lp-alloc ringbuf_t))
   (define i (lp-alloc (T S32)))
@@ -66,9 +66,6 @@
    (chk (run-linked-program lp "make_ringbuf" (list rb buf)) 0)
    (chk (run-linked-program lp "ringbuf_push" (list rb 5)) 0)
    (chk (run-linked-program lp "ringbuf_pop" (list rb i)) 0)
-   ;; XXX Right now caller has to use ffi/unsafe to make sense of any
-   ;; pointer value returned by native code. Maybe we should provide
-   ;; a cleaner interface?
-   (chk (ptr-ref i _sint32) 5)
+   (chk (linked-program-read lp i) 5)
    (chk (run-linked-program lp "ringbuf_pop" (list rb i)) -1)
   ))
