@@ -9,7 +9,7 @@
          "compile.rkt"
          "stx.rkt")
 
-(struct linked-program (lib type-map src-path ty->tag tag->ty) #:transparent)
+(struct linked-program (lib type-map src-path ty->tag tag->ty ret-tys) #:transparent)
 (struct typed-pointer (ty ptr) #:transparent)
 
 (define (Int/Flo->ctype ty)
@@ -107,17 +107,21 @@
                        (Arg->ctype ty->tag tag->ty a)))
       (define c-ret (ty->ctype ty->tag tag->ty ret-ty))
       (values name (_cprocedure c-args c-ret))))
-  (linked-program lib type-map c-path ty->tag tag->ty))
+  (define ret-tys
+    (for/hash ([(name fun) (in-hash name->fun)])
+      (values name (IntFun-ret-ty (unpack-MetaFun fun)))))
+  (linked-program lib type-map c-path ty->tag tag->ty ret-tys))
 
 (define (linked-program-run lp n args)
-  (match-define (linked-program lib type-map _ _ _) lp)
+  (match-define (linked-program lib type-map _ _ _ ret-tys) lp)
   (define fun (get-ffi-obj n lib (hash-ref type-map n)))
-  (define args* (for/list ([a (in-list args)])
-                  (cond [(typed-pointer? a)
-                         (typed-pointer-ptr a)]
-                        [else a])))
-  ;; XXX If return type is cpointer, marshal into typed-pointer.
-  (apply fun args*))
+  (define r (apply fun (for/list ([a (in-list args)])
+                         (cond [(typed-pointer? a)
+                                (typed-pointer-ptr a)]
+                               [else a]))))
+  (cond [(cpointer? r)
+         (typed-pointer (hash-ref ret-tys n) r)]
+        [else r]))
 
 (define (linked-program-alloc lp ty)
   (define p (malloc (ty->alloc-ctype ty)))
@@ -155,7 +159,8 @@
                           [type-map (hash/c c-identifier-string? ctype?)]
                           [src-path path?]
                           [ty->tag (hash/c Type? symbol?)]
-                          [tag->ty (hash/c symbol? Type?)])]
+                          [tag->ty (hash/c symbol? Type?)]
+                          [ret-tys (hash/c c-identifier-string? Type?)])]
   [struct typed-pointer ([ty Type?] [ptr cpointer?])]
   [link-program (-> Program? linked-program?)]
   [linked-program-run (-> linked-program? c-identifier-string? list? any/c)]
