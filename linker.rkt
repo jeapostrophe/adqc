@@ -96,8 +96,11 @@
   (define bin-path (make-temporary-file "adqc~a"))
   (unless (compile-library p c-path bin-path)
     (newline (current-error-port))
-    (display (port->string (open-input-file c-path)) (current-error-port))
-    ;; XXX (unless given-c-path (delete-file c-path)) ??
+    (define in (open-input-file c-path))
+    (for ([ch (in-port read-char in)])
+      (display ch (current-error-port)))
+    (close-input-port in)
+    (unless given-c-path (delete-file c-path))
     (error 'link-program "call to compile-library failed (see stderr)"))
   (unless given-c-path (delete-file c-path))
   (define lib (ffi-lib bin-path))
