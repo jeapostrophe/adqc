@@ -9,7 +9,7 @@
          "compile.rkt"
          "stx.rkt")
 
-(struct linked-program (lib type-map src-path ty->tag tag->ty ret-tys) #:transparent)
+(struct linked-program (lib type-map ty->tag tag->ty ret-tys) #:transparent)
 (struct typed-pointer (ty ptr) #:transparent)
 
 (define (Int/Flo->ctype ty)
@@ -82,21 +82,24 @@
     ;; XXX Read for unions?
     ))
 
+(define-simple-macro (make-tag-tables (~seq k v) ...)
+  (values (make-hash (list (cons k v) ...))
+          (make-hasheq (list (cons v k) ...))))
+
 (define (default-tag-tables)
-  (define-simple-macro (make-tag-tables (~seq k v) ...)
-    (values (make-hash (list (cons k v) ...))
-            (make-hasheq (list (cons v k) ...))))
   (make-tag-tables (T S8) 'sint8 (T S16) 'sint16 (T S32) 'sint32 (T S64) 'sint64
                    (T U8) 'uint8 (T U16) 'uint16 (T U32) 'uint32 (T U64) 'uint64
                    (T F32) 'float (T F64) 'double))
        
-(define (link-program p)
-  (define c-path (make-temporary-file "adqc~a.c"))
+(define (link-program p [given-c-path #f])
+  (define c-path (or given-c-path (make-temporary-file "adqc~a.c")))
   (define bin-path (make-temporary-file "adqc~a"))
   (unless (compile-library p c-path bin-path)
     (newline (current-error-port))
     (display (port->string (open-input-file c-path)) (current-error-port))
+    ;; XXX (unless given-c-path (delete-file c-path)) ??
     (error 'link-program "call to compile-library failed (see stderr)"))
+  (unless given-c-path (delete-file c-path))
   (define lib (ffi-lib bin-path))
   (define name->fun (Program-name->fun p))
   (define-values (ty->tag tag->ty) (default-tag-tables))
@@ -110,10 +113,10 @@
   (define ret-tys
     (for/hash ([(name fun) (in-hash name->fun)])
       (values name (IntFun-ret-ty (unpack-MetaFun fun)))))
-  (linked-program lib type-map c-path ty->tag tag->ty ret-tys))
+  (linked-program lib type-map ty->tag tag->ty ret-tys))
 
 (define (linked-program-run lp n args)
-  (match-define (linked-program lib type-map _ _ _ ret-tys) lp)
+  (match-define (linked-program lib type-map _ _ ret-tys) lp)
   (define fun (get-ffi-obj n lib (hash-ref type-map n)))
   (define r (apply fun (for/list ([a (in-list args)])
                          (cond [(typed-pointer? a)
@@ -157,12 +160,11 @@
  (contract-out
   [struct linked-program ([lib ffi-lib?]
                           [type-map (hash/c c-identifier-string? ctype?)]
-                          [src-path path?]
                           [ty->tag (hash/c Type? symbol?)]
                           [tag->ty (hash/c symbol? Type?)]
                           [ret-tys (hash/c c-identifier-string? Type?)])]
   [struct typed-pointer ([ty Type?] [ptr cpointer?])]
-  [link-program (-> Program? linked-program?)]
+  [link-program (->* (Program?) ((or/c path? #f)) linked-program?)]
   [linked-program-run (-> linked-program? c-identifier-string? list? any/c)]
   [linked-program-alloc (-> linked-program? Type? typed-pointer?)]
   [linked-program-read (-> linked-program? any/c any/c)]))
