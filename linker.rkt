@@ -75,7 +75,7 @@
     [(or (? IntT?) (? FloT?))
      (Int/Flo->ctype ty)]
     [(ArrT dim ety)
-     (_array/vector (ty->ctype ty->tag tag->ty ety) dim)]
+     (_array (ty->ctype ty->tag tag->ty ety) dim)]
     [(RecT f->ty _ c-order)
      (apply _list-struct (for/list ([f (in-list c-order)])
                            (ty->ctype ty->tag tag->ty (hash-ref f->ty f))))]
@@ -142,8 +142,7 @@
      (define r (ptr-ref ptr (ty->read-ctype ty->tag tag->ty ty)))
      (match ty
        [(ArrT dim ety)
-        ;; XXX Maybe use _array instead of _array/vector to avoid extra copy.
-        (for/vector #:length dim ([e (in-vector r)])
+        (for/vector #:length dim ([e (in-array r)])
           (cond [(or (ArrT? ety) (RecT? ety) (UniT? ety))
                  (typed-pointer (ty->read-ctype ty->tag tag->ty ety) e)]
                 [else e]))]
