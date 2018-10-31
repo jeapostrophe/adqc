@@ -144,19 +144,39 @@
        [(ArrT dim ety)
         (for/vector #:length dim ([e (in-array r)])
           (cond [(or (ArrT? ety) (RecT? ety) (UniT? ety))
-                 (typed-pointer (ty->read-ctype ty->tag tag->ty ety) e)]
+                 (typed-pointer ety e)]
                 [else e]))]
        [(RecT f->ty _ c-order)
         ;; XXX Maybe use make-cstruct-type instead of _list-struct to avoid extra copy.
-        (for/list ([e (in-list r)]
-                   [f (in-list c-order)])
+        (for/list ([e (in-list r)] [f (in-list c-order)])
           (define ety (hash-ref f->ty f))
           (cond [(or (ArrT? ety) (RecT? ety) (UniT? ety)) 
-                 (typed-pointer (ty->read-ctype ty->tag tag->ty ety) e)]
+                 (typed-pointer ety e)]
                 [else e]))]
        ;; XXX UniT?
        [_ r])]
     [_ maybe-tp]))
+
+(define (linked-program-write lp tp val)
+  (match-define (typed-pointer ty ptr) tp)
+  (define ty->tag (linked-program-ty->tag lp))
+  (define tag->ty (linked-program-tag->ty lp))
+  (match ty
+    [(ArrT dim ety)
+     (define a (ptr-ref ptr (ty->read-ctype ty->tag tag->ty ty)))
+     (for ([e (in-vector val)] [i (in-naturals)])
+       (array-set! a i (cond [(or (ArrT? ety) (RecT? ety) (UniT? ety))
+                              (typed-pointer-ptr e)]
+                             [else e])))]
+    [(RecT f->ty _ c-order)
+     ;; XXX Maybe use make-cstruct-type instead of _list-struct to avoid extra copy.
+     (define val* (for/list ([e (in-list val)] [f (in-list c-order)])
+                    (define ety (hash-ref f->ty f))
+                    (cond [(or (ArrT? ety) (RecT? ety) (UniT? ety))
+                           (typed-pointer-ptr e)]
+                          [else e])))
+     (ptr-set! ptr (ty->read-ctype ty->tag tag->ty ty) val*)]
+    [_ (ptr-set! ptr (ty->read-ctype ty->tag tag->ty ty) val)]))
 
 (provide
  (contract-out
@@ -169,4 +189,6 @@
   [link-program (->* (Program?) ((or/c path? #f)) linked-program?)]
   [linked-program-run (-> linked-program? c-identifier-string? list? any/c)]
   [linked-program-alloc (-> linked-program? Type? typed-pointer?)]
-  [linked-program-read (-> linked-program? any/c any/c)]))
+  ;; XXX Be more specific than any/c for argument type?
+  [linked-program-read (-> linked-program? any/c any/c)]
+  [linked-program-write (-> linked-program? typed-pointer? any/c void?)]))
