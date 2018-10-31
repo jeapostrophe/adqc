@@ -5,8 +5,7 @@
          adqc
          chk
          racket/file
-         racket/match
-         racket/port)
+         racket/match)
 
 ;; This assumes the same representation used by the evaluator for data types.
 (define (raw-value ty v)

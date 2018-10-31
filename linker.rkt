@@ -2,7 +2,6 @@
 (require racket/contract/base
          racket/file
          racket/match
-         racket/port
          syntax/parse/define
          (except-in ffi/unsafe ->)
          "ast.rkt"
@@ -186,9 +185,8 @@
                           [tag->ty (hash/c symbol? Type?)]
                           [ret-tys (hash/c c-identifier-string? Type?)])]
   [struct typed-pointer ([ty Type?] [ptr cpointer?])]
-  [link-program (->* (Program?) ((or/c path? #f)) linked-program?)]
+  [link-program (->* [Program?] [(or/c path? #f)] linked-program?)]
   [linked-program-run (-> linked-program? c-identifier-string? list? any/c)]
   [linked-program-alloc (-> linked-program? Type? typed-pointer?)]
-  ;; XXX Be more specific than any/c for argument type?
   [linked-program-read (-> linked-program? any/c any/c)]
   [linked-program-write (-> linked-program? typed-pointer? any/c void?)]))
