@@ -3,14 +3,11 @@
          racket/match
          "ast.rkt")
 
-;; XXX How to use m in MetaE? Is a cons pair okay (this would require
-;;     expressions with multiple types of meta-data to have multiple
-;;     layers of nested MetaE expressions) or is it better to use
-;;     something like a hash table?
+(struct type-info (ty) #:transparent)
 
 (define (expr-ty e)
   (match e
-    [(MetaE (cons 'type ty) _) ty]
+    [(MetaE (type-info ty) _) ty]
     [(MetaE _ e) (expr-ty e)]
     [(Int signed? bits _) (IntT signed? bits)]
     [(Flo bits _) (FloT bits)]
@@ -53,28 +50,28 @@
 
 ;; Typed expressions constructors
 (define (Int^ signed? bits val)
-  (MetaE (cons 'type (IntT signed? bits))
+  (MetaE (type-info (IntT signed? bits))
          (Int signed? bits val)))
 (define (Flo^ bits val)
-  (MetaE (cons 'type (FloT bits))
+  (MetaE (type-info (FloT bits))
          (Flo bits val)))
 (define (Cast^ ty e)
-  (MetaE (cons 'type ty)
+  (MetaE (type-info ty)
          (Cast ty e)))
 (define (Read^ p)
-  (MetaE (cons 'type (path-ty p))
+  (MetaE (type-info (path-ty p))
          (Read p)))
 (define (BinOp^ op L R)
   (define bin-op (BinOp op L R))
-  (MetaE (cons 'type (expr-ty bin-op))
+  (MetaE (type-info (expr-ty bin-op))
          bin-op))
 (define (LetE^ x ty xe be)
   (define let-e (LetE x ty xe be))
-  (MetaE (cons 'type (expr-ty let-e))
+  (MetaE (type-info (expr-ty let-e))
          let-e))
 (define (IfE^ ce te fe)
   (define if-e (IfE ce te fe))
-  (MetaE (cons 'type (expr-ty if-e))
+  (MetaE (type-info (expr-ty if-e))
          if-e))
 
 ;; XXX Should Stmts have types? It's hard to imagine what the type of certain
@@ -83,10 +80,10 @@
 
 ;; Typed function constructors
 (define (IntFun^ args ret-x ret-ty ret-lab body)
-  (MetaFun (cons 'type ret-ty)
+  (MetaFun (type-info ret-ty)
            (IntFun args ret-x ret-ty ret-lab body)))
 (define (ExtFun^ src args ret-ty name)
-  (MetaFun (cons 'type ret-ty)
+  (MetaFun (type-info ret-ty)
            (ExtFun src args ret-ty name)))
 
 ;; XXX How to provide? Do we want to expose the the typed-constructors using
