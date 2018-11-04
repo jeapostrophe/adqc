@@ -11,7 +11,13 @@
     [(MetaE _ e) (expr-ty e)]
     [(Int signed? bits _) (IntT signed? bits)]
     [(Flo bits _) (FloT bits)]
-    [(Cast ty _) ty]
+    [(Cast to-ty e)
+     (define from-ty (expr-ty e))
+     (unless (or (IntT? from-ty) (FloT? from-ty))
+       (error 'expr-ty "Cast: from type not numeric"))
+     (unless (or (IntT? to-ty) (FloT? to-ty))
+       (error 'expr-ty "Cast: to type not numeric"))
+     to-ty]
     [(Read p) (path-ty p)]
     [(BinOp _ L R)
      (define L-ty (expr-ty L))
@@ -55,9 +61,12 @@
 (define (Flo^ bits val)
   (MetaE (type-info (FloT bits))
          (Flo bits val)))
+;; XXX Should this constructor (and others like it) ensure that the 'e'
+;; in '(Cast ty e)' is a MetaE if it is not already?
 (define (Cast^ ty e)
-  (MetaE (type-info ty)
-         (Cast ty e)))
+  (define cast-e (Cast ty e))
+  (MetaE (type-info (expr-ty cast-e))
+         cast-e))
 (define (Read^ p)
   (MetaE (type-info (path-ty p))
          (Read p)))
