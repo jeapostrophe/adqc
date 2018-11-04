@@ -54,6 +54,16 @@
      (match-define (UniT m->ty _) (path-ty p))
      (hash-ref m->ty m)]))
 
+(define (fun-ty f)
+  (match f
+    [(MetaFun (type-info ty) _) ty]
+    [(MetaFun _ f) (fun-ty f)]
+    [(IntFun _ ret-x ret-ty _ body)
+     ;; XXX Should we check here that body assigns to
+     ;; ret-x a value of type ret-ty?
+     ret-ty]
+    [(ExtFun _ _ ret-ty _) ret-ty]))
+
 ;; Typed expressions constructors
 (define (Int^ signed? bits val)
   (MetaE (type-info (IntT signed? bits))
@@ -89,11 +99,13 @@
 
 ;; Typed function constructors
 (define (IntFun^ args ret-x ret-ty ret-lab body)
-  (MetaFun (type-info ret-ty)
-           (IntFun args ret-x ret-ty ret-lab body)))
+  (define int-fun (IntFun args ret-x ret-ty ret-lab body))
+  (MetaFun (type-info (fun-ty int-fun))
+           int-fun))
 (define (ExtFun^ src args ret-ty name)
-  (MetaFun (type-info ret-ty)
-           (ExtFun src args ret-ty name)))
+  (define ext-fun (ExtFun src args ret-ty name))
+  (MetaFun (type-info (fun-ty ext-fun))
+           ext-fun))
 
 ;; XXX How to provide? Do we want to expose the the typed-constructors using
 ;; their internal names (with the hat symbols), or is it better to shadow the
