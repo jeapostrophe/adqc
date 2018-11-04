@@ -54,6 +54,39 @@
      (match-define (UniT m->ty _) (path-ty p))
      (hash-ref m->ty m)]))
 
+(define (stmt-ty s)
+  (match s
+    ;; XXX Is there any type info we should store inside of a MetaS?
+  #;[(MetaS (type-info ty) _) ty]
+    [(MetaS _ s) (stmt-ty s)]
+    [(Skip _) (void)]
+    [(Fail _) (void)]
+    [(Jump _) (void)]
+    [(Begin f s)
+     (stmt-ty f)
+     (stmt-ty s)]
+    [(Assign p e)
+     (unless (equal? (path-ty p) (expr-ty e))
+       (error 'stmt-ty "Assign: path type and expression type not equal"))]
+    [(If p t f)
+     (unless (IntT? (expr-ty p))
+       (error 'stmt-ty "If: predicate type not integral"))
+     (stmt-ty t)
+     (stmt-ty f)]
+    [(While p body)
+     (unless (IntT? (expr-ty p))
+       (error 'stmt-ty "While: predicate type not integral"))
+     (stmt-ty body)]
+    [(Let/ec _ body)
+     (stmt-ty body)]
+    [(Let x ty xi bs)
+     ;; XXX Check that xi type and ty match
+     (stmt-ty bs)]
+    [(Call x ty f as bs)
+     ;; XXX Check that arg types match expected
+     ;; XXX Check that f ret-ty matches ty
+     (stmt-ty bs)]))
+
 (define (fun-ty f)
   (match f
     [(MetaFun (type-info ty) _) ty]
@@ -93,9 +126,7 @@
   (MetaE (type-info (expr-ty if-e))
          if-e))
 
-;; XXX Should Stmts have types? It's hard to imagine what the type of certain
-;; kinds of statements would be. E.g., what's the type of a Skip? Should we
-;; still make smart-constructors that check for internal coherency?
+;; XXX Stmt constructors
 
 ;; Typed function constructors
 (define (IntFun^ args ret-x ret-ty ret-lab body)
