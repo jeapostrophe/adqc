@@ -1,9 +1,15 @@
 #lang racket/base
 (require racket/contract/base
          racket/match
+         racket/set
          "ast.rkt")
 
 (struct type-info (ty) #:transparent)
+
+(define i-arith-ops '(iadd isub imul iudiv isdiv iurem isrem ishl ilshr iashr iand ior ixor))
+(define f-arith-ops '(fadd fsub fmul fdiv frem))
+(define i-cmp-ops '(ieq ine iugt iuge iult iule isgt isge islt isle))
+(define f-cmp-ops '(foeq fone fogt foge folt fole fueq fune fugt fuge fult fule ffalse ftrue ford funo))
 
 (define (expr-ty e)
   (match e
@@ -19,12 +25,21 @@
        (error 'expr-ty "Cast: to type not numeric"))
      to-ty]
     [(Read p) (path-ty p)]
-    [(BinOp _ L R)
+    [(BinOp op L R)
      (define L-ty (expr-ty L))
      (define R-ty (expr-ty R))
      (unless (equal? L-ty R-ty)
        (error 'expr-ty "BinOp: LHS and RHS types not equal"))
-     L-ty]
+     (when (or (set-member? i-arith-ops op) (set-member? i-cmp-ops op))
+       (unless (IntT? L-ty)
+         (error 'expr-ty "BinOp: integer op expects integral arguments")))
+     (when (or (set-member? f-arith-ops op) (set-member? f-cmp-ops op))
+       (unless (FloT? L-ty)
+         (error 'expr-ty "BinOp: floating-point op expects floating-point arguments")))
+     (cond [(or (set-member? i-arith-ops op) (set-member? f-arith-ops op))
+            L-ty]
+           [(or (set-member? i-cmp-ops op) (set-member? f-cmp-ops op))
+            (IntT #t 32)])]
     [(LetE _ ty xe be)
      (unless (equal? ty (expr-ty xe))
        (error 'expr-ty "LetE: x and xe types not equal"))
