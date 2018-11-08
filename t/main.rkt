@@ -32,17 +32,13 @@
 (define-syntax-rule (! . b)
   (parameterize ([current-invert? #t]) . b))
 
-(define current-c-path (make-parameter #f))
-
-(define (print-src! _)
-  (define src-path (current-c-path))
-  (when src-path
-    (define in (open-input-file src-path))
-    (for ([ch (in-port read-char in)])
-      (display ch (current-error-port)))
-    (newline (current-error-port))
-    (close-input-port in)
-    (delete-file src-path)))
+(define ((print-src! c-path) _)
+  (define in (open-input-file c-path))
+  (for ([ch (in-port read-char in)])
+    (display ch (current-error-port)))
+  (newline (current-error-port))
+  (close-input-port in)
+  (delete-file c-path))
 
 (define (TProg1* stx the-p the-cp n args-i expect-ans-i)
   ;; Get type info for args and ans.
@@ -58,27 +54,26 @@
     (chk (#:src stx eval-ans)
          (#:src stx eval-expect-ans)))
   (define c-path (make-temporary-file "adqc~a.c"))
-  (parameterize ([current-c-path c-path])
-    (unless the-cp
-      (chk #:t (set! the-cp (link-program the-p c-path))))
-    (when the-cp
-      (with-chk ([chk-inform! print-src!])
-        ;; XXX Once linked-program-write exists, we can automatically
-        ;; convert arguments into the data layout expected by linked-program-run.
-        (define comp-args (for/list ([a (in-list args)]
-                                     [ty (in-list arg-tys)])
-                            (raw-value ty a)))
-        (chk #:t (#:src stx
-                  (set! comp-ans (linked-program-run the-cp n comp-args))))
-        (when comp-ans
-          (define comp-expect-ans (raw-value ans-ty eval-ans))
-          (define comp-ans* (linked-program-read the-cp comp-ans))
-          (if (current-invert?)
-              (chk #:! (#:src stx comp-ans*)
-                   (#:src stx comp-expect-ans))
-              (chk (#:src stx comp-ans*)
-                   (#:src stx comp-expect-ans)))))
-      (delete-file c-path))))
+  (unless the-cp
+    (chk #:t (set! the-cp (link-program the-p c-path))))
+  (when the-cp
+    (with-chk ([chk-inform! (print-src! c-path)])
+      ;; XXX Once linked-program-write exists, we can automatically
+      ;; convert arguments into the data layout expected by linked-program-run.
+      (define comp-args (for/list ([a (in-list args)]
+                                   [ty (in-list arg-tys)])
+                          (raw-value ty a)))
+      (chk #:t (#:src stx
+                (set! comp-ans (linked-program-run the-cp n comp-args))))
+      (when comp-ans
+        (define comp-expect-ans (raw-value ans-ty eval-ans))
+        (define comp-ans* (linked-program-read the-cp comp-ans))
+        (if (current-invert?)
+            (chk #:! (#:src stx comp-ans*)
+                 (#:src stx comp-expect-ans))
+            (chk (#:src stx comp-ans*)
+                 (#:src stx comp-expect-ans)))))
+    (delete-file c-path)))
 
 (define-syntax (TProg1 stx)
   (syntax-parse stx
