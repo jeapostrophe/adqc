@@ -499,7 +499,11 @@
                  (hash-ref ty->ast ty))
                (for/list ([ty (in-list root-types)]
                           #:when (not (has-vertex? (current-type-graph) ty)))
-                 (hash-ref ty->ast ty))))
+                 (hash-ref ty->ast ty))
+               (for/list ([(n ty) (in-hash n->ty)])
+                 (define def-n (hash-ref type-table ty))
+                 (and (not (string=? def-n n))
+                      (list* "typedef " def-n " " n ";" ind-nl)))))
       ;; Headers
       (define headers-ast (for/list ([h (in-set (current-headers))])
                             (list* "#include <" h ">" ind-nl)))

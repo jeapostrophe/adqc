@@ -385,6 +385,13 @@
               (define m : S64 := bar <- p)
               m)
             #:tests ["foo" (S64 4) => (S64 4)])
+     ;; Duplicate public type
+     (TProg (include-ty "Coord1" Coord)
+            (include-ty "Coord2" Coord)
+            (define-fun (foo [n : S64] [m : S64]) : S64
+              (define c : #,Coord := (record x n y m))
+              (iadd (c -> x) (c -> y)))
+            #:tests ["foo" (S64 2) (S64 3) => (S64 5)])
      ;; XXX Can't return structs by pointer while they're compiled on stack.
      #;
      (TProg (define-fun (foo) : #,Coord
