@@ -255,6 +255,9 @@
   (ensure-fun-type (ExtFun src args ret-ty name)))
 
 ;; XXX Can we both rename and provide a contract when providing?
+;; ... or maybe we don't need to, since all of these functions
+;; immediately call the underlying constructors, which will check
+;; the argument types.
 (provide
  (rename-out
   [Int^ Int]
