@@ -94,7 +94,7 @@
      (match-define (type-info ie-env ie-ty)
        (expr-type-info ie))
      (unless (IntT? ie-ty)
-       (error 'path-type-info "Select index type not integral"))
+       (error 'path-type-info "Select: index type not integral"))
      (match-define (type-info p-env (ArrT _ ety))
        (path-type-info p))
      (define env (hash-union ie-env p-env))
