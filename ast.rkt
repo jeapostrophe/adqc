@@ -73,6 +73,7 @@
 (struct Field Path (p f) #:transparent)
 (struct Mode Path (p m) #:transparent)
 (struct ExtVar Path (src name ty) #:transparent)
+(struct MetaP Path (m p) #:transparent)
 
 (provide
  (contract-out
@@ -81,7 +82,8 @@
   [struct Select ([p Path?] [ie Expr?])]
   [struct Field ([p Path?] [f symbol?])]
   [struct Mode ([p Path?] [m symbol?])]
-  [struct ExtVar ([src ExternSrc?] [name c-identifier-string?] [ty Type?])]))
+  [struct ExtVar ([src ExternSrc?] [name c-identifier-string?] [ty Type?])]
+  [struct MetaP ([m any/c] [p Path?])]))
 
 ;; Expressions
 (struct Expr () #:transparent)
