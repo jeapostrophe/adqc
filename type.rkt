@@ -1,158 +1,283 @@
 #lang racket/base
 (require racket/contract/base
+         racket/hash
          racket/match
          racket/set
          "ast.rkt")
 
-(struct type-info (ty) #:transparent)
+(struct env-info (env) #:transparent)
+(struct type-info env-info (ty) #:transparent)
 
 (define i-arith-ops '(iadd isub imul iudiv isdiv iurem isrem ishl ilshr iashr iand ior ixor))
 (define f-arith-ops '(fadd fsub fmul fdiv frem))
 (define i-cmp-ops '(ieq ine iugt iuge iult iule isgt isge islt isle))
 (define f-cmp-ops '(foeq fone fogt foge folt fole fueq fune fugt fuge fult fule ffalse ftrue ford funo))
 
-(define (expr-ty e)
+(define (expr-type-info e)
   (match e
-    [(MetaE (type-info ty) _) ty]
-    [(MetaE _ e) (expr-ty e)]
-    [(Int signed? bits _) (IntT signed? bits)]
-    [(Flo bits _) (FloT bits)]
+    [(MetaE (? type-info? ti) _) ti]
+    [(MetaE _ e) (expr-type-info e)]
+    [(Int signed? bits _)
+     (type-info (hasheq) (IntT signed? bits))]
+    [(Flo bits _)
+     (type-info (hasheq) (FloT bits))]
     [(Cast to-ty e)
-     (define from-ty (expr-ty e))
+     (match-define (type-info from-env from-ty)
+       (expr-type-info e))
      (unless (or (IntT? from-ty) (FloT? from-ty))
-       (error 'expr-ty "Cast: from type not numeric"))
+       (error 'expr-type-info "Cast: from type not numeric"))
      (unless (or (IntT? to-ty) (FloT? to-ty))
-       (error 'expr-ty "Cast: to type not numeric"))
-     to-ty]
-    [(Read p) (path-ty p)]
+       (error 'expr-type-info "Cast: to type not numeric"))
+     (type-info from-env to-ty)]
+    [(Read p) (path-type-info p)]
     [(BinOp op L R)
-     (define L-ty (expr-ty L))
-     (define R-ty (expr-ty R))
+     (match-define (type-info L-env L-ty)
+       (expr-type-info L))
+     (match-define (type-info R-env R-ty)
+       (expr-type-info R))
      (unless (equal? L-ty R-ty)
-       (error 'expr-ty "BinOp: LHS and RHS types not equal"))
+       (error 'expr-type-info "BinOp: LHS and RHS types not equal"))
      (when (or (set-member? i-arith-ops op) (set-member? i-cmp-ops op))
        (unless (IntT? L-ty)
-         (error 'expr-ty "BinOp: integer op expects integral arguments")))
+         (error 'expr-type-info "BinOp: integer op expects integral arguments")))
      (when (or (set-member? f-arith-ops op) (set-member? f-cmp-ops op))
        (unless (FloT? L-ty)
-         (error 'expr-ty "BinOp: floating-point op expects floating-point arguments")))
+         (error 'expr-type-info "BinOp: floating-point op expects floating-point arguments")))
+     ;; XXX add logic for union types.
+     (define env (hash-union L-env R-env))
      (cond [(or (set-member? i-arith-ops op) (set-member? f-arith-ops op))
-            L-ty]
+            (type-info env L-ty)]
            [(or (set-member? i-cmp-ops op) (set-member? f-cmp-ops op))
-            (IntT #t 32)])]
-    [(LetE _ ty xe be)
-     (unless (equal? ty (expr-ty xe))
-       (error 'expr-ty "LetE: x and xe types not equal"))
-     (expr-ty be)]
+            (type-info env (IntT #t 32))])]
+    [(LetE x ty xe be)
+     (match-define (type-info xe-env xe-ty)
+       (expr-type-info xe))
+     (unless (equal? ty xe-ty)
+       (error 'expr-type-info "LetE: x and xe types not equal"))
+     (match-define (type-info be-env be-ty)
+       (expr-type-info be))
+       ;; If x is not referenced in 'be', x will not be in be-env.
+       ;; In this case, return ty to avoid error.
+     (unless (equal? ty (hash-ref be-env x ty))
+       (error "LetE: be references x as incorrect type"))
+     (type-info be-env be-ty)]
     [(IfE ce te fe)
-     (unless (IntT? (expr-ty ce))
-       (error 'expr-ty "IfE: predicate type not integral"))
-     (define te-ty (expr-ty te))
-     (define fe-ty (expr-ty fe))
+     (match-define (type-info ce-env ce-ty)
+       (expr-type-info ce))
+     (unless (IntT? ce-ty)
+       (error 'expr-type-info "IfE: predicate type not integral"))
+     (match-define (type-info te-env te-ty)
+       (expr-type-info te))
+     (match-define (type-info fe-env fe-ty)
+       (expr-type-info fe))
      (unless (equal? te-ty fe-ty)
-       (error 'expr-ty "IfE: true and false types not equal"))
-     te-ty]))
+       (error 'expr-type-info "IfE: true and false types not equal"))
+     (define env (hash-union ce-env te-env fe-env))
+     (type-info env te-ty)]))
 
-(define (path-ty p)
+(define (ensure-expr-type e)
+  (let rec ([e* e])
+    (match e*
+      [(MetaE (? type-info? ti) _) e]
+      [(MetaE _ e*) (rec e*)]
+      [(? Expr?) (MetaE (expr-type-info e*) e)])))
+
+(define (path-type-info p)
   (match p
-    [(Var _ ty) ty]
-    [(ExtVar _ _ ty) ty]
+    [(MetaP (? type-info? ti) _) ti]
+    [(MetaP _ p) (path-type-info p)]
+    [(Var x ty) (type-info (hash x ty) ty)]
+    [(ExtVar _ name ty)
+     (define x (string->symbol name))
+     (type-info (hash x ty) ty)]
     [(Select p ie)
-     (unless (IntT? (expr-ty ie))
-       (error 'path-ty "Select: index type not integral"))
-     (match-define (ArrT _ ety) (path-ty p))
-     ety]
+     (match-define (type-info ie-env ie-ty)
+       (expr-type-info ie))
+     (unless (IntT? ie-ty)
+       (error 'path-type-info "Select index type not integral"))
+     (match-define (type-info p-env (ArrT _ ety))
+       (path-type-info p))
+     (define env (hash-union ie-env p-env))
+     (type-info env ety)]
     [(Field p f)
-     (match-define (RecT f->ty _ _) (path-ty p))
-     (hash-ref f->ty f)]
+     (match-define (type-info p-env (RecT f->ty _ _))
+       (path-type-info p))
+     (type-info p-env (hash-ref f->ty f))]
     [(Mode p m)
-     (match-define (UniT m->ty _) (path-ty p))
-     (hash-ref m->ty m)]))
+     (match-define (type-info p-env (UniT m->ty _))
+       (path-type-info p))
+     (type-info p-env (hash-ref m->ty m))]))
 
-(define (stmt-ty s)
+(define (ensure-path-type p)
+  (let rec ([p* p])
+    (match p*
+      [(MetaP (? type-info? ti) _) ti]
+      [(MetaP _ p*) (rec p*)]
+      [(? Path?) (MetaP (path-type-info p*) p)])))
+
+(define (stmt-env-info s)
+  (define (rec s) (stmt-env-info s))
   (match s
-    ;; XXX Is there any type info we should store inside of a MetaS?
-  #;[(MetaS (type-info ty) _) ty]
-    [(MetaS _ s) (stmt-ty s)]
-    [(Skip _) (void)]
-    [(Fail _) (void)]
-    [(Jump _) (void)]
+    [(MetaS (? env-info? ei) _) ei]
+    [(MetaS _ s) (stmt-env-info s)]
+    [(? (or/c Skip? Fail? Jump?)) (env-info (hasheq))]
     [(Begin f s)
-     (stmt-ty f)
-     (stmt-ty s)]
+     (match-define (env-info f-env) (rec f))
+     (match-define (env-info s-env) (rec s))
+     (env-info (hash-union f-env s-env))]
     [(Assign p e)
-     (unless (equal? (path-ty p) (expr-ty e))
-       (error 'stmt-ty "Assign: path type and expression type not equal"))]
+     (match-define (type-info p-env p-ty)
+       (path-type-info p))
+     (match-define (type-info e-env e-ty)
+       (expr-type-info e))
+     (unless (equal? p-ty e-ty)
+       (error 'stmt-env-info "Assign: path type and expression type not equal"))
+     (env-info (hash-union p-env e-env))]
     [(If p t f)
-     (unless (IntT? (expr-ty p))
-       (error 'stmt-ty "If: predicate type not integral"))
-     (stmt-ty t)
-     (stmt-ty f)]
+     (match-define (type-info p-env p-ty)
+       (expr-type-info p))
+     (match-define (env-info t-env) (rec t))
+     (match-define (env-info f-env) (rec f))
+     (unless (IntT? p-ty)
+       (error 'stmt-env-info "If: predicate type not integral"))
+     (env-info (hash-union p-env t-env f-env))]
     [(While p body)
-     (unless (IntT? (expr-ty p))
-       (error 'stmt-ty "While: predicate type not integral"))
-     (stmt-ty body)]
-    [(Let/ec _ body)
-     (stmt-ty body)]
+     (match-define (type-info p-env p-ty)
+       (expr-type-info p))
+     (unless (IntT? p-ty)
+       (error 'stmt-env-info "While: predicate type not integral"))
+     (match-define (env-info body-env) (rec body))
+     (env-info (hash-union p-env body-env))]
+    [(Let/ec _ body) (rec body)]
     [(Let x ty xi bs)
-     ;; XXX Check that xi type and ty match
-     (stmt-ty bs)]
+     ;; XXX init-type -> should return Type?
+     (define xi-ty #f)
+     (unless (equal? ty xi-ty)
+       (error 'stmt-env-info "Let: x and xi types not equal"))
+     (match-define (env-info bs-env) (rec bs))
+     (unless (equal? ty (hash-ref bs-env x ty))
+       (error 'stmt-env-info "Let: bs references x as incorrect type"))
+     (env-info bs-env)]
     [(Call x ty f as bs)
      ;; XXX Check that arg types match expected
      ;; XXX Check that f ret-ty matches ty
-     (stmt-ty bs)]))
+     (rec bs)]))
 
-(define (fun-ty f)
+(define (ensure-stmt-env s)
+  (let rec ([s* s])
+    (match s*
+      [(MetaS (? env-info? ei) _) ei]
+      [(MetaS _ s*) (rec s*)]
+      [(? Stmt?) (MetaS (stmt-env-info s*) s)])))
+
+(define (fun-type-info f)
   (match f
-    [(MetaFun (type-info ty) _) ty]
-    [(MetaFun _ f) (fun-ty f)]
-    [(IntFun _ ret-x ret-ty _ body)
-     ;; XXX Should we check here that body assigns to
-     ;; ret-x a value of type ret-ty?
-     ret-ty]
-    [(ExtFun _ _ ret-ty _) ret-ty]))
+    [(MetaFun (? type-info ti) _) ti]
+    [(MetaFun _ f) (fun-type-info f)]
+    [(IntFun args ret-x ret-ty _ body)
+     (match-define (env-info env)
+       (stmt-env-info body))
+     ;; XXX Do we want to fail if ret-x is not referenced inside of body?
+     (unless (equal? ret-ty (hash-ref env ret-x))
+       (error 'fun-type-info "IntFun: ret-ty does not match usage of ret-x in body"))
+     (for ([a (in-list args)])
+       (match-define (Arg x ty _) a)
+       (unless (equal? ty (hash-ref env x ty))
+         (error 'fun-type-info "IntFun: arg type does not match usage in body")))
+     (type-info ret-ty env)]
+    ;; XXX Should we somehow be tracking ExtFun declarations and making sure
+    ;; that all ExtFuns which share 'name' are really equal?
+    [(ExtFun _ _ ret-ty _) (type-info (hasheq) ret-ty)]))
+
+(define (ensure-fun-type f)
+  (let rec ([f* f])
+    (match f*
+      [(MetaFun (? type-info? ti) _) ti]
+      [(MetaFun _ f*) (rec f*)]
+      [(? Fun?) (MetaFun (fun-type-info f*) f)])))
 
 ;; Typed expressions constructors
 (define (Int^ signed? bits val)
-  (MetaE (type-info (IntT signed? bits))
+  (MetaE (type-info (hasheq) (IntT signed? bits))
          (Int signed? bits val)))
 (define (Flo^ bits val)
-  (MetaE (type-info (FloT bits))
+  (MetaE (type-info (hasheq) (FloT bits))
          (Flo bits val)))
-;; XXX Should this constructor (and others like it) ensure that the 'e'
-;; in '(Cast ty e)' is a MetaE if it is not already?
 (define (Cast^ ty e)
-  (define cast-e (Cast ty e))
-  (MetaE (type-info (expr-ty cast-e))
-         cast-e))
+  (ensure-expr-type (Cast ty e)))
 (define (Read^ p)
-  (MetaE (type-info (path-ty p))
-         (Read p)))
+  (ensure-expr-type (Read p)))
 (define (BinOp^ op L R)
-  (define bin-op (BinOp op L R))
-  (MetaE (type-info (expr-ty bin-op))
-         bin-op))
+  (ensure-expr-type (BinOp op L R)))
 (define (LetE^ x ty xe be)
-  (define let-e (LetE x ty xe be))
-  (MetaE (type-info (expr-ty let-e))
-         let-e))
+  (ensure-expr-type (LetE x ty xe be)))
 (define (IfE^ ce te fe)
-  (define if-e (IfE ce te fe))
-  (MetaE (type-info (expr-ty if-e))
-         if-e))
+  (ensure-expr-type (IfE ce te fe)))
 
-;; XXX Stmt constructors
+;; Typed path constructors
+(define (Var^ x ty)
+  (ensure-path-type (Var x ty)))
+(define (Select^ p ie)
+  (ensure-path-type (Select p ie)))
+(define (Field^ p f)
+  (ensure-path-type (Field p f)))
+(define (Mode^ p m)
+  (ensure-path-type (Mode p m)))
+(define (ExtVar^ src name ty)
+  (ensure-path-type (ExtVar src name ty)))
+
+;; Typed statement constructors
+(define (Skip^ comment)
+  (ensure-stmt-env (Skip comment)))
+(define (Fail^ msg)
+  (ensure-stmt-env (Fail msg)))
+(define (Begin^ f s)
+  (ensure-stmt-env (Begin f s)))
+(define (Assign^ p e)
+  (ensure-stmt-env (Assign p e)))
+(define (If^ p t f)
+  (ensure-stmt-env (If p t f)))
+(define (While^ p body)
+  (ensure-stmt-env (While p body)))
+(define (Jump^ label)
+  (ensure-stmt-env (Jump label)))
+(define (Let/ec^ label body)
+  (ensure-stmt-env (Let/ec label body)))
+(define (Let^ x ty xi bs)
+  (ensure-stmt-env (Let x ty xi bs)))
+(define (Call^ x ty f as bs)
+  (ensure-stmt-env (Call x ty f as bs)))
 
 ;; Typed function constructors
 (define (IntFun^ args ret-x ret-ty ret-lab body)
-  (define int-fun (IntFun args ret-x ret-ty ret-lab body))
-  (MetaFun (type-info (fun-ty int-fun))
-           int-fun))
+  (ensure-fun-type (IntFun args ret-x ret-ty ret-lab body)))
 (define (ExtFun^ src args ret-ty name)
-  (define ext-fun (ExtFun src args ret-ty name))
-  (MetaFun (type-info (fun-ty ext-fun))
-           ext-fun))
+  (ensure-fun-type (ExtFun src args ret-ty name)))
 
-;; XXX How to provide? Do we want to expose the the typed-constructors using
-;; their internal names (with the hat symbols), or is it better to shadow the
-;; untyped constructors?
+;; XXX Can we both rename and provide a contract when providing?
+(provide
+ (rename-out
+  [Int^ Int]
+  [Flo^ Flo]
+  [Cast^ Cast]
+  [Read^ Read]
+  [BinOp^ BinOp]
+  [LetE^ LetE]
+  [IfE^ IfE]
+  [Var^ Var]
+  [Select^ Select]
+  [Field^ Field]
+  [Mode^ Mode]
+  [ExtVar^ ExtVar]
+  [Skip^ Skip]
+  [Fail^ Fail]
+  [Begin^ Begin]
+  [Assign^ Assign]
+  [If^ If]
+  [While^ While]
+  [Jump^ Jump]
+  [Let/ec^ Let/ec]
+  [Let^ Let]
+  [Call^ Call]
+  [IntFun^ IntFun]
+  [ExtFun^ ExtFun]))
