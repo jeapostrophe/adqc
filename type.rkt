@@ -1,8 +1,10 @@
 #lang racket/base
-(require racket/contract/base
+(require (for-syntax racket/base)
+         racket/contract/base
          racket/hash
          racket/match
          racket/set
+         syntax/parse/define
          "ast.rkt")
 
 (struct env-info (env) #:transparent)
@@ -75,13 +77,6 @@
      (define env (hash-union ce-env te-env fe-env))
      (type-info env te-ty)]))
 
-(define (ensure-expr-type e)
-  (let rec ([e* e])
-    (match e*
-      [(MetaE (? type-info? ti) _) e]
-      [(MetaE _ e*) (rec e*)]
-      [(? Expr?) (MetaE (expr-type-info e*) e)])))
-
 (define (path-type-info p)
   (match p
     [(MetaP (? type-info? ti) _) ti]
@@ -107,13 +102,6 @@
      (match-define (type-info p-env (UniT m->ty _))
        (path-type-info p))
      (type-info p-env (hash-ref m->ty m))]))
-
-(define (ensure-path-type p)
-  (let rec ([p* p])
-    (match p*
-      [(MetaP (? type-info? ti) _) ti]
-      [(MetaP _ p*) (rec p*)]
-      [(? Path?) (MetaP (path-type-info p*) p)])))
 
 (define (stmt-env-info s)
   (define (rec s) (stmt-env-info s))
@@ -163,13 +151,6 @@
      ;; XXX Check that f ret-ty matches ty
      (rec bs)]))
 
-(define (ensure-stmt-env s)
-  (let rec ([s* s])
-    (match s*
-      [(MetaS (? env-info? ei) _) ei]
-      [(MetaS _ s*) (rec s*)]
-      [(? Stmt?) (MetaS (stmt-env-info s*) s)])))
-
 (define (fun-type-info f)
   (match f
     [(MetaFun (? type-info ti) _) ti]
@@ -189,98 +170,40 @@
     ;; that all ExtFuns which share 'name' are really equal?
     [(ExtFun _ _ ret-ty _) (type-info (hasheq) ret-ty)]))
 
-(define (ensure-fun-type f)
-  (let rec ([f* f])
-    (match f*
-      [(MetaFun (? type-info? ti) _) ti]
-      [(MetaFun _ f*) (rec f*)]
-      [(? Fun?) (MetaFun (fun-type-info f*) f)])))
+(define-simple-macro (define-ensurer name:id meta-type info-proc)
+  (define (name v)
+    (let rec ([v* v])
+      (match v*
+        [(meta-type (? env-info? info) _) info]
+        [(meta-type _ v*) (rec v*)]
+        [_ (meta-type (info-proc v*) v)]))))
 
-;; Typed expressions constructors
-(define (Int^ signed? bits val)
-  (MetaE (type-info (hasheq) (IntT signed? bits))
-         (Int signed? bits val)))
-(define (Flo^ bits val)
-  (MetaE (type-info (hasheq) (FloT bits))
-         (Flo bits val)))
-(define (Cast^ ty e)
-  (ensure-expr-type (Cast ty e)))
-(define (Read^ p)
-  (ensure-expr-type (Read p)))
-(define (BinOp^ op L R)
-  (ensure-expr-type (BinOp op L R)))
-(define (LetE^ x ty xe be)
-  (ensure-expr-type (LetE x ty xe be)))
-(define (IfE^ ce te fe)
-  (ensure-expr-type (IfE ce te fe)))
+(define-ensurer ensure-expr-type MetaE expr-type-info)
+(define-ensurer ensure-path-type MetaP path-type-info)
+(define-ensurer ensure-stmt-env MetaS stmt-env-info)
+(define-ensurer ensure-fun-type MetaFun fun-type-info)
 
-;; Typed path constructors
-(define (Var^ x ty)
-  (ensure-path-type (Var x ty)))
-(define (Select^ p ie)
-  (ensure-path-type (Select p ie)))
-(define (Field^ p f)
-  (ensure-path-type (Field p f)))
-(define (Mode^ p m)
-  (ensure-path-type (Mode p m)))
-(define (ExtVar^ src name ty)
-  (ensure-path-type (ExtVar src name ty)))
+(define-syntax (define-constructor stx)
+  (syntax-parse stx
+    [(_ name:id ensure)
+     #:with (name^) (generate-temporaries #'(name))
+     (syntax/loc stx
+       (begin
+         (define (name^ . args) (ensure (apply name args)))
+         (provide (rename-out [name^ name]))))]))
 
-;; Typed statement constructors
-(define (Skip^ comment)
-  (ensure-stmt-env (Skip comment)))
-(define (Fail^ msg)
-  (ensure-stmt-env (Fail msg)))
-(define (Begin^ f s)
-  (ensure-stmt-env (Begin f s)))
-(define (Assign^ p e)
-  (ensure-stmt-env (Assign p e)))
-(define (If^ p t f)
-  (ensure-stmt-env (If p t f)))
-(define (While^ p body)
-  (ensure-stmt-env (While p body)))
-(define (Jump^ label)
-  (ensure-stmt-env (Jump label)))
-(define (Let/ec^ label body)
-  (ensure-stmt-env (Let/ec label body)))
-(define (Let^ x ty xi bs)
-  (ensure-stmt-env (Let x ty xi bs)))
-(define (Call^ x ty f as bs)
-  (ensure-stmt-env (Call x ty f as bs)))
+(define-simple-macro (define-exprs name:id ...)
+  (begin (define-constructor name ensure-expr-type) ...))
+(define-exprs Int Flo Cast Read BinOp LetE IfE)
 
-;; Typed function constructors
-(define (IntFun^ args ret-x ret-ty ret-lab body)
-  (ensure-fun-type (IntFun args ret-x ret-ty ret-lab body)))
-(define (ExtFun^ src args ret-ty name)
-  (ensure-fun-type (ExtFun src args ret-ty name)))
+(define-simple-macro (define-paths name:id ...)
+  (begin (define-constructor name ensure-path-type) ...))
+(define-paths Var Select Field Mode ExtVar)
 
-;; XXX Can we both rename and provide a contract when providing?
-;; ... or maybe we don't need to, since all of these functions
-;; immediately call the underlying constructors, which will check
-;; the argument types.
-(provide
- (rename-out
-  [Int^ Int]
-  [Flo^ Flo]
-  [Cast^ Cast]
-  [Read^ Read]
-  [BinOp^ BinOp]
-  [LetE^ LetE]
-  [IfE^ IfE]
-  [Var^ Var]
-  [Select^ Select]
-  [Field^ Field]
-  [Mode^ Mode]
-  [ExtVar^ ExtVar]
-  [Skip^ Skip]
-  [Fail^ Fail]
-  [Begin^ Begin]
-  [Assign^ Assign]
-  [If^ If]
-  [While^ While]
-  [Jump^ Jump]
-  [Let/ec^ Let/ec]
-  [Let^ Let]
-  [Call^ Call]
-  [IntFun^ IntFun]
-  [ExtFun^ ExtFun]))
+(define-simple-macro (define-stmts name:id ...)
+  (begin (define-constructor name ensure-stmt-env) ...))
+(define-stmts Skip Fail Begin Assign If While Jump Let/ec Let Call)
+
+(define-simple-macro (define-funs name:id ...)
+  (begin (define-constructor name ensure-fun-type) ...))
+(define-funs IntFun ExtFun)
