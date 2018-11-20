@@ -147,9 +147,18 @@
        (error 'stmt-env-info "Let: bs references x as incorrect type"))
      (env-info bs-env)]
     [(Call x ty f as bs)
-     ;; XXX Check that arg types match expected
-     ;; XXX Check that f ret-ty matches ty
-     (rec bs)]))
+     (match-define (or (IntFun f-as _ ret-ty _ _) (ExtFun _ f-as ret-ty _)) f)
+     (unless (= (length f-as) (length as))
+       (error 'stmt-env-info "Call: too many or not enough arguments"))
+     (unless (equal? ret-ty ty)
+       (error 'stmt-env-info "Call: return type mismatch"))
+     (for ([a (in-list as)] [fa (in-list f-as)])
+       (unless (equal? (Arg-ty a) (Arg-ty fa))
+         (error 'stmt-env-info "Call: argument type mismatch")))
+     (match-define (env-info bs-env) (rec bs))
+     (unless (equal? ty (hash-ref bs-env x ty))
+       (error 'stmt-env-info "Call: bs references x as incorrect type"))
+     (env-info bs-env)]))
 
 (define (fun-type-info f)
   (match f
