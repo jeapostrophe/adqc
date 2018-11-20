@@ -138,10 +138,7 @@
      (env-info (hash-union p-env body-env))]
     [(Let/ec _ body) (rec body)]
     [(Let x ty xi bs)
-     ;; XXX init-type -> should return Type?
-     (define xi-ty #f)
-     (unless (equal? ty xi-ty)
-       (error 'stmt-env-info "Let: x and xi types not equal"))
+     (check-init-type ty xi)
      (match-define (env-info bs-env) (rec bs))
      (unless (equal? ty (hash-ref bs-env x ty))
        (error 'stmt-env-info "Let: bs references x as incorrect type"))
@@ -159,6 +156,31 @@
      (unless (equal? ty (hash-ref bs-env x ty))
        (error 'stmt-env-info "Call: bs references x as incorrect type"))
      (env-info bs-env)]))
+
+(define (check-init-type ty i)
+  (match i
+    [(UndI u-ty)
+     (unless (equal? ty u-ty)
+       (error 'stmt-env-info "UndI: type mismatch"))]
+    [(ConI e)
+     (match-define (type-info _ e-ty) (expr-type-info e))
+     (unless (equal? ty e-ty)
+       (error 'stmt-env-info "ConI: type mismatch"))]
+    [(ZedI z-ty)
+     (unless (equal? ty z-ty)
+       (error 'stmt-env-info "ZedI: type mismatch"))]
+    [(ArrI is)
+     (unless (equal? (length is) (ArrT-dim ty))
+       (error 'stmt-env-info "ArrI: length mismatch"))
+     (for ([i (in-list is)])
+       (check-init-type (ArrT-ety ty) i))]
+    [(RecI f->i)
+     (match-define (RecT f->ty _ _) ty)
+     (for ([(f i) (in-hash f->i)])
+       (check-init-type (hash-ref f->ty f) i))]
+    [(UniI m i)
+     (match-define (UniT m->ty _) ty)
+     (check-init-type (hash-ref m->ty m) i)]))
 
 (define (fun-type-info f)
   (match f
