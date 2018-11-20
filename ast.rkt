@@ -100,6 +100,14 @@
 (struct IfE Expr (ce te fe) #:transparent)
 (struct MetaE Expr (m e) #:transparent)
 
+
+;; XXX Eventually define macros to define custom exports for structs
+;; which are going to be shadowed by constructors.
+#;(define (Int/c R)
+  (-> boolean? integer-bit-widths exact-integer? R))
+#;(provide (contract-out [Int (Int/c Int?)]
+                         [Int/c (-> any/c contract?)]))
+
 (provide
  (contract-out
   [struct Expr ()]
