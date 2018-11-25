@@ -160,7 +160,8 @@
        (error 'stmt-env-info "Let: bs references x as incorrect type"))
      (env-info bs-env)]
     [(Call x ty f as bs)
-     (match-define (or (IntFun f-as _ ret-ty _ _) (ExtFun _ f-as ret-ty _)) f)
+     (match-define (or (IntFun f-as _ ret-ty _ _) (ExtFun _ f-as ret-ty _))
+       (unpack-MetaFun f))
      (unless (= (length f-as) (length as))
        (error 'stmt-env-info "Call: too many or not enough arguments"))
      (unless (equal? ret-ty ty)
