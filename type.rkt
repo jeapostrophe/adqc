@@ -15,6 +15,22 @@
 (define i-cmp-ops '(ieq ine iugt iuge iult iule isgt isge islt isle))
 (define f-cmp-ops '(foeq fone fogt foge folt fole fueq fune fugt fuge fult fule ffalse ftrue ford funo))
 
+(define (union-subset? u ty)
+  (match-define (UniT m->ty _) u)
+  (for/or ([u-ty (in-hash-values m->ty)])
+    (cond [(equal? ty u-ty) #t]
+          [(UniT? u-ty) (union-subset? u-ty ty)]
+          [else #f])))
+
+(define (resolve-type L R)
+  (cond [(equal? L R) L]
+        [else (cond [(and (UniT? L) (union-subset? L R)) L]
+                    [(and (UniT? R) (union-subset? R L)) R]
+                    [else (error 'resolve-type "type mismatch L: ~v R: ~v" L R)])]))
+
+(define (env-union e0 . es)
+  (apply hash-union e0 es #:combine resolve-type))
+
 (define (expr-type-info e)
   (match e
     [(MetaE (? type-info? ti) _) ti]
