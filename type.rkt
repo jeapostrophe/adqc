@@ -162,8 +162,11 @@
     [(Call x ty f as bs)
      (match-define (or (IntFun f-as _ ret-ty _ _) (ExtFun _ f-as ret-ty _))
        (unpack-MetaFun f))
-     (unless (= (length f-as) (length as))
-       (error 'stmt-env-info "Call: too many or not enough arguments"))
+     (cond [(> (length f-as) (length as))
+            (error 'stmt-env-info "Call: not enough arguments")]
+           [(< (length f-as) (length as))
+            (error 'stmt-env-info "Call: too many arguments")]
+           [else (void)])
      (unless (equal? ret-ty ty)
        (error 'stmt-env-info "Call: return type mismatch"))
      (for ([a (in-list as)] [fa (in-list f-as)])
