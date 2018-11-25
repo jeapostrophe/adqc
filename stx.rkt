@@ -10,7 +10,13 @@
                      racket/syntax
                      racket/dict
                      syntax/id-table)
-         "ast.rkt")
+         ;; XXX Use set intersection on import statements?
+         (except-in "ast.rkt"
+                    Int Flo Cast Read BinOp LetE IfE
+                    Var Select Field Mode ExtVar
+                    Skip Fail Begin Assign If While Jump Let/ec Let Call
+                    IntFun ExtFun)
+         "type.rkt")
 
 ;; XXX This module should use plus not ast (i.e. the thing that does
 ;; type checking, termination checking, and resource analysis). And

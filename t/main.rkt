@@ -23,6 +23,7 @@
 
 (define (val->type v)
   (match v
+    [(MetaE _ e) (val->type e)]
     [(Int signed? bits _)
      (IntT signed? bits)]
     [(Flo bits _)
@@ -103,8 +104,8 @@
      (quasisyntax/loc stx
        (let ([the-p #f]
              [the-cp #f])
-         (chk #:t (set! the-p (Prog p-body ...)))
-         (chk #:t (set! the-cp (link-program the-p)))
+         (chk #:t (#:stx #,stx (set! the-p (Prog p-body ...))))
+         (chk #:t (#:stx #,stx (set! the-cp (link-program the-p))))
          (TProgN the-p #:compiled the-cp t ...)))]))
 
 (define-syntax (TS stx)
