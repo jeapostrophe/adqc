@@ -7,12 +7,6 @@
 
 (define float-bit-widths '(32 64))
 (define integer-bit-widths '(8 16 32 64))
-
-(require syntax/parse/define)
-(define-simple-macro (for/syntax ([x:id stx:expr] ...+) bs:expr ...+)
-  (for/list ([x (in-list (or (syntax->list stx)
-                             (error 'for/syntax "argument not syntax list")))] ...)
-    bs ...))
   
 (define-syntax (struct+ stx)
   (syntax-parse stx
