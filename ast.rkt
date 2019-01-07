@@ -1,56 +1,49 @@
 #lang racket/base
 (require (for-syntax racket/base
-                     racket/syntax
-                     syntax/parse)
+                     racket/syntax)
          racket/contract/base
-         racket/match)
+         racket/match
+         syntax/parse/define)
 
 (define float-bit-widths '(32 64))
 (define integer-bit-widths '(8 16 32 64))
-  
-(define-syntax (struct+ stx)
+
+(define-syntax (struct++ stx)
   (syntax-parse stx
-    [(_ name:id base:id ([field:id ctc:expr] ...))
+    [(_ name:id base:id meta-base:id unpack:id ([field:id ctc:expr] ...))
      #:with (name^) (generate-temporaries #'(name))
-     #:with name-? (format-id #'name "~a?" #'name)
+     #:with name? (format-id #'name "~a?" #'name)
      #:with (field-accessor ...) (for/list ([f (in-list (syntax->list #'(field ...)))])
                                    (format-id f "~a-~a" #'name f))
      #:with (field-accessor^ ...) (generate-temporaries #'(field-accessor ...))
-     ;; XXX Maybe instead of determining meta-base and unpack here,
-     ;; they should be provided to struct+ as arguments? Then we
-     ;; could define wrapper macros for expr-struct, path-struct, etc.
-     #:with meta-base (syntax-parse #'base
-                        [Expr #'MetaE])
-     #:with meta-base-? (format-id #'base "~a?" #'meta-base)
-     #:with unpack (syntax-parse #'base
-                     [Expr #'unpack-MetaE])
-     #:with meta-ctc #'(or/c name-? meta-base-?)
+     #:with meta-base? (format-id #'meta-base "~a?" #'meta-base)
+     #:with meta-ctc #'(or/c name? meta-base?)
      (syntax/loc stx
        (begin
-         (struct name base (field ...) #:transparent)
-         #;; XXX How to provide name as a match expander? Need to preserve
-          ;; contract for procedure form while still allowing use as match
-          ;; expander - how does the struct form of contract-out handle this?
-         (define-match-expander name^
-           (λ (stx*)
-             (syntax-parse stx*
-               [(_ field ...)
-                (syntax/loc stx*
-                  (name field ...))]))
-           (λ (stx*)
-             (syntax-parse stx*
-               [(_ field ...)
-                (syntax/loc stx*
-                  (name field ...))])))
-         (begin
-           (define (field-accessor^ v)
-             (field-accessor (unpack v))) ...)
+         (struct name^ base (field ...) #:transparent
+           #:property prop:match-expander
+           (λ (this stx)
+             (syntax-parse stx
+               [(_ args:expr (... ...))
+                #'(name^ args (... ...))
+                ]))
+           #:property prop:procedure
+           (λ (this stx)
+             (syntax-parse stx
+               [(me args:expr (... ...))
+                #'(#%app me args (... ...))]
+               [me:id
+                ;; XXX actual-defn-as-fun == ??
+                #'(contract (-> ctc ... meta-ctc) actual-defn-as-fun #'me #,stx)
+                ])))
+         (define (field-accessor^ v)
+           (field-accessor (unpack v)))
+         ...
          (provide
+          (rename-out [name^ name])
           (contract-out
-           [#|rename name^|# name (-> ctc ... meta-ctc)]
-           [name-? predicate/c]
+           [name? predicate/c]
            [rename field-accessor^ field-accessor (-> meta-ctc ctc)] ...))))]))
-         
 
 ;; This is a partial test, see
 ;; http://en.cppreference.com/w/c/language/identifier for the complete
@@ -161,10 +154,11 @@
 #;(provide (contract-out [Int (Int/c Int?)]
                          [Int/c (-> any/c contract?)]))
 
+(struct++ Int Expr MetaE unpack-MetaE
+          ([signed? boolean?]
+           [bits (apply or/c integer-bit-widths)]
+           [val exact-integer?]))
 
-(struct+ Int Expr ([signed? boolean?]
-                   [bits (apply or/c integer-bit-widths)]
-                   [val exact-integer?]))
 (provide
  (contract-out
   [struct Expr ()]
