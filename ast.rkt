@@ -1,7 +1,5 @@
 #lang racket/base
 (require (for-syntax racket/base
-                     racket/contract/base
-                     racket/match
                      racket/syntax)
          racket/contract/base
          racket/match
@@ -16,18 +14,23 @@
     (λ (this stx)
       (syntax-parse stx
         [(_ args:expr ...)
-         (define ctor (constructor-instance-ctor this))
-         #'(#,ctor args ...)]))
+         #:with ctor (constructor-instance-ctor this)
+         (syntax/loc stx
+           (ctor args ...))]))
     #:property prop:procedure
     (λ (this stx)
       (syntax-parse stx
         [(me args:expr ...)
-         #'(#%app me args ...)]
+         (syntax/loc stx
+           (#%app me args ...))]
         [me:id
-         (match-define (constructor-instance ctc ctor) this)
-         #'(contract #,ctc #,ctor #'me #,stx)]))))
+         #:with ctc (constructor-instance-ctc this)
+         #:with ctor (constructor-instance-ctor this)
+         ;; XXX Is this syntax/loc necessary if we're also
+         ;;     passing stx to the call to contract?
+         (syntax/loc stx
+           (contract ctc ctor #'me #'#,stx))]))))
 
-;; new one, this is the real one
 (define-syntax (struct+ stx)
   (syntax-parse stx
     [(_ name:id base:id meta-base:id unpack:id ([field:id ctc:expr] ...))
@@ -41,50 +44,12 @@
      (syntax/loc stx
        (begin
          (struct name base (field ...) #:transparent)
-         (define-syntax ctor (constructor-instance ctor-ctc name))
+         (define-syntax ctor (constructor-instance #'ctor-ctc #'name))
          (define (field-accessor^ v)
            (field-accessor (unpack v)))
          ...
          (provide
           (rename-out [ctor name])
-          (contract-out
-           [name? predicate/c]
-           [rename field-accessor^ field-accessor (-> meta-ctc ctc)] ...))))]))
-           
-#;; old one, keeping around for reference for now (TODO: delete)
-(define-syntax (struct++ stx)
-  (syntax-parse stx
-    [(_ name:id base:id meta-base:id unpack:id ([field:id ctc:expr] ...))
-     #:with (name^) (generate-temporaries #'(name))
-     #:with name? (format-id #'name "~a?" #'name)
-     #:with (field-accessor ...) (for/list ([f (in-list (syntax->list #'(field ...)))])
-                                   (format-id f "~a-~a" #'name f))
-     #:with (field-accessor^ ...) (generate-temporaries #'(field-accessor ...))
-     #:with meta-base? (format-id #'meta-base "~a?" #'meta-base)
-     #:with meta-ctc #'(or/c name? meta-base?)
-     (syntax/loc stx
-       (begin
-         (struct name^ base (field ...) #:transparent
-           #:property prop:match-expander
-           (λ (this stx)
-             (syntax-parse stx
-               [(_ args:expr (... ...))
-                #'(name^ args (... ...))
-                ]))
-           #:property prop:procedure
-           (λ (this stx)
-             (syntax-parse stx
-               [(me args:expr (... ...))
-                #'(#%app me args (... ...))]
-               [me:id
-                ;; XXX actual-defn-as-fun == ??
-                #'(contract (-> ctc ... meta-ctc) actual-defn-as-fun #'me #,stx)
-                ])))
-         (define (field-accessor^ v)
-           (field-accessor (unpack v)))
-         ...
-         (provide
-          (rename-out [name^ name])
           (contract-out
            [name? predicate/c]
            [rename field-accessor^ field-accessor (-> meta-ctc ctc)] ...))))]))
@@ -172,16 +137,16 @@
 ;; Expressions
 (struct Expr () #:transparent)
 #;(struct Int Expr (signed? bits val) #:transparent)
-(struct Flo Expr (bits val) #:transparent)
-(struct Cast Expr (ty e) #:transparent)
-(struct Read Expr (p) #:transparent)
-(struct BinOp Expr (op L R) #:transparent)
+#;(struct Flo Expr (bits val) #:transparent)
+#;(struct Cast Expr (ty e) #:transparent)
+;(struct Read Expr (p) #:transparent)
+;(struct BinOp Expr (op L R) #:transparent)
 ;; DESIGN: We could instead make LamE and AppE then make expressions a
 ;; static simply-typed version of the lambda-calculus. I think this
 ;; would be overkill. We can do most of what we want with Racket
 ;; macros though.
-(struct LetE Expr (x ty xe be) #:transparent)
-(struct IfE Expr (ce te fe) #:transparent)
+;(struct LetE Expr (x ty xe be) #:transparent)
+;(struct IfE Expr (ce te fe) #:transparent)
 (struct MetaE Expr (m e) #:transparent)
 
 ;; XXX Should define macro for defining unpack-Meta*
@@ -190,14 +155,22 @@
     [(MetaE _ e) (unpack-MetaE e)]
     [(? Expr?) e]))
 
+(define-simple-macro (define-Expr name:id ([field:id ctc:expr] ...))
+  (struct+ name Expr MetaE unpack-MetaE ([field ctc] ...)))
 
-;; XXX Eventually define macros to define custom exports for structs
-;; which are going to be shadowed by constructors.
-#;(define (Int/c R)
-  (-> boolean? integer-bit-widths exact-integer? R))
-#;(provide (contract-out [Int (Int/c Int?)]
-                         [Int/c (-> any/c contract?)]))
+(define-Expr Int ([signed? boolean?]
+                  [bits (apply or/c integer-bit-widths)]
+                  [val exact-integer?]))
+(define-Expr Flo ([bits (apply or/c float-bit-widths)]
+                  [val (or/c single-flonum? double-flonum?)]))
+(define-Expr Cast ([ty Type?] [e Expr?]))
+(define-Expr Read ([p Path?]))
+(define-Expr BinOp ([op symbol?] [L Expr?] [R Expr?]))
+(define-Expr LetE ([x symbol?] [ty Type?] [xe Expr?] [be Expr?]))
+(define-Expr IfE ([ce Expr?] [te Expr?] [fe Expr?]))
 
+
+#;
 (struct+ Int Expr MetaE unpack-MetaE
           ([signed? boolean?]
            [bits (apply or/c integer-bit-widths)]
@@ -209,13 +182,13 @@
   #;[struct Int ([signed? boolean?]
                [bits (apply or/c integer-bit-widths)]
                [val exact-integer?])]
-  [struct Flo ([bits (apply or/c float-bit-widths)]
+  #;[struct Flo ([bits (apply or/c float-bit-widths)]
                [val (or/c single-flonum? double-flonum?)])]
-  [struct Cast ([ty Type?] [e Expr?])]
-  [struct Read ([p Path?])]
-  [struct BinOp ([op symbol?] [L Expr?] [R Expr?])]
-  [struct LetE ([x symbol?] [ty Type?] [xe Expr?] [be Expr?])]
-  [struct IfE ([ce Expr?] [te Expr?] [fe Expr?])]
+  #;[struct Cast ([ty Type?] [e Expr?])]
+ #;[struct Read ([p Path?])]
+  #;[struct BinOp ([op symbol?] [L Expr?] [R Expr?])]
+  #;[struct LetE ([x symbol?] [ty Type?] [xe Expr?] [be Expr?])]
+  #;[struct IfE ([ce Expr?] [te Expr?] [fe Expr?])]
   [struct MetaE ([m any/c] [e Expr?])]))
 
 ;; Initializer
