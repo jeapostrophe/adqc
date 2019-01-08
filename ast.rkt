@@ -1,5 +1,7 @@
 #lang racket/base
 (require (for-syntax racket/base
+                     racket/contract/base
+                     racket/match
                      racket/syntax)
          racket/contract/base
          racket/match
@@ -8,6 +10,48 @@
 (define float-bit-widths '(32 64))
 (define integer-bit-widths '(8 16 32 64))
 
+(begin-for-syntax
+  (struct constructor-instance (ctc ctor)
+    #:property prop:match-expander
+    (λ (this stx)
+      (syntax-parse stx
+        [(_ args:expr ...)
+         (define ctor (constructor-instance-ctor this))
+         #'(#,ctor args ...)]))
+    #:property prop:procedure
+    (λ (this stx)
+      (syntax-parse stx
+        [(me args:expr ...)
+         #'(#%app me args ...)]
+        [me:id
+         (match-define (constructor-instance ctc ctor) this)
+         #'(contract #,ctc #,ctor #'me #,stx)]))))
+
+;; new one, this is the real one
+(define-syntax (struct+ stx)
+  (syntax-parse stx
+    [(_ name:id base:id meta-base:id unpack:id ([field:id ctc:expr] ...))
+     #:with name? (format-id #'name "~a?" #'name)
+     #:with (field-accessor ...) (for/list ([f (in-list (syntax->list #'(field ...)))])
+                                   (format-id f "~a-~a" #'name f))
+     #:with (field-accessor^ ...) (generate-temporaries #'(field-accessor ...))
+     #:with meta-base? (format-id #'meta-base "~a?" #'meta-base)
+     #:with meta-ctc #'(or/c name? meta-base?)
+     #:with ctor-ctc #'(-> ctc ... meta-ctc)
+     (syntax/loc stx
+       (begin
+         (struct name base (field ...) #:transparent)
+         (define-syntax ctor (constructor-instance ctor-ctc name))
+         (define (field-accessor^ v)
+           (field-accessor (unpack v)))
+         ...
+         (provide
+          (rename-out [ctor name])
+          (contract-out
+           [name? predicate/c]
+           [rename field-accessor^ field-accessor (-> meta-ctc ctc)] ...))))]))
+           
+#;; old one, keeping around for reference for now (TODO: delete)
 (define-syntax (struct++ stx)
   (syntax-parse stx
     [(_ name:id base:id meta-base:id unpack:id ([field:id ctc:expr] ...))
@@ -154,7 +198,7 @@
 #;(provide (contract-out [Int (Int/c Int?)]
                          [Int/c (-> any/c contract?)]))
 
-(struct++ Int Expr MetaE unpack-MetaE
+(struct+ Int Expr MetaE unpack-MetaE
           ([signed? boolean?]
            [bits (apply or/c integer-bit-widths)]
            [val exact-integer?]))
