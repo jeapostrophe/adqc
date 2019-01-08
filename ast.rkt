@@ -136,18 +136,11 @@
 
 ;; Expressions
 (struct Expr () #:transparent)
-#;(struct Int Expr (signed? bits val) #:transparent)
-#;(struct Flo Expr (bits val) #:transparent)
-#;(struct Cast Expr (ty e) #:transparent)
-;(struct Read Expr (p) #:transparent)
-;(struct BinOp Expr (op L R) #:transparent)
-;; DESIGN: We could instead make LamE and AppE then make expressions a
-;; static simply-typed version of the lambda-calculus. I think this
-;; would be overkill. We can do most of what we want with Racket
-;; macros though.
-;(struct LetE Expr (x ty xe be) #:transparent)
-;(struct IfE Expr (ce te fe) #:transparent)
 (struct MetaE Expr (m e) #:transparent)
+(provide
+ (contract-out
+  [struct Expr ()]
+  [struct MetaE ([m any/c] [e Expr?])]))
 
 ;; XXX Should define macro for defining unpack-Meta*
 (define (unpack-MetaE e)
@@ -166,30 +159,12 @@
 (define-Expr Cast ([ty Type?] [e Expr?]))
 (define-Expr Read ([p Path?]))
 (define-Expr BinOp ([op symbol?] [L Expr?] [R Expr?]))
+;; DESIGN: We could instead make LamE and AppE then make expressions a
+;; static simply-typed version of the lambda-calculus. I think this
+;; would be overkill. We can do most of what we want with Racket
+;; macros though.
 (define-Expr LetE ([x symbol?] [ty Type?] [xe Expr?] [be Expr?]))
 (define-Expr IfE ([ce Expr?] [te Expr?] [fe Expr?]))
-
-
-#;
-(struct+ Int Expr MetaE unpack-MetaE
-          ([signed? boolean?]
-           [bits (apply or/c integer-bit-widths)]
-           [val exact-integer?]))
-
-(provide
- (contract-out
-  [struct Expr ()]
-  #;[struct Int ([signed? boolean?]
-               [bits (apply or/c integer-bit-widths)]
-               [val exact-integer?])]
-  #;[struct Flo ([bits (apply or/c float-bit-widths)]
-               [val (or/c single-flonum? double-flonum?)])]
-  #;[struct Cast ([ty Type?] [e Expr?])]
- #;[struct Read ([p Path?])]
-  #;[struct BinOp ([op symbol?] [L Expr?] [R Expr?])]
-  #;[struct LetE ([x symbol?] [ty Type?] [xe Expr?] [be Expr?])]
-  #;[struct IfE ([ce Expr?] [te Expr?] [fe Expr?])]
-  [struct MetaE ([m any/c] [e Expr?])]))
 
 ;; Initializer
 (struct Init () #:transparent)
