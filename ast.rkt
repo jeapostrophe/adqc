@@ -54,11 +54,13 @@
            [name? predicate/c]
            [rename field-accessor^ field-accessor (-> meta-ctc ctc)] ...))))]))
 
-(define-simple-macro (define-unpacker name:id meta-type base-type?)
-  (define (name v)
-    (match v
-      [(meta-type _ v) (name v)]
-      [(? base-type?) v])))
+(define-simple-macro (define-unpacker name:id meta-type:id base-type?:id)
+  (begin
+    (define (name v)
+      (match v
+        [(meta-type _ v) (name v)]
+        [(? base-type?) v]))
+    (provide (contract-out [name (-> base-type? base-type?)]))))
 
 ;; This is a partial test, see
 ;; http://en.cppreference.com/w/c/language/identifier for the complete
@@ -258,7 +260,6 @@
   [struct Arg ([x symbol?] [ty Type?] [mode mode/c])]
   [struct Fun ()]
   [struct MetaFun ([m any/c] [f Fun?])]
-  [unpack-MetaFun (-> Fun? Fun?)]
   [Fun-args (-> (or/c IntFun? ExtFun? MetaFun?) (listof Arg?))]))
 
 (define (IntFun*? x)
