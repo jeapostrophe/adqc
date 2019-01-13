@@ -54,6 +54,12 @@
            [name? predicate/c]
            [rename field-accessor^ field-accessor (-> meta-ctc ctc)] ...))))]))
 
+(define-simple-macro (define-unpacker name:id meta-type base-type?)
+  (define (name v)
+    (match v
+      [(meta-type _ v) (name v)]
+      [(? base-type?) v])))
+
 ;; This is a partial test, see
 ;; http://en.cppreference.com/w/c/language/identifier for the complete
 ;; rules.
@@ -117,22 +123,21 @@
 
 ;; Path
 (struct Path () #:transparent)
-(struct Var Path (x ty) #:transparent)
-(struct Select Path (p ie) #:transparent)
-(struct Field Path (p f) #:transparent)
-(struct Mode Path (p m) #:transparent)
-(struct ExtVar Path (src name ty) #:transparent)
 (struct MetaP Path (m p) #:transparent)
-
 (provide
  (contract-out
   [struct Path ()]
-  [struct Var ([x symbol?] [ty Type?])]
-  [struct Select ([p Path?] [ie Expr?])]
-  [struct Field ([p Path?] [f symbol?])]
-  [struct Mode ([p Path?] [m symbol?])]
-  [struct ExtVar ([src ExternSrc?] [name c-identifier-string?] [ty Type?])]
   [struct MetaP ([m any/c] [p Path?])]))
+
+(define-unpacker unpack-MetaP MetaP Path?)
+(define-simple-macro (define-Path name:id ([field:id ctc:expr] ...))
+  (struct+ name Path MetaP unpack-MetaP ([field ctc] ...)))
+
+(define-Path Var ([x symbol?] [ty Type?]))
+(define-Path Select ([p Path?] [ie Expr?]))
+(define-Path Field ([p Path?] [f symbol?]))
+(define-Path Mode ([p Path?] [m symbol?]))
+(define-Path ExtVar ([src ExternSrc?] [name c-identifier-string?] [ty Type?]))
 
 ;; Expressions
 (struct Expr () #:transparent)
@@ -142,12 +147,7 @@
   [struct Expr ()]
   [struct MetaE ([m any/c] [e Expr?])]))
 
-;; XXX Should define macro for defining unpack-Meta*
-(define (unpack-MetaE e)
-  (match e
-    [(MetaE _ e) (unpack-MetaE e)]
-    [(? Expr?) e]))
-
+(define-unpacker unpack-MetaE MetaE Expr?)
 (define-simple-macro (define-Expr name:id ([field:id ctc:expr] ...))
   (struct+ name Expr MetaE unpack-MetaE ([field ctc] ...)))
 
@@ -190,36 +190,30 @@
 
 ;; Statements
 (struct Stmt () #:transparent)
-(struct Skip Stmt (comment) #:transparent)
-(struct Fail Stmt (msg) #:transparent)
-(struct Begin Stmt (f s) #:transparent)
-(struct Assign Stmt (p e) #:transparent)
-(struct If Stmt (p t f) #:transparent)
-(struct While Stmt (p body) #:transparent)
-(struct Jump Stmt (label) #:transparent)
-(struct Let/ec Stmt (label body) #:transparent)
-(struct Let Stmt (x ty xi bs) #:transparent)
 (struct MetaS Stmt (m bs) #:transparent)
+(provide
+ (contract-out
+  [struct Stmt ()]
+  [struct MetaS ([m any/c] [bs Stmt?])]))
+
+(define-unpacker unpack-MetaS MetaS Stmt?)
+(define-simple-macro (define-Stmt name:id ([field:id ctc:expr] ...))
+  (struct+ name Stmt MetaS unpack-MetaS ([field ctc] ...)))
+
+(define-Stmt Skip ([comment (or/c #f string?)]))
+(define-Stmt Fail ([msg string?]))
+(define-Stmt Begin ([f Stmt?] [s Stmt?]))
+(define-Stmt Assign ([p Path?] [e Expr?]))
+(define-Stmt If ([p Expr?] [t Stmt?] [f Stmt?]))
+(define-Stmt While ([p Expr?] [body Stmt?]))
+(define-Stmt Jump ([label symbol?]))
+(define-Stmt Let/ec ([label symbol?] [body Stmt?]))
+(define-Stmt Let ([x symbol?] [ty Type?] [xi Init?] [bs Stmt?]))
 ;; DESIGN NOTE: `f` could be an `IntFun`, which includes `Stmt`, so
 ;; this is a mutually recursive definition. Alternatively, we could
 ;; treat functions like variables and have a name plus an environment
 ;; binding later in `Program`.
-(struct Call Stmt (x ty f as bs) #:transparent)
-
-(provide
- (contract-out
-  [struct Stmt ()]
-  [struct Skip ([comment (or/c #f string?)])]
-  [struct Fail ([msg string?])]
-  [struct Begin ([f Stmt?] [s Stmt?])]
-  [struct Assign ([p Path?] [e Expr?])]
-  [struct If ([p Expr?] [t Stmt?] [f Stmt?])]
-  [struct While ([p Expr?] [body Stmt?])]
-  [struct Jump ([label symbol?])]
-  [struct Let/ec ([label symbol?] [body Stmt?])]
-  [struct Let ([x symbol?] [ty Type?] [xi Init?] [bs Stmt?])]
-  [struct MetaS ([m any/c] [bs Stmt?])]
-  [struct Call ([x symbol?] [ty Type?] [f Fun?] [as (listof (or/c Expr? Path?))] [bs Stmt?])]))
+(define-Stmt Call ([x symbol?] [ty Type?] [f Fun?] [as (listof (or/c Expr? Path?))] [bs Stmt?]))
 
 ;; Functions
 (struct Arg (x ty mode) #:transparent)
@@ -235,19 +229,22 @@
 ;; but changes are not visible.
 
 (struct Fun () #:transparent)
-(struct IntFun Fun (args ret-x ret-ty ret-lab body) #:transparent)
+(struct MetaFun Fun (m f) #:transparent)
+
+(define-unpacker unpack-MetaFun MetaFun Fun?)
+(define-simple-macro (define-Fun name:id ([field:id ctc:expr] ...))
+  (struct+ name Fun MetaFun unpack-MetaFun ([field ctc] ...)))
+
 ;; This definition is carefully chosen to be trivially inline-able.
 ;; but the compiler MAY turn it into an actual function call (perhaps
 ;; if it is used many times)
-
-(struct MetaFun Fun (m f) #:transparent)
-(struct ExtFun Fun (src args ret-ty name) #:transparent)
-
-(define (unpack-MetaFun f)
-  (match f
-    [(MetaFun _ f)
-     (unpack-MetaFun f)]
-    [(? Fun?) f]))
+(define-Fun IntFun ([args (listof Arg?)]
+                    [ret-x symbol?] [ret-ty Type?]
+                    [ret-lab symbol?] [body Stmt?]))
+(define-Fun ExtFun ([src ExternSrc?]
+                    [args (listof Arg?)]
+                    [ret-ty Type?]
+                    [name c-identifier-string?]))
 
 (define (Fun-args f)
   (match (unpack-MetaFun f)
@@ -260,14 +257,7 @@
  (contract-out
   [struct Arg ([x symbol?] [ty Type?] [mode mode/c])]
   [struct Fun ()]
-  [struct IntFun ([args (listof Arg?)]
-                  [ret-x symbol?] [ret-ty Type?]
-                  [ret-lab symbol?] [body Stmt?])]
   [struct MetaFun ([m any/c] [f Fun?])]
-  [struct ExtFun ([src ExternSrc?]
-                  [args (listof Arg?)]
-                  [ret-ty Type?]
-                  [name c-identifier-string?])]
   [unpack-MetaFun (-> Fun? Fun?)]
   [Fun-args (-> (or/c IntFun? ExtFun? MetaFun?) (listof Arg?))]))
 
