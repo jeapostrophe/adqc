@@ -1,11 +1,25 @@
 #lang racket/base
-(require (for-syntax racket/base)
+(require (for-syntax racket/base
+                     racket/syntax)
          racket/contract/base
          racket/hash
          racket/match
          racket/set
          syntax/parse/define
          "ast.rkt")
+
+(define-syntax (define-reporter stx)
+  (syntax-parse stx
+    [(_ name:id blame-ast:expr)
+     (syntax/loc stx
+       (define-syntax (name stx*)
+         (syntax-parse stx*
+           [(_ msg-header:expr msg:str args:expr (... ...))
+            #:with msg-full (datum->syntax
+                             #'msg (string-append
+                                    (syntax->datum #'msg) "\nBlaming AST: ~v"))
+            (syntax/loc stx*
+              (error msg-header msg-full args (... ...) blame-ast))])))]))
 
 (struct env-info (env) #:transparent)
 (struct type-info env-info (ty) #:transparent)
@@ -32,6 +46,7 @@
   (apply hash-union e0 es #:combine resolve-type))
 
 (define (expr-type-info e)
+  (define-reporter report e)
   (match e
     [(MetaE (? type-info? ti) _) ti]
     [(MetaE _ e) (expr-type-info e)]
@@ -43,9 +58,9 @@
      (match-define (type-info from-env from-ty)
        (expr-type-info e))
      (unless (or (IntT? from-ty) (FloT? from-ty))
-       (error 'expr-type-info "Cast: from type not numeric"))
+       (report 'Cast "can't cast from non-numeric type ~v" from-ty))
      (unless (or (IntT? to-ty) (FloT? to-ty))
-       (error 'expr-type-info "Cast: to type not numeric"))
+       (report 'Cast "can't cast to non-numeric type ~v" to-ty))
      (type-info from-env to-ty)]
     [(Read p) (path-type-info p)]
     [(BinOp op L R)
@@ -54,13 +69,16 @@
      (match-define (type-info R-env R-ty)
        (expr-type-info R))
      (unless (equal? L-ty R-ty)
-       (error 'expr-type-info "BinOp: LHS and RHS types not equal"))
+       (report 'BinOp "LHS type ~v and RHS type ~v not equal" L-ty R-ty))
      (when (or (set-member? i-arith-ops op) (set-member? i-cmp-ops op))
        (unless (IntT? L-ty)
-         (error 'expr-type-info "BinOp: integer op expects integral arguments")))
+         (report 'BinOp "integer op expects integral arguments, given ~v, ~v"
+                 L-ty R-ty)))
      (when (or (set-member? f-arith-ops op) (set-member? f-cmp-ops op))
        (unless (FloT? L-ty)
-         (error 'expr-type-info "BinOp: floating-point op expects floating-point arguments")))
+         (report
+          'BinOp "floating-point op expects floating-point arguments, given ~v, ~v"
+          L-ty R-ty)))
      ;; XXX add logic for union types.
      (define env (hash-union L-env R-env))
      (cond [(or (set-member? i-arith-ops op) (set-member? f-arith-ops op))
@@ -71,29 +89,34 @@
      (match-define (type-info xe-env xe-ty)
        (expr-type-info xe))
      (unless (equal? ty xe-ty)
-       (error 'expr-type-info "LetE: x and xe types not equal"))
+       (report 'LetE "declaration '~a' has type ~v but is initialized as type ~v"
+               x ty xe-ty))
      (match-define (type-info be-env be-ty)
        (expr-type-info be))
        ;; If x is not referenced in 'be', x will not be in be-env.
        ;; In this case, return ty to avoid error.
-     (unless (equal? ty (hash-ref be-env x ty))
-       (error "LetE: be references x as incorrect type"))
+     (define be-x-ty (hash-ref be-env x ty))
+     (unless (equal? ty be-x-ty)
+       (report
+        'LetE "declaration '~a' has type ~v but is referenced as type ~v in body"
+        x ty be-x-ty))
      (type-info be-env be-ty)]
     [(IfE ce te fe)
      (match-define (type-info ce-env ce-ty)
        (expr-type-info ce))
      (unless (IntT? ce-ty)
-       (error 'expr-type-info "IfE: predicate type not integral"))
+       (report 'IfE "predicate type ~v not integral" ce-ty))
      (match-define (type-info te-env te-ty)
        (expr-type-info te))
      (match-define (type-info fe-env fe-ty)
        (expr-type-info fe))
      (unless (equal? te-ty fe-ty)
-       (error 'expr-type-info "IfE: true and false types not equal"))
+       (report 'IfE "'then' type ~v and 'else' type ~v not equal" te-ty fe-ty))
      (define env (hash-union ce-env te-env fe-env))
      (type-info env te-ty)]))
 
 (define (path-type-info p)
+  (define-reporter report p)
   (match p
     [(MetaP (? type-info? ti) _) ti]
     [(MetaP _ p) (path-type-info p)]
@@ -105,7 +128,7 @@
      (match-define (type-info ie-env ie-ty)
        (expr-type-info ie))
      (unless (IntT? ie-ty)
-       (error 'path-type-info "Select: index type not integral"))
+       (report 'Select "index type ~v not integral" ie-ty))
      (match-define (type-info p-env (ArrT _ ety))
        (path-type-info p))
      (define env (hash-union ie-env p-env))
@@ -120,6 +143,7 @@
      (type-info p-env (hash-ref m->ty m))]))
 
 (define (stmt-env-info s)
+  (define-reporter report s)
   (define (rec s) (stmt-env-info s))
   (match s
     [(MetaS (? env-info? ei) _) ei]
@@ -135,7 +159,9 @@
      (match-define (type-info e-env e-ty)
        (expr-type-info e))
      (unless (equal? p-ty e-ty)
-       (error 'stmt-env-info "Assign: path type and expression type not equal"))
+       (report
+        'Assign "path type ~v and expression type ~v not equal"
+        p-ty e-ty))
      (env-info (hash-union p-env e-env))]
     [(If p t f)
      (match-define (type-info p-env p-ty)
@@ -143,42 +169,52 @@
      (match-define (env-info t-env) (rec t))
      (match-define (env-info f-env) (rec f))
      (unless (IntT? p-ty)
-       (error 'stmt-env-info "If: predicate type not integral"))
+       (report 'If "predicate type ~v not integral" p-ty))
      (env-info (hash-union p-env t-env f-env))]
     [(While p body)
      (match-define (type-info p-env p-ty)
        (expr-type-info p))
      (unless (IntT? p-ty)
-       (error 'stmt-env-info "While: predicate type not integral"))
+       (report 'While "predicate type ~v not integral" p-ty))
      (match-define (env-info body-env) (rec body))
      (env-info (hash-union p-env body-env))]
     [(Let/ec _ body) (rec body)]
     [(Let x ty xi bs)
      (check-init-type ty xi)
      (match-define (env-info bs-env) (rec bs))
-     (unless (equal? ty (hash-ref bs-env x ty))
-       (error 'stmt-env-info "Let: bs references x as incorrect type"))
+     (define bs-x-ty (hash-ref bs-env x ty))
+     (unless (equal? ty bs-x-ty)
+       (report
+        'Let "declaration '~a' has type ~v but is referenced as type ~v in body"
+        x ty bs-x-ty))
      (env-info bs-env)]
     [(Call x ty f as bs)
      (match-define (or (IntFun f-as _ ret-ty _ _) (ExtFun _ f-as ret-ty _))
        (unpack-MetaFun f))
      (define f-as-length (length f-as))
      (define as-length (length as))
-     (cond [(> f-as-length as-length)
-            (error 'stmt-env-info "Call: not enough arguments")]
-           [(< f-as-length as-length)
-            (error 'stmt-env-info "Call: too many arguments")]
-           [else (void)])
+     (unless (= f-as-length as-length)
+       (report 'Call "given ~a arguments, expected ~a" as-length f-as-length))
      (unless (equal? ret-ty ty)
-       (error 'stmt-env-info "Call: return type mismatch"))
-     (for ([a (in-list as)] [fa (in-list f-as)])
+       (report
+        'Call "declaration '~a' has type ~v but is initialized as type ~v"
+        ret-ty ty))
+     (for ([a (in-list as)] [fa (in-list f-as)] [i (in-naturals 1)])
        (unless (equal? (Arg-ty a) (Arg-ty fa))
-         (error 'stmt-env-info "Call: argument type mismatch")))
+         (report 'Call "expected type ~v for argument ~a, given ~v" fa i a)))
      (match-define (env-info bs-env) (rec bs))
-     (unless (equal? ty (hash-ref bs-env x ty))
-       (error 'stmt-env-info "Call: bs references x as incorrect type"))
+     (define bs-x-ty (hash-ref bs-env x ty))
+     (unless (equal? ty bs-x-ty)
+       (report
+        'Call "declaration '~a' has type ~v but is referenced as type ~v in body"
+        x ty bs-x-ty))
      (env-info bs-env)]))
 
+;; XXX Improve this, maybe check-init-type should instead be
+;; init-type and just take an Init and return a type. That way
+;; the calling function would be responsible for checking for
+;; outer-level type mismatches and this function would only
+;; error when internally inconsistent. 
 (define (check-init-type ty i)
   (match i
     [(UndI u-ty)
@@ -205,6 +241,7 @@
      (check-init-type (hash-ref m->ty m) i)]))
 
 (define (fun-type-info f)
+  (define-reporter report f)
   (match f
     [(MetaFun (? type-info ti) _) ti]
     [(MetaFun _ f) (fun-type-info f)]
@@ -212,12 +249,18 @@
      (match-define (env-info env)
        (stmt-env-info body))
      ;; XXX Do we want to fail if ret-x is not referenced inside of body?
-     (unless (equal? ret-ty (hash-ref env ret-x))
-       (error 'fun-type-info "IntFun: ret-ty does not match usage of ret-x in body"))
-     (for ([a (in-list args)])
+     (define body-ret-x-ty (hash-ref env ret-x))
+     (unless (equal? ret-ty body-ret-x-ty)
+       (report
+        'IntFun "return type declared as ~v but returns value of type ~v"
+        ret-ty body-ret-x-ty))
+     (for ([a (in-list args)] [i (in-naturals 1)])
        (match-define (Arg x ty _) a)
-       (unless (equal? ty (hash-ref env x ty))
-         (error 'fun-type-info "IntFun: arg type does not match usage in body")))
+       (define body-x-ty (hash-ref env x ty))
+       (unless (equal? ty body-x-ty)
+         (report
+          'IntFun "argument ~a declared as type ~v but referenced as type ~v in body"
+          i ty body-x-ty)))
      (type-info ret-ty env)]
     ;; XXX Should we somehow be tracking ExtFun declarations and making sure
     ;; that all ExtFuns which share 'name' are really equal?
@@ -239,7 +282,7 @@
 (define-syntax (define-constructor stx)
   (syntax-parse stx
     [(_ name:id ensure)
-     #:with (name^) (generate-temporaries #'(name))
+     #:with name^ (generate-temporary #'name)
      (syntax/loc stx
        (begin
          (define (name^ . args) (ensure (apply name args)))
