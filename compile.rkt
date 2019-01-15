@@ -167,7 +167,7 @@
 
 (define (compile-path ρ path)
   (define (rec path) (compile-path ρ path))
-  (match path
+  (match (unpack-MetaP path)
     [(Var x ty)
      (values (hash-ref ρ x) ty)]
     [(Select path ie)

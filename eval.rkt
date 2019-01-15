@@ -153,7 +153,7 @@
 
 (define (path-read σ p)
   (define (rec p) (unbox (path-read σ p)))
-  (match p
+  (match (unpack-MetaP p)
     [(Var x _) (hash-ref σ x)]
     [(Select p ie) (vector-ref (rec p) (Int-val (eval-expr σ ie)))]
     [(Field p f) (hash-ref (rec p) f)]
@@ -162,7 +162,7 @@
      (error 'path-read/ref "XXX Cannot interp external variables yet: ~e" p)]))
 
 (define (path-write! σ p v)
-  (match p
+  (match (unpack-MetaP p)
     [(Var x _)
      (set-box! (hash-ref σ x) v)]
     [(Select p ie)
