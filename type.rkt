@@ -8,6 +8,12 @@
          syntax/parse/define
          "ast.rkt")
 
+;; XXX Maybe this isn't the best way to do this. My first instinct is to capture
+;; the AST node which is creating the error and print it along with the error
+;; message, but this may result in unreadable output for Let, LetE, and Call
+;; nodes, as they contain the rest of the function as their body. Maybe have
+;; different reporting schemes for syntax which makes declarations and has a body
+;; (Let, LetE, Call, IntFun, etc?) and other types of syntax?
 (define-syntax (define-reporter stx)
   (syntax-parse stx
     [(_ name:id blame-ast:expr)
