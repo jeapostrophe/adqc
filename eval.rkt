@@ -47,6 +47,20 @@
 (define sint-op (int-op #t))
 (define uint-op (int-op #f))
 
+(define (((int-cmp signed?) op) a b)
+  (match-define (Int a-signed? a-bits a-val) a)
+  (match-define (Int b-signed? b-bits b-val) b)
+  (unless (eq? a-signed? b-signed?)
+    (error "Mismatched signs" a b))
+  (unless (= a-bits b-bits)
+    (error "Mismatched bit widths" a b))
+  (define pre-cast (int-cast signed? a-bits))
+  (define res (op (pre-cast a-val) (pre-cast b-val)))
+  (Int #t 32 (if res 1 0)))
+
+(define sint-cmp (int-cmp #t))
+(define uint-cmp (int-cmp #f))
+
 (define ((flo-op op) a b)
   (match-define (Flo a-bits a-val) a)
   (match-define (Flo b-bits b-val) b)
@@ -54,14 +68,12 @@
     (error 'flo-op "Mismatched bit widths" a b))
   (Flo a-bits (op a-val b-val)))
 
-;; flo-cmp needs to be distinct from flo-op so that it can return an
-;; integer instead of a float.
 (define ((flo-cmp op) a b)
   (match-define (Flo a-bits a-val) a)
   (match-define (Flo b-bits b-val) b)
   (unless (= a-bits b-bits)
     (error 'flo-cmp "Mismatched bit widths" a b))
-  (Int #f 32 (if (op a-val b-val) 1 0)))
+  (Int #t 32 (if (op a-val b-val) 1 0)))
 
 (define ((ordered-op op) a b)
   (and (not (equal? a +nan.0))
@@ -72,18 +84,6 @@
   (or (equal? a +nan.0)
       (equal? b +nan.0)
       (op a b)))
-
-(define ((bool-op op) a b)
-  (if (op a b) 1 0))
-
-;; xxx: Should *int-cmp be its own function so that it can return a
-;; standard bit width regardless of arguments? C uses 'int' types for
-;; bools regardless of argument types, IIRC.
-(define sint-cmp
-  (λ~> bool-op sint-op))
-
-(define uint-cmp
-  (λ~> bool-op uint-op))
 
 (define ord-flo-cmp
   (λ~> ordered-op flo-cmp))
@@ -105,6 +105,9 @@
           'ior (uint-op bitwise-ior)
           'iand (uint-op bitwise-and)
           'ixor (uint-op bitwise-xor)
+          ;; ieq and ine technically aren't signed or unsigned, but we
+          ;; use uint-cmp here because we only care if the results are
+          ;; equal, which is unaffected by signed vs. unsigned.
           'ieq (uint-cmp =)
           'ine (uint-cmp !=)
           'iugt (uint-cmp >)
