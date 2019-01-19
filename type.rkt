@@ -206,7 +206,10 @@
         'Call "declaration '~a' has type ~v but is initialized as type ~v"
         ret-ty ty))
      (for ([a (in-list as)] [fa (in-list f-as)] [i (in-naturals 1)])
-       (unless (equal? (Arg-ty a) (Arg-ty fa))
+       (define a-ty (type-info-ty
+                     (cond [(Expr? a) (expr-type-info a)]
+                           [(Path? a) (path-type-info a)])))
+       (unless (equal? a-ty (Arg-ty fa))
          (report 'Call "expected type ~v for argument ~a, given ~v" fa i a)))
      (match-define (env-info bs-env) (rec bs))
      (define bs-x-ty (hash-ref bs-env x ty))
