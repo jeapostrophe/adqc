@@ -86,7 +86,7 @@
           'BinOp "floating-point op expects floating-point arguments, given ~v, ~v"
           L-ty R-ty)))
      ;; XXX add logic for union types.
-     (define env (hash-union L-env R-env))
+     (define env (env-union L-env R-env))
      (cond [(or (set-member? i-arith-ops op) (set-member? f-arith-ops op))
             (type-info env L-ty)]
            [(or (set-member? i-cmp-ops op) (set-member? f-cmp-ops op))
@@ -118,7 +118,7 @@
        (expr-type-info fe))
      (unless (equal? te-ty fe-ty)
        (report 'IfE "'then' type ~v and 'else' type ~v not equal" te-ty fe-ty))
-     (define env (hash-union ce-env te-env fe-env))
+     (define env (env-union ce-env te-env fe-env))
      (type-info env te-ty)]))
 
 (define (path-type-info p)
@@ -137,7 +137,7 @@
        (report 'Select "index type ~v not integral" ie-ty))
      (match-define (type-info p-env (ArrT _ ety))
        (path-type-info p))
-     (define env (hash-union ie-env p-env))
+     (define env (env-union ie-env p-env))
      (type-info env ety)]
     [(Field p f)
      (match-define (type-info p-env (RecT f->ty _ _))
@@ -158,7 +158,7 @@
     [(Begin f s)
      (match-define (env-info f-env) (rec f))
      (match-define (env-info s-env) (rec s))
-     (env-info (hash-union f-env s-env))]
+     (env-info (env-union f-env s-env))]
     [(Assign p e)
      (match-define (type-info p-env p-ty)
        (path-type-info p))
@@ -168,7 +168,7 @@
        (report
         'Assign "path type ~v and expression type ~v not equal"
         p-ty e-ty))
-     (env-info (hash-union p-env e-env))]
+     (env-info (env-union p-env e-env))]
     [(If p t f)
      (match-define (type-info p-env p-ty)
        (expr-type-info p))
@@ -176,14 +176,14 @@
      (match-define (env-info f-env) (rec f))
      (unless (IntT? p-ty)
        (report 'If "predicate type ~v not integral" p-ty))
-     (env-info (hash-union p-env t-env f-env))]
+     (env-info (env-union p-env t-env f-env))]
     [(While p body)
      (match-define (type-info p-env p-ty)
        (expr-type-info p))
      (unless (IntT? p-ty)
        (report 'While "predicate type ~v not integral" p-ty))
      (match-define (env-info body-env) (rec body))
-     (env-info (hash-union p-env body-env))]
+     (env-info (env-union p-env body-env))]
     [(Let/ec _ body) (rec body)]
     [(Let x ty xi bs)
      (check-init-type ty xi)
