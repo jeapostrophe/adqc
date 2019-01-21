@@ -251,7 +251,7 @@
     [(Call x ty f as bs)
      (define σ* (for/fold ([σ* Σ]) ([a (in-list as)] [fa (in-list (Fun-args f))])
                   (match-define (Arg x ty m) fa)
-                  (match a
+                  (match (unpack-any a)
                     [(or (Read p) (? Path? p))
                      (match m
                        ['copy

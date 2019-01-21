@@ -297,6 +297,17 @@
   (or (IntFun? x)
       (and (MetaFun? x) (IntFun*? (MetaFun-f x)))))
 
+(define (unpack-any v)
+  (match v
+    [(? Path?) (unpack-MetaP v)]
+    [(? Expr?) (unpack-MetaE v)]
+    [(? Stmt?) (unpack-MetaS v)]
+    [(? Fun?) (unpack-MetaFun v)]))
+(provide
+ (contract-out
+  [unpack-any (-> (or/c Path? Expr? Stmt? Fun?)
+                  (or/c Path? Expr? Stmt? Fun?))]))
+
 ;; Program
 (struct Global (ty xi) #:transparent)
 (struct Program (globals private->public name->ty name->fun) #:transparent)

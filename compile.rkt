@@ -369,7 +369,7 @@
         ;; arg-* relates to what the function expects of its arguments
         (for/list ([var (in-list as)]
                    [arg (in-list (Fun-args f*))])
-          (match var
+          (match (unpack-any var)
             [(or (Read path) (? Path? path))
              (match-define-values (var-ast _)
                (compile-path ρ path))
