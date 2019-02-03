@@ -124,6 +124,8 @@
          (LetE (first xs) (first tys) (first xes)
                (Let*E (rest xs) (rest tys) (rest xes) be))]))
 
+(define-syntax-parameter expect-ty #f)
+
 (define-syntax (E stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -145,7 +147,8 @@
          (let ([x-id 'x-id] ... [the-ty (T xty)] ...)
            (Let*E (list x-id ...)
                   (list the-ty ...)
-                  (list (E xe) ...)
+                  (list (syntax-parameterize ([expect-ty #'the-ty])
+                          (E xe)) ...)
                   (let ([the-x-ref (Var x-id the-ty)] ...)
                     (let-syntax ([x (P-expander
                                      (syntax-parser [_ #'the-x-ref]))] ...)
@@ -164,6 +167,18 @@
       [(_ (unsyntax e))
        (record-disappeared-uses #'unsyntax)
        #'e]
+      ;; XXX Add bounds checks, infer type from number's size when expect-ty is #f
+      [(_ n:integer)
+       #:with ty (datum->syntax #f (syntax-parameter-value #'expect-ty))
+       (syntax/loc stx
+         (Int (IntT-signed? ty) (IntT-bits ty) n))]
+      ;; XXX These two cases should probably be one case, since we want to
+      ;; select the output type based on the value of expect-ty, not whether
+      ;; the user typed in an 'integer' or a 'number'
+      [(_ f:number)
+       #:with ty (datum->syntax #f (syntax-parameter-value #'expect-ty))
+       (syntax/loc stx
+         (Flo (FloT-bits ty) f))]
       [(_ p) (quasisyntax/loc stx (Read #,(syntax/loc #'p (P p))))])))
 
 (define-E-free-syntax cond
@@ -329,7 +344,8 @@
        (syntax/loc stx
          (let ([x-id 'x-id]
                [the-ty (T ty)])
-           (Let x-id the-ty (I xi)
+           (Let x-id the-ty (syntax-parameterize ([expect-ty #'the-ty])
+                              (I xi))
                 (let ([the-x-ref (Var x-id the-ty)])
                   (let-syntax ([x (P-expander
                                    (syntax-parser [_ #'the-x-ref]))])
