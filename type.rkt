@@ -312,3 +312,15 @@
 (define-simple-macro (define-funs name:id ...)
   (begin (define-constructor name ensure-fun-type) ...))
 (define-funs IntFun ExtFun)
+
+(define (expr-type e)
+  (type-info-ty (expr-type-info e)))
+(define (path-type p)
+  (type-info-ty (path-type-info p)))
+(define (fun-type f)
+  (type-info-ty (fun-type-info f)))
+(provide
+ (contract-out
+  [expr-type (-> Expr? Type?)]
+  [path-type (-> Path? Type?)]
+  [fun-type (-> Fun? Type?)]))

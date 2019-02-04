@@ -5,7 +5,15 @@
          adqc
          chk
          racket/file
-         racket/match)
+         racket/match
+         ;; XXX Poor code organization? The *-type functions need to be defined
+         ;; in type.rkt so they can access the private functions there. But we
+         ;; also want them available here. However adding type.rkt to list of
+         ;; modules exported by adqc would cause conflicts since type.rkt
+         ;; shadows many of the names exported in ast.rkt. Maybe the relevant
+         ;; functions should be re-provided by stx.rkt? Or maybe adqc's main.rkt
+         ;; should include type.rkt, but only provide certain functions from it?
+         (only-in "../type.rkt" expr-type))
 
 ;; This assumes the same representation used by the evaluator for data types.
 (define (raw-value ty v)
@@ -20,14 +28,6 @@
        (raw-value ety (unbox v*)))]
     ;; XXX Structs and Unions.
     ))
-
-(define (val->type v)
-  (match v
-    [(MetaE _ e) (val->type e)]
-    [(Int signed? bits _)
-     (IntT signed? bits)]
-    [(Flo bits _)
-     (FloT bits)]))
 
 (define current-invert? (make-parameter #f))
 (define-syntax-rule (! . b)
@@ -115,8 +115,7 @@
      #:with f (generate-temporary)
      ;; XXX Right now TS & TE only work when returning Int/Flo types
      ;; because the 'ans' must be a value which can be initialized with 'E'.
-     ;; Eventually replace this with type inference. 
-     #:with the-ty #'(~? #,(val->type (E ans)) S64)
+     #:with the-ty #'(~? #,(expr-type (E ans)) S64)
      (quasisyntax/loc stx
        (TProg (define-fun (f) : the-ty the-s)
               #:tests
