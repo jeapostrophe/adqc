@@ -2,7 +2,6 @@
 (require data/queue
          graph
          racket/contract/base
-         racket/file
          racket/format
          racket/function
          racket/list
@@ -431,7 +430,7 @@
 
 (define (compile-program prog)
   (match-define (Program gs private->public n->ty n->f) prog)
-  ;; XXX Need to construct immutable ρ from given value?
+  ;; Need to construct immutable ρ from given value
   (define ρ (make-immutable-hash
              (for/list ([(priv pub) (in-hash private->public)])
                (cons priv pub))))
