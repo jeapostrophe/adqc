@@ -124,6 +124,14 @@
          (LetE (first xs) (first tys) (first xes)
                (Let*E (rest xs) (rest tys) (rest xes) be))]))
 
+;; XXX Bounds checks, infer type from number's size when ty is #f
+(define (infer-number ty n)
+  (match ty
+    [(IntT signed? bits)
+     (Int signed? bits n)]
+    [(FloT bits)
+     (Flo bits n)]))
+
 (define-syntax-parameter expect-ty #f)
 
 (define-syntax (E stx)
@@ -167,18 +175,11 @@
       [(_ (unsyntax e))
        (record-disappeared-uses #'unsyntax)
        #'e]
-      ;; XXX Add bounds checks, infer type from number's size when expect-ty is #f
-      [(_ n:integer)
+      [(_ n:number)
+       #:when (syntax-parameter-value #'expect-ty)
        #:with ty (datum->syntax #f (syntax-parameter-value #'expect-ty))
        (syntax/loc stx
-         (Int (IntT-signed? ty) (IntT-bits ty) n))]
-      ;; XXX These two cases should probably be one case, since we want to
-      ;; select the output type based on the value of expect-ty, not whether
-      ;; the user typed in an 'integer' or a 'number'
-      [(_ f:number)
-       #:with ty (datum->syntax #f (syntax-parameter-value #'expect-ty))
-       (syntax/loc stx
-         (Flo (FloT-bits ty) f))]
+         (infer-number ty n))]
       [(_ p) (quasisyntax/loc stx (Read #,(syntax/loc #'p (P p))))])))
 
 (define-E-free-syntax cond
