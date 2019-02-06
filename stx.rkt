@@ -128,7 +128,17 @@
 (define (infer-number ty n)
   (match ty
     [(IntT signed? bits)
-     (Int signed? bits n)]
+     (define min (cond [signed? (- (expt 2 (sub1 bits)))]
+                       [else 0]))
+     (define max (sub1 (expt 2 (cond [signed? (sub1 bits)]
+                                     [else bits]))))
+     (cond
+       [(< n min)
+        (error 'infer-number "integer value ~a too small for type ~v" n ty)]
+       [(> n max)
+        (error 'infer-number "integer value ~a too large for type ~v" n ty)]
+       [else
+        (Int signed? bits n)])]
     [(FloT bits)
      (Flo bits n)]))
 
