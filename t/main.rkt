@@ -5,15 +5,7 @@
          adqc
          chk
          racket/file
-         racket/match
-         ;; XXX Poor code organization? The *-type functions need to be defined
-         ;; in type.rkt so they can access the private functions there. But we
-         ;; also want them available here. However adding type.rkt to list of
-         ;; modules exported by adqc would cause conflicts since type.rkt
-         ;; shadows many of the names exported in ast.rkt. Maybe the relevant
-         ;; functions should be re-provided by stx.rkt? Or maybe adqc's main.rkt
-         ;; should include type.rkt, but only provide certain functions from it?
-         (only-in "../type.rkt" expr-type))
+         racket/match)
 
 ;; This assumes the same representation used by the evaluator for data types.
 (define (raw-value ty v)
