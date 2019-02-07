@@ -124,8 +124,7 @@
          (LetE (first xs) (first tys) (first xes)
                (Let*E (rest xs) (rest tys) (rest xes) be))]))
 
-;; XXX Bounds checks, infer type from number's size when ty is #f
-(define (infer-number ty n)
+(define (construct-number ty n)
   (match ty
     [(IntT signed? bits)
      (define min (cond [signed? (- (expt 2 (sub1 bits)))]
@@ -140,7 +139,20 @@
        [else
         (Int signed? bits n)])]
     [(FloT bits)
-     (Flo bits n)]))
+     ;; XXX This isn't very nice, will error if user (for example) submits
+     ;; '3' instead of '3.0' for F64s or '3.0' instead of '3.0f0' for F32s.
+     ;; The actual Flo constructor also has this issue.
+     (unless (or (and (single-flonum? n) (= bits 32))
+                 (and (double-flonum? n) (= bits 64)))
+       (error 'infer-number "floating-point value ~a will not fit type ~v" n ty))
+     (Flo bits n)]
+    [#f (cond [(single-flonum? n)
+               (Flo 32 n)]
+              [(double-flonum? n)
+               (Flo 64 n)]
+              [(exact-integer? n)
+               ;; XXX Actually infer smallest valid bit width based on size
+               (Int #t 64 n)])]))
 
 (define-syntax-parameter expect-ty #f)
 
@@ -189,7 +201,11 @@
        #:when (syntax-parameter-value #'expect-ty)
        #:with ty (datum->syntax #f (syntax-parameter-value #'expect-ty))
        (syntax/loc stx
-         (infer-number ty n))]
+         (construct-number ty n))]
+      ;; XXX This case should be part of the above case.
+      [(_ n:number)
+       (syntax/loc stx
+         (construct-number #f n))]
       [(_ p) (quasisyntax/loc stx (Read #,(syntax/loc #'p (P p))))])))
 
 (define-E-free-syntax cond
@@ -233,7 +249,8 @@
         (syntax-parser
           [(_ n:expr)
            (record-disappeared-uses #'name)
-           (syntax/loc this-syntax (Flo bits n))]))
+           (syntax/loc this-syntax
+             (construct-number (FloT bits) n))]))
       (provide name))
     ...))
 
@@ -254,7 +271,8 @@
         (syntax-parser
           [(_ n:expr)
            (record-disappeared-uses #'name)
-           (syntax/loc this-syntax (Int signed? bits n))]))
+           (syntax/loc this-syntax
+             (construct-number (IntT signed? bits) n))]))
       (provide name))
     ...))
 
