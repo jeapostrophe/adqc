@@ -122,7 +122,13 @@
      (syntax/loc stx
        (TS the-e (~@ . (~? (ans) ()))))]))
 
-(provide TProg1 TProgN TProg TS TE)
+(define-syntax (TTE stx)
+  (syntax-parse stx
+    [(_ the-e)
+     (syntax/loc stx
+       (chk #:x (E the-e) exn:fail?))]))
+
+(provide TProg1 TProgN TProg TS TE TTE)
 
 (module+ test
   (chk*
@@ -412,4 +418,10 @@
               (c -> x))
             #:tests ["foo" (record x (S64 1) y (S64 2)) => (S64 1)])
      )
+   ;; Check for false positives on the type checker
+   (TTE (iadd (S32 5) (S64 5)))
+   (TTE (fadd (S32 5) (S32 1)))
+   (TTE (iadd (F32 5f0) (S32 2)))
+   (TTE (let ([x : S32 := (S64 5)]) x))
+   (TTE (let ([x : S32 := #,(expt 2 31)]) x))
    ))
