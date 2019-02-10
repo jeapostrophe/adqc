@@ -294,7 +294,17 @@
      #:with name^ (generate-temporary #'name)
      (syntax/loc stx
        (begin
-         (define (name^ . args) (ensure (apply name args)))
+         (define-match-expander name^
+           (λ (stx*)
+             (syntax-parse stx*
+               [(_ args:expr (... ...))
+                (syntax/loc stx*
+                  (name args (... ...)))]))
+           (λ (stx*)
+             (syntax-parse stx*
+               [(_ args:expr (... ...))
+                (syntax/loc stx*
+                  (ensure (name args (... ...))))])))
          (provide (rename-out [name^ name]))))]))
 
 (define-simple-macro (define-exprs name:id ...)
