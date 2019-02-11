@@ -133,26 +133,38 @@
                                      [else bits]))))
      (cond
        [(< n min)
-        (error 'infer-number "integer value ~a too small for type ~v" n ty)]
+        (error 'construct-number "integer value ~a too small for type ~v" n ty)]
        [(> n max)
-        (error 'infer-number "integer value ~a too large for type ~v" n ty)]
+        (error 'construct-number "integer value ~a too large for type ~v" n ty)]
        [else
         (Int signed? bits n)])]
     [(FloT bits)
-     ;; XXX This isn't very nice, will error if user (for example) submits
-     ;; '3' instead of '3.0' for F64s or '3.0' instead of '3.0f0' for F32s.
-     ;; The actual Flo constructor also has this issue.
      (unless (or (and (single-flonum? n) (= bits 32))
                  (and (double-flonum? n) (= bits 64)))
-       (error 'infer-number "floating-point value ~a will not fit type ~v" n ty))
+       (error 'construct-number "floating-point value ~a will not fit type ~v" n ty))
      (Flo bits n)]
-    [#f (cond [(single-flonum? n)
-               (Flo 32 n)]
-              [(double-flonum? n)
-               (Flo 64 n)]
-              [(exact-integer? n)
-               ;; XXX Actually infer smallest valid bit width based on size
-               (Int #t 64 n)])]))
+    [#f (cond
+          [(single-flonum? n) (Flo 32 n)]
+          [(double-flonum? n) (Flo 64 n)]
+          [(exact-integer? n)
+           (define 2^7  (expt 2 7))
+           (define 2^15 (expt 2 15))
+           (define 2^31 (expt 2 31))
+           (define 2^63 (expt 2 63))
+           (unless (and (< n (expt 2 64))
+                        (>= n (- 2^63)))
+             (error 'construct-number "~a is too large to fit in 64 bits" n))
+           ;; XXX Right now, only use U64 when the value is too large to fit
+           ;; in any other type, and always prefer signed types for smaller
+           ;; values. Maybe we want to use a different scheme, e.g. always
+           ;; use unsigned types for non-negative values?
+           (define unsigned? (>= n 2^63))
+           (define bits
+             (cond [(and (< n 2^7)  (>= n (- 2^7)))   8]
+                   [(and (< n 2^15) (>= n (- 2^15))) 16]
+                   [(and (< n 2^31) (>= n (- 2^31))) 32]
+                   [else 64]))
+           (Int (not unsigned?) bits n)])]))
 
 (define-syntax-parameter expect-ty #f)
 
