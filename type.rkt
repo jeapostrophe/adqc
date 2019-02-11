@@ -8,6 +8,10 @@
          syntax/parse/define
          "ast.rkt")
 
+;; Type for exceptions raised by the ADQC type checker.
+(struct type-exn exn:fail ())
+(provide (struct-out type-exn))
+
 ;; XXX Maybe this isn't the best way to do this. My first instinct is to capture
 ;; the AST node which is creating the error and print it along with the error
 ;; message, but this may result in unreadable output for Let, LetE, and Call
@@ -20,12 +24,13 @@
      (syntax/loc stx
        (define-syntax (name stx*)
          (syntax-parse stx*
-           [(_ msg-header:expr msg:str args:expr (... ...))
+           [(_ msg:str args:expr (... ...))
             #:with msg-full (datum->syntax
                              #'msg (string-append
                                     (syntax->datum #'msg) "\nBlaming AST: ~v"))
             (syntax/loc stx*
-              (error msg-header msg-full args (... ...) blame-ast))])))]))
+              (raise (type-exn (format msg-full args (... ...) blame-ast)
+                               (current-continuation-marks))))])))]))
 
 (struct env-info (env) #:transparent)
 (struct type-info env-info (ty) #:transparent)
@@ -64,9 +69,9 @@
      (match-define (type-info from-env from-ty)
        (expr-type-info e))
      (unless (or (IntT? from-ty) (FloT? from-ty))
-       (report 'Cast "can't cast from non-numeric type ~v" from-ty))
+       (report "Cast: can't cast from non-numeric type ~v" from-ty))
      (unless (or (IntT? to-ty) (FloT? to-ty))
-       (report 'Cast "can't cast to non-numeric type ~v" to-ty))
+       (report "Cast: can't cast to non-numeric type ~v" to-ty))
      (type-info from-env to-ty)]
     [(Read p) (path-type-info p)]
     [(BinOp op L R)
@@ -75,15 +80,15 @@
      (match-define (type-info R-env R-ty)
        (expr-type-info R))
      (unless (equal? L-ty R-ty)
-       (report 'BinOp "LHS type ~v and RHS type ~v not equal" L-ty R-ty))
+       (report "BinOp: LHS type ~v and RHS type ~v not equal" L-ty R-ty))
      (when (or (set-member? i-arith-ops op) (set-member? i-cmp-ops op))
        (unless (IntT? L-ty)
-         (report 'BinOp "integer op expects integral arguments, given ~v, ~v"
+         (report "BinOp: integer op expects integral arguments, given ~v, ~v"
                  L-ty R-ty)))
      (when (or (set-member? f-arith-ops op) (set-member? f-cmp-ops op))
        (unless (FloT? L-ty)
          (report
-          'BinOp "floating-point op expects floating-point arguments, given ~v, ~v"
+          "BinOp: floating-point op expects floating-point arguments, given ~v, ~v"
           L-ty R-ty)))
      ;; XXX add logic for union types.
      (define env (env-union L-env R-env))
@@ -95,7 +100,7 @@
      (match-define (type-info xe-env xe-ty)
        (expr-type-info xe))
      (unless (equal? ty xe-ty)
-       (report 'LetE "declaration '~a' has type ~v but is initialized as type ~v"
+       (report "LetE: declaration '~a' has type ~v but is initialized as type ~v"
                x ty xe-ty))
      (match-define (type-info be-env be-ty)
        (expr-type-info be))
@@ -104,20 +109,20 @@
      (define be-x-ty (hash-ref be-env x ty))
      (unless (equal? ty be-x-ty)
        (report
-        'LetE "declaration '~a' has type ~v but is referenced as type ~v in body"
+        "LetE: declaration '~a' has type ~v but is referenced as type ~v in body"
         x ty be-x-ty))
      (type-info be-env be-ty)]
     [(IfE ce te fe)
      (match-define (type-info ce-env ce-ty)
        (expr-type-info ce))
      (unless (IntT? ce-ty)
-       (report 'IfE "predicate type ~v not integral" ce-ty))
+       (report "IfE: predicate type ~v not integral" ce-ty))
      (match-define (type-info te-env te-ty)
        (expr-type-info te))
      (match-define (type-info fe-env fe-ty)
        (expr-type-info fe))
      (unless (equal? te-ty fe-ty)
-       (report 'IfE "'then' type ~v and 'else' type ~v not equal" te-ty fe-ty))
+       (report "IfE: 'then' type ~v and 'else' type ~v not equal" te-ty fe-ty))
      (define env (env-union ce-env te-env fe-env))
      (type-info env te-ty)]))
 
@@ -134,7 +139,7 @@
      (match-define (type-info ie-env ie-ty)
        (expr-type-info ie))
      (unless (IntT? ie-ty)
-       (report 'Select "index type ~v not integral" ie-ty))
+       (report "Select: index type ~v not integral" ie-ty))
      (match-define (type-info p-env (ArrT _ ety))
        (path-type-info p))
      (define env (env-union ie-env p-env))
@@ -166,7 +171,7 @@
        (expr-type-info e))
      (unless (equal? p-ty e-ty)
        (report
-        'Assign "path type ~v and expression type ~v not equal"
+        "Assign: path type ~v and expression type ~v not equal"
         p-ty e-ty))
      (env-info (env-union p-env e-env))]
     [(If p t f)
@@ -175,13 +180,13 @@
      (match-define (env-info t-env) (rec t))
      (match-define (env-info f-env) (rec f))
      (unless (IntT? p-ty)
-       (report 'If "predicate type ~v not integral" p-ty))
+       (report "If: predicate type ~v not integral" p-ty))
      (env-info (env-union p-env t-env f-env))]
     [(While p body)
      (match-define (type-info p-env p-ty)
        (expr-type-info p))
      (unless (IntT? p-ty)
-       (report 'While "predicate type ~v not integral" p-ty))
+       (report "While: predicate type ~v not integral" p-ty))
      (match-define (env-info body-env) (rec body))
      (env-info (env-union p-env body-env))]
     [(Let/ec _ body) (rec body)]
@@ -191,7 +196,7 @@
      (define bs-x-ty (hash-ref bs-env x ty))
      (unless (equal? ty bs-x-ty)
        (report
-        'Let "declaration '~a' has type ~v but is referenced as type ~v in body"
+        "Let: declaration '~a' has type ~v but is referenced as type ~v in body"
         x ty bs-x-ty))
      (env-info bs-env)]
     [(Call x ty f as bs)
@@ -200,22 +205,22 @@
      (define f-as-length (length f-as))
      (define as-length (length as))
      (unless (= f-as-length as-length)
-       (report 'Call "given ~a arguments, expected ~a" as-length f-as-length))
+       (report "Call: given ~a arguments, expected ~a" as-length f-as-length))
      (unless (equal? ret-ty ty)
        (report
-        'Call "declaration '~a' has type ~v but is initialized as type ~v"
+        "Call: declaration '~a' has type ~v but is initialized as type ~v"
         ret-ty ty))
      (for ([a (in-list as)] [fa (in-list f-as)] [i (in-naturals 1)])
        (define a-ty (type-info-ty
                      (cond [(Expr? a) (expr-type-info a)]
                            [(Path? a) (path-type-info a)])))
        (unless (equal? a-ty (Arg-ty fa))
-         (report 'Call "expected type ~v for argument ~a, given ~v" fa i a)))
+         (report "Call: expected type ~v for argument ~a, given ~v" fa i a)))
      (match-define (env-info bs-env) (rec bs))
      (define bs-x-ty (hash-ref bs-env x ty))
      (unless (equal? ty bs-x-ty)
        (report
-        'Call "declaration '~a' has type ~v but is referenced as type ~v in body"
+        "Call: declaration '~a' has type ~v but is referenced as type ~v in body"
         x ty bs-x-ty))
      (env-info bs-env)]))
 
@@ -261,14 +266,14 @@
      (define body-ret-x-ty (hash-ref env ret-x))
      (unless (equal? ret-ty body-ret-x-ty)
        (report
-        'IntFun "return type declared as ~v but returns value of type ~v"
+        "IntFun: return type declared as ~v but returns value of type ~v"
         ret-ty body-ret-x-ty))
      (for ([a (in-list args)] [i (in-naturals 1)])
        (match-define (Arg x ty _) a)
        (define body-x-ty (hash-ref env x ty))
        (unless (equal? ty body-x-ty)
          (report
-          'IntFun "argument ~a declared as type ~v but referenced as type ~v in body"
+          "IntFun: argument ~a declared as type ~v but referenced as type ~v in body"
           i ty body-x-ty)))
      (type-info ret-ty env)]
     ;; XXX Should we somehow be tracking ExtFun declarations and making sure
