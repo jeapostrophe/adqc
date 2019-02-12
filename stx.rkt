@@ -154,10 +154,6 @@
            (unless (and (< n (expt 2 64))
                         (>= n (- 2^63)))
              (error 'construct-number "~a is too large to fit in 64 bits" n))
-           ;; XXX Right now, only use U64 when the value is too large to fit
-           ;; in any other type, and always prefer signed types for smaller
-           ;; values. Maybe we want to use a different scheme, e.g. always
-           ;; use unsigned types for non-negative values?
            (define unsigned? (>= n 2^63))
            (define bits
              (cond [(and (< n 2^7)  (>= n (- 2^7)))   8]
