@@ -308,9 +308,15 @@
                   (name args (... ...)))]))
            (λ (stx*)
              (syntax-parse stx*
-               [(_ args:expr (... ...))
+               [me:id
+                (quasisyntax/loc stx*
+                  (contract
+                   (value-contract name)
+                   (λ args (ensure (apply name args)))
+                   #'me #'#,stx*))]
+               [(me:id . args)
                 (syntax/loc stx*
-                  (ensure (name args (... ...))))])))
+                  (#%app me . args))])))
          (provide (rename-out [name^ name]))))]))
 
 (define-simple-macro (define-exprs name:id ...)

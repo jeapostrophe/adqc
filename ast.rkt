@@ -26,9 +26,7 @@
         [me:id
          #:with ctc (constructor-instance-ctc this)
          #:with ctor (constructor-instance-ctor this)
-         ;; XXX Is this syntax/loc necessary if we're also
-         ;;     passing stx to the call to contract?
-         (syntax/loc stx
+         (quasisyntax/loc stx
            (contract ctc ctor #'me #'#,stx))]))))
 
 
