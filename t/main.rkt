@@ -126,7 +126,7 @@
   (syntax-parse stx
     [(_ the-e)
      (syntax/loc stx
-       (chk #:x (E the-e) type-exn?))]))
+       (chk #:x (E the-e) exn:fail:adqc:type?))]))
 
 (provide TProg1 TProgN TProg TS TE TTE)
 
