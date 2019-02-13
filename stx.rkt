@@ -103,27 +103,6 @@
       [(_ x:id) #'x]
       [(_ (x:id)) #'x])))
 
-(define-expanders&macros
-  E-free-macros define-E-free-syntax
-  E-expander define-E-expander)
-
-(begin-for-syntax
-  (define-literal-set E-bin-op
-    #:datum-literals (
-                      iadd isub imul isdiv iudiv isrem iurem ishl ilshr iashr ior iand
-                      ixor ieq ine iugt isgt iuge isge iult islt iule isle
-
-                      fadd fsub fmul fdiv frem foeq fogt foge folt fole fone fueq fugt
-                      fuge fult fule fune ffalse ftrue ford funo)
-    ())
-  (define E-bin-op? (literal-set->predicate E-bin-op)))
-
-(define (Let*E xs tys xes be)
-  (cond [(empty? xs) be]
-        [else
-         (LetE (first xs) (first tys) (first xes)
-               (Let*E (rest xs) (rest tys) (rest xes) be))]))
-
 (define (construct-number ty n)
   (match ty
     [(IntT signed? bits)
@@ -164,13 +143,38 @@
 
 (define-syntax-parameter expect-ty #f)
 
+(define-syntax (N stx)
+  (syntax-parse stx
+    [(_ n)
+     #:with ty (or (syntax-parameter-value #'expect-ty) #'#f)
+     (syntax/loc stx
+       (construct-number ty n))]))
+
+(define-expanders&macros
+  E-free-macros define-E-free-syntax
+  E-expander define-E-expander)
+
+(begin-for-syntax
+  (define-literal-set E-bin-op
+    #:datum-literals (
+                      iadd isub imul isdiv iudiv isrem iurem ishl ilshr iashr ior iand
+                      ixor ieq ine iugt isgt iuge isge iult islt iule isle
+
+                      fadd fsub fmul fdiv frem foeq fogt foge folt fole fone fueq fugt
+                      fuge fult fule fune ffalse ftrue ford funo)
+    ())
+  (define E-bin-op? (literal-set->predicate E-bin-op)))
+
+(define (Let*E xs tys xes be)
+  (cond [(empty? xs) be]
+        [else
+         (LetE (first xs) (first tys) (first xes)
+               (Let*E (rest xs) (rest tys) (rest xes) be))]))
+
 (define-syntax (E stx)
   (with-disappeared-uses
     (syntax-parse stx
       #:literals (if let unsyntax)
-      ;; XXX recognize literal numbers + booleans and find the smallest
-      ;; type (or use inferred)
-      ;;
       ;; XXX make generic binops that look at the types and determine the operation
       [(_ (op:id l r))
        #:when (E-bin-op? #'op)
@@ -205,15 +209,7 @@
       [(_ (unsyntax e))
        (record-disappeared-uses #'unsyntax)
        #'e]
-      [(_ n:number)
-       #:when (syntax-parameter-value #'expect-ty)
-       #:with ty (datum->syntax #f (syntax-parameter-value #'expect-ty))
-       (syntax/loc stx
-         (construct-number ty n))]
-      ;; XXX This case should be part of the above case.
-      [(_ n:number)
-       (syntax/loc stx
-         (construct-number #f n))]
+      [(_ n:number) (syntax/loc stx (N n))]
       [(_ p) (quasisyntax/loc stx (Read #,(syntax/loc #'p (P p))))])))
 
 (define-E-free-syntax cond
@@ -656,7 +652,7 @@
              pf ...)
            the-prog))])))
 
-(provide T P E I
+(provide T P N E I
          while assert! return S
          define-S-free-syntax define-S-expander
          F
