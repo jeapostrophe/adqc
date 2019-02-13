@@ -258,7 +258,7 @@
 (define (fun-type-info f)
   (define-reporter report f)
   (match f
-    [(MetaFun (? type-info ti) _) ti]
+    [(MetaFun (? type-info? ti) _) ti]
     [(MetaFun _ f) (fun-type-info f)]
     [(IntFun args ret-x ret-ty _ body)
      (match-define (env-info env)
