@@ -40,6 +40,7 @@
      #:with meta-base? (format-id #'meta-base "~a?" #'meta-base)
      #:with meta-ctc #'(or/c name? meta-base?)
      #:with ctor-ctc #'(-> ctc ... meta-ctc)
+     #:with ctor (generate-temporary #'name)
      (syntax/loc stx
        (begin
          (struct name base (field ...) #:transparent)
