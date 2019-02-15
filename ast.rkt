@@ -27,8 +27,7 @@
          #:with ctc (constructor-instance-ctc this)
          #:with ctor (constructor-instance-ctor this)
          (quasisyntax/loc stx
-           (contract ctc ctor #'me #'#,stx))]))))
-
+           (contract ctc ctor #'ctor #'#,stx 'me #f))]))))
 
 (define-syntax (struct+ stx)
   (syntax-parse stx

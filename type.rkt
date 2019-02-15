@@ -192,7 +192,7 @@
      (env-info (env-union p-env body-env))]
     [(Let/ec _ body) (rec body)]
     [(Let x ty xi bs)
-     (check-init-type ty xi)
+     (check-init-type s ty xi)
      (match-define (env-info bs-env) (rec bs))
      (define bs-x-ty (hash-ref bs-env x ty))
      (unless (equal? ty bs-x-ty)
@@ -230,21 +230,24 @@
 ;; the calling function would be responsible for checking for
 ;; outer-level type mismatches and this function would only
 ;; error when internally inconsistent. 
-(define (check-init-type ty i)
+(define (check-init-type outer-s ty i)
+  (define-reporter report outer-s)
   (match i
     [(UndI u-ty)
      (unless (equal? ty u-ty)
-       (error 'stmt-env-info "UndI: type mismatch"))]
+       (report "UndI: type mismatch with ~v and ~v" ty u-ty))]
     [(ConI e)
      (match-define (type-info _ e-ty) (expr-type-info e))
-     (unless (equal? ty e-ty)
-       (error 'stmt-env-info "ConI: type mismatch"))]
+     (unless (resolve-type ty e-ty)
+       (report "ConI: type mismatch with ~v and ~v" ty e-ty))]
     [(ZedI z-ty)
      (unless (equal? ty z-ty)
-       (error 'stmt-env-info "ZedI: type mismatch"))]
+       (report "ZedI: type mismatch with ~v and ~v" ty z-ty))]
     [(ArrI is)
-     (unless (equal? (length is) (ArrT-dim ty))
-       (error 'stmt-env-info "ArrI: length mismatch"))
+     (define is-len (length is))
+     (define ty-dim (ArrT-dim ty))
+     (unless (equal? is-len ty-dim)
+       (report "ArrI: length mismatch, ~a != ~a" is-len ty-dim))
      (for ([i (in-list is)])
        (check-init-type (ArrT-ety ty) i))]
     [(RecI f->i)
@@ -313,7 +316,11 @@
                   (contract
                    (value-contract name)
                    (λ args (ensure (apply name args)))
-                   #'me #'#,stx*))]
+                   ;; XXX Need to fix 'contract from' portion of error message.
+                   ;; Right now it reports the expression that caused the violation
+                   ;; (obviously wrong), but it's unclear how to get the source
+                   ;; location of the original contract defined in ast.rkt.
+                   #'me #'#,stx* 'me #f))]
                [(me:id . args)
                 (syntax/loc stx*
                   (#%app me . args))])))
