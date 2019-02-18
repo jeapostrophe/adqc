@@ -232,13 +232,14 @@
 ;; error when internally inconsistent. 
 (define (check-init-type outer-s ty i)
   (define-reporter report outer-s)
+  (define (rec ty i) (check-init-type outer-s ty i))
   (match i
     [(UndI u-ty)
      (unless (equal? ty u-ty)
        (report "UndI: type mismatch with ~v and ~v" ty u-ty))]
     [(ConI e)
      (match-define (type-info _ e-ty) (expr-type-info e))
-     (unless (resolve-type ty e-ty)
+     (unless (equal? ty e-ty)
        (report "ConI: type mismatch with ~v and ~v" ty e-ty))]
     [(ZedI z-ty)
      (unless (equal? ty z-ty)
@@ -249,14 +250,14 @@
      (unless (equal? is-len ty-dim)
        (report "ArrI: length mismatch, ~a != ~a" is-len ty-dim))
      (for ([i (in-list is)])
-       (check-init-type (ArrT-ety ty) i))]
+       (rec (ArrT-ety ty) i))]
     [(RecI f->i)
      (match-define (RecT f->ty _ _) ty)
      (for ([(f i) (in-hash f->i)])
-       (check-init-type (hash-ref f->ty f) i))]
+       (rec (hash-ref f->ty f) i))]
     [(UniI m i)
      (match-define (UniT m->ty _) ty)
-     (check-init-type (hash-ref m->ty m) i)]))
+     (rec (hash-ref m->ty m) i)]))
 
 (define (fun-type-info f)
   (define-reporter report f)
