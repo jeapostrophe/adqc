@@ -234,10 +234,15 @@
    (TE (funo (F64 1.0) (F64 2.0)) (S32 0))
    ;; Cast
    (TE ((S8 23) : U32) (U32 23))
+   (TE (let ([x : S8 := (S8 23)]) (x : U32)) (U32 23))
    ;; XXX Test fails because eval isn't casting between F32 and F64 correctly.
    (! (TE ((F64 23.3) : F32) (F32 23.3f0)))
    (TE ((F64 23.3) : S32) (S32 23))
    (TE ((S32 23) : F64) (F64 23.0))
+   ;; Simple unions
+   (TE (let ([x : (union a S32 b S64) := (union a (S32 5))])
+         (iadd (x as a) (S32 5)))
+       (S32 10))
    ;; XXX How to test Fail?
 
    (TS (let ([x : S64 := (S64 1)])
@@ -423,7 +428,22 @@
    (TTE (fadd (S32 5) (S32 1)))
    (TTE (iadd (F32 5f0) (S32 2)))
    (TTE (let ([x : S32 := (S64 5)]) x))
-   #;; XXX This doesn't work atm, right now it's awkward to try
-    ;; to use racket-computed numbers as type-inferred literals
-   (TTE (let ([x : S32 := (expt 2 31)]) x))
+   (TTE ((S32 5) : (array 1 S32)))
+   #;; Errors with:  P: bad syntax in: (P (array (S64 4) (S64 5)))
+    ;; Should this be valid syntax?
+   (TTE (let ([x : (array 2 S64) := (array (S64 4) (S64 5))])
+          (x : S32)))
+   (TTE (iadd (F32 5f0) (F32 6F0)))
+   (TTE (fadd (S32 5) (S32 6)))
+   (TTE (let ([x : S32 := (S64 5)]) x))
+
+   #;; XXX This currently results in a GCC error, but should
+    ;; probably be caught by the type checker instead. Make
+    ;; sure that types are initialized by the correct 'I' stmt.
+   (TTE (let ([x : (union a S32 b S64) := (S32 5)])
+          (iadd (x as a) (S32 5))))
+   
+   #;; XXX this results in exn:fail... should construct-number throw
+    ;; exn:fail:adqc:type, or is it not considered part of the type system?
+   (TTE (let ([x : S32 := #,(N (expt 2 31))]) x))
    ))
