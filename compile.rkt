@@ -152,7 +152,10 @@
        (enqueue! (current-type-queue) ty)
        (hash-set! type-table ty x)
        x)
-     (hash-ref type-table ty new-type!)]))
+     (hash-ref type-table ty new-type!)]
+    [(ExtT src name)
+     (include-src! src)
+     name]))
 
 (define (compile-type/ref ty x)
   (match ty
@@ -347,13 +350,19 @@
     [(Call x ty f as bs)
      (define Σ (current-Σ))
      (define f* (unpack-MetaFun f))
-     (add-directed-edge! (current-fun-graph) f* (current-fun))
      (define (new-fun!)
        (define fun-name (cify 'fun))
        (hash-set! Σ f* fun-name)
        (enqueue! (current-fun-queue) f*)
        fun-name)
-     (define fun-name (hash-ref Σ f* new-fun!))
+     (define fun-name
+       (match f*
+         [(ExtFun src _ _ name)
+          (include-src! src)
+          name]
+         [(? IntFun?)
+          (add-directed-edge! (current-fun-graph) f* (current-fun))
+          (hash-ref Σ f* new-fun!)]))
      ;; XXX Awkward to calculate these for each function call as well as
      ;;     inside of compile-fun.
      (define ref-args

@@ -150,7 +150,7 @@
                 [c-order (listof symbol?)])]
   [struct UniT ([mode->ty (hash/c symbol? Type?)]
                 [mode->c (hash/c symbol? c-identifier-string?)])]
-  [struct ExtT ([src ExternSrc?] [name c-identifier-string?])]))
+  [struct ExtT ([src ExternSrc?] [name string?])]))
 
 ;; Path
 (struct Path () #:transparent)
