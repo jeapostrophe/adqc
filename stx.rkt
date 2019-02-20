@@ -2,20 +2,16 @@
 (require racket/contract/base
          racket/list
          racket/match
-         syntax/parse/define
+         racket/require
          racket/stxparam
+         syntax/parse/define
          (for-syntax racket/base
                      syntax/parse
                      racket/list
                      racket/syntax
                      racket/dict
                      syntax/id-table)
-         ;; XXX Use set intersection on import statements?
-         (except-in "ast.rkt"
-                    Int Flo Cast Read BinOp LetE IfE
-                    Var Select Field Mode ExtVar
-                    Skip Fail Begin Assign If While Jump Let/ec Let Call
-                    IntFun ExtFun)
+         (subtract-in "ast.rkt" "type.rkt")
          "type.rkt")
 
 ;; XXX This module should use plus not ast (i.e. the thing that does
