@@ -317,11 +317,9 @@
                   (contract
                    (value-contract name)
                    (λ args (ensure (apply name args)))
-                   ;; XXX Need to fix 'contract from' portion of error message.
-                   ;; Right now it reports the expression that caused the violation
-                   ;; (obviously wrong), but it's unclear how to get the source
-                   ;; location of the original contract defined in ast.rkt.
-                   #'me #'#,stx* 'me #f))]
+                   ;; XXX Currently displays contract source as this module.
+                   ;; Worth it to display original contract source in ast.rkt?
+                   (syntax-source #'name) #'#,stx* 'me #'name))]
                [(me:id . args)
                 (syntax/loc stx*
                   (#%app me . args))])))
