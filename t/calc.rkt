@@ -27,8 +27,8 @@
   (require chk)
   ;; XXX Maybe we should have helper functions (like in linker.rkt)
   ;; to improve interacting with executables 
-  (define c-path (make-temporary-file))
-  (define bin-path (make-temporary-file))
+  (define c-path (make-temporary-file "adqc~a.c"))
+  (define bin-path (make-temporary-file "adqc~a"))
   (unless (compile-exe calc c-path bin-path)
     (newline (current-error-port))
     (define in (open-input-file c-path))
