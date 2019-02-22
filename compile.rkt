@@ -180,12 +180,19 @@
     [(Field path f)
      (define-values (p-ast pty) (rec path))
      (match-define (RecT f->ty f->c _) pty)
-     (values (list* "(" p-ast "->" (hash-ref f->c f) ")")
+     ;; XXX This is kind of hacky, treating arrays as a special
+     ;; case where we use . instead of ->   ...or maybe C just
+     ;; has weird syntax and is this complexity isn't incidental.
+     ;; We may have to revist this if more complex programs force
+     ;; us to change the way value vs. reference types work.
+     (define op (if (Select? (unpack-MetaP path)) "." "->"))
+     (values (list* "(" p-ast op (hash-ref f->c f) ")")
              (hash-ref f->ty f))]
     [(Mode path m)
      (define-values (p-ast pty) (rec path))
      (match-define (UniT m->ty m->c) pty)
-     (values (list* "(" p-ast "->" (hash-ref m->c m) ")")
+     (define op (if (Select? (unpack-MetaP path)) "." "->"))
+     (values (list* "(" p-ast op (hash-ref m->c m) ")")
              (hash-ref m->ty m))]
     [(ExtVar src n ty)
      (include-src! src)
