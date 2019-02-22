@@ -5,21 +5,24 @@
 
 (define char* (ExtT (ExternSrc '() '()) "char*"))
 (define stdlib-h (ExternSrc '() '("stdlib.h")))
-(define atoi (ExtFun stdlib-h
-                     (list (Arg 'nptr char* 'read-only))
-                     (T S32)
-                     "atoi"))
+(define atoi (ExtFun stdlib-h (list (Arg 'nptr char* 'read-only)) (T S32) "atoi"))
 
 (define main
-  (F ([argc : S32] [argv : (array 4 #,char*)]) : S32
+  (F ([argc : S32] [argv : (array 4 (union c-str #,char* ch-ptr (array 1 S8)))]) : S32
      (assert! #:dyn #:msg "exactly 3 arguments supplied" ; 4 args w/ user cmd
               (ieq argc (S32 4)))
-     (define n1 : S32 := atoi <- (argv @ 1))
-     (define n2 : S32 := atoi <- (argv @ 3))
-     ;; XXX Need a way to dereference op argument to see what kind of character
-     ;; it is (+, -, etc.), so we can dispatch on that. Also need way to print
-     ;; result rather than return it from main.
-     (iadd n1 n2)))
+     (define n1 : S32 := atoi <- (argv @ (S32 1) as c-str))
+     (define n2 : S32 := atoi <- (argv @ (S32 3) as c-str))
+     (define op :  S8 := (argv @ (S32 2) as ch-ptr @ (S32 0)))
+     (cond [(ieq op #,(N (char->integer #\+)))
+            (iadd n1 n2)]
+           [(ieq op #,(N (char->integer #\-)))
+            (isub n1 n2)]
+           [(ieq op #,(N (char->integer #\*)))
+            (imul n1 n2)]
+           [(ieq op #,(N (char->integer #\/)))
+            (isdiv n1 n2)]
+           [else (error "invalid op")])))
 
 (define calc (Prog (include-fun "main" main)))
 
