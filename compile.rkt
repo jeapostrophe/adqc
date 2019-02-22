@@ -241,6 +241,8 @@
   (match ty
     [(or (? IntT?) (? FloT?) (? ArrT?) (? RecT?) (? UniT?))
      (list* (compile-type/ref ty name) " " name assign ";")]
+    ;; Should ExtT's be lifted and users declare pointers to
+    ;; them, or should their names always be compiled literally?
     [(ExtT src ext)
      (include-src! src)
      (list* ext " " name assign ";")]))
@@ -252,7 +254,9 @@
      (list* (compile-type ty) " " name assign ";")]
     [(ArrT dim ety)
      (list* (compile-type ety) " " name "[" (~a dim) "]" assign ";")]
-    ;; XXX Can we compile storage for ExtT?
+    [(ExtT src ext)
+     (include-src! src)
+     (list* ext " " name assign ";")]
     ))
 
 (define (compile-init ρ ty i)
@@ -339,15 +343,15 @@
             cl ":")]
     [(Let x ty xi bs)
      (define-values (storage-ast x-init-ast)
-       (match xi
-         [(or (? ZedI?) (? ArrI?) (? RecI?) (? UniI?))
+       (cond
+         [(and (or (ArrT? ty) (RecT? ty) (UniT? ty)) (not (ConI? xi)))
           ;; XXX Better name?
           (define st-x (cify 'mem))
           (values (list* (compile-storage ty st-x (compile-init ρ ty xi)))
                   (cond [(ArrT? ty) st-x]
                         [else (list* "(&" st-x ")")]))]
-         [(or (? UndI?) (? ConI?))
-          (values #f (compile-init ρ ty xi))]))
+         ;; XXX Should ExtT be compiled with lifted storage?
+         [else (values #f (compile-init ρ ty xi))]))
      (define x* (cify x))
      (list* (and storage-ast (list* storage-ast ind-nl))
             (compile-decl ty x* x-init-ast) ind-nl
@@ -505,7 +509,7 @@
                (list* "typedef union {" ind++ ind-nl
                       (add-between
                        (for/list ([(m ty) (in-hash m->ty)])
-                         (compile-decl ty (hash-ref m->c m)))
+                         (compile-storage ty (hash-ref m->c m)))
                        ind-nl)
                       ind-- ind-nl "} " x ";" ind-nl)]))
           (values ty ast)))
