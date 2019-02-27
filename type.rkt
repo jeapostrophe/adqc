@@ -320,8 +320,6 @@
                   (contract
                    (value-contract name)
                    (λ args (ensure (apply name args)))
-                   ;; XXX Currently displays contract source as this module.
-                   ;; Worth it to display original contract source in ast.rkt?
                    (syntax-source #'name) #'#,stx* 'me #'name))]
                [(me:id . args)
                 (syntax/loc stx*
