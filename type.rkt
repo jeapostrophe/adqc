@@ -143,9 +143,14 @@
        (report "Select: index type ~v not integral" ie-ty))
      (match-define (type-info p-env (and (ArrT dim ety) p-ty))
        (path-type-info p))
-     (define idx (Int-val ie))
-     (unless (and (exact-nonnegative-integer? idx) (< idx dim))
-       (report "Select: index ~a out of bounds for ~v" idx p-ty))
+     ;; XXX Only checks for bounds when `ie` is a constant expression.
+     ;; Eventually, this code should use results from the verifier to
+     ;; implement a stricter check.
+     (let ([ie* (unpack-MetaE ie)])
+       (when (Int? ie*)
+         (define idx (Int-val ie*))
+         (unless (and (exact-nonnegative-integer? idx) (< idx dim))
+           (report "Select: index ~a out of bounds for ~v" idx p-ty))))
      (define env (env-union ie-env p-env))
      (type-info env ety)]
     [(Field p f)
