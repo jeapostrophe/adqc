@@ -6,4 +6,5 @@
  "stx.rkt"
  "compile.rkt"
  "linker.rkt"
- "type.rkt")
+ "type.rkt"
+ "exec.rkt")

@@ -26,30 +26,23 @@
         (ExtFun stdlib-h (list (Arg 'str char* 'read-only)) ty name)))
   (define arg-xs (map gensym (make-list nargs 'arg)))
   (define ret-x (gensym 'ret))
-  (define argc (gensym 'argc))
-  (define argv (gensym 'argv))
-  (define ret-lab (gensym 'ret-lab))
-  (define user-call
-    (Call ret-x (T S32) main
-          (for/list ([x (in-list arg-xs)] [ty (in-list tys)])
-            (Var x ty))
-          (Jump ret-lab))) ;; XXX return?
-  (define argv-ty (ArrT (add1 nargs) char*))
-  (IntFun (list (Arg argc (T S32) 'read-only)
-                (Arg argv argv-ty 'read-only))
-          ret-x
-          (T S32)
-          ret-lab
-          (for/fold ([body user-call])
-                    ([ty tys] [fn fns] [x arg-xs] [i (in-naturals 1)])
-            (Call x ty fn (list (Select (Var argv argv-ty) (E (S32 i)))) body)))
-  #;
   (F ([argc : S32] [argv : (array (add1 nargs) #,char*)]) : S32
-     (assert: #:dyn #:msg (format "exactly ~a arguments supplied" nargs)
-              (ieq argc (S32 nargs)))
-     #,(for/fold ([body user-call])
-                 ([ty tys] [fn fns] [x arg-xs] [i (in-naturals 1)])
-         (Call x ty fn (list (E (argv @ (S32 i)))) body))))
+     (assert! #:dyn #:msg (format "exactly ~a arguments supplied" nargs)
+             (ieq argc (S32 (add1 nargs))))
+     #,(let ([user-call
+              ;; XXX Instead of using 'Call', I wish I could do something like
+              ;; `(S (let ([ret-x : S32 := #,main <- #,(for/list ... (Var x ty))])
+              ;;       (return ret-x)))`
+              ;; But I think that the `S` macro expects to know how many arguments
+              ;; to use during macro expansion. We get the number of arguments from
+              ;; a `Program` structure at run time, so I don't think they're compatible.
+              (Call ret-x (T S32) main
+                    (for/list ([x (in-list arg-xs)] [ty (in-list tys)])
+                      (Var x ty))
+                    (S (return #,(Read (Var ret-x (T S32))))))])
+         (for/fold ([body user-call])
+                   ([ty tys] [fn fns] [x arg-xs] [i (in-naturals 1)])
+           (Call x ty fn (list (E (argv @ (S32 i)))) body)))))
 
 (define (make-exe prog c-path out-path)
   (define name->fun (Program-name->fun prog))

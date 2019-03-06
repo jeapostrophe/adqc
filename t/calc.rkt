@@ -3,8 +3,6 @@
          racket/file
          racket/system)
 
-(require "../exec.rkt")
-
 (define char* (ExtT (ExternSrc '() '()) "char*"))
 
 (define stdlib-h (ExternSrc '() '("stdlib.h")))
@@ -19,25 +17,25 @@
                         "write"))
 
 (define main
-  (F ([n1 : S32] [op : S32] [n2 : S32])
-   #;([argc : S32] [argv : (array 4 (union c-str #,char* ch-ptr (array 1 S8)))]) : S32
-     #;(assert! #:dyn #:msg "exactly 3 arguments supplied" ; 4 args w/ user cmd
-              (ieq argc (S32 4)))
-     #;(define n1 : S32 := atoi <- (argv @ (S32 1) as c-str))
-     #;(define n2 : S32 := atoi <- (argv @ (S32 3) as c-str))
-     #;(define op :  S8 := (argv @ (S32 2) as ch-ptr @ (S32 0)))
-     ;; XXX Right now now this always results in the 'else' case because
-     ;; the 'ch-ptr' part of argv is being compiled as storage, not as
-     ;; a pointer. One of the side effects of treating union members as
-     ;; values and not references is that we can no longer use unions
-     ;; to pun over C-strings by pretending we know how long they are.
-     (cond [(ieq op (S32 (char->integer #\+)))
+  (F ([n1 : S32] [op : S32] [n2 : S32]) : S32
+     ;; Because we have no way to pass ASCII values from the command line
+     ;; (currently exec will only convert arguments to integer or float values)
+     ;; we alias 1 as +, 2 as -, 3 as *, 4 as /
+     
+     ;; XXX There should be some unsafe C-routine that can be used to get
+     ;; character values from the command line. Maybe we would infer that `S8`
+     ;; arguments are ASCII characters and that we should just derefernce the
+     ;; corresponding argv isntead of passing it to atoi or atof?
+
+     ;; XXX Currently the calculator returns its result as the program's exit
+     ;; code. We should be able to write the result to stdout instead.
+     (cond [(ieq op (S32 1))
             (iadd n1 n2)]
-           [(ieq op (S32 (char->integer #\-)))
+           [(ieq op (S32 2))
             (isub n1 n2)]
-           [(ieq op (S32 (char->integer #\*)))
+           [(ieq op (S32 3))
             (imul n1 n2)]
-           [(ieq op (S32 (char->integer #\/)))
+           [(ieq op (S32 4))
             (isdiv n1 n2)]
            [else (error "invalid op\n")])))
 
@@ -45,8 +43,8 @@
 
 (module+ test
   (require chk)
-  ;; XXX Maybe we should have helper functions (like in linker.rkt)
-  ;; to improve interacting with executables 
+  ;; XXX Write some helper routine for compilation so that users don't have to
+  ;; write their own error-handling code every time.
   (define c-path (make-temporary-file "adqc~a.c"))
   (define bin-path (make-temporary-file "adqc~a"))
   (unless (make-exe calc c-path bin-path)
@@ -58,8 +56,15 @@
     (delete-file c-path)
     (delete-file bin-path)
     (error "call to compile-exe failed (see stderr)"))
-  ;(define r (system*/exit-code bin-path "2" "+" "2"))
-  ;(chk r 4)
+  ;; XXX Write some helper routine for users to call executables without
+  ;; having to use `system` directly.
+  (define (go . args)
+    (apply system*/exit-code bin-path args))
+  (chk*
+   (chk (go "2" "1" "3") 5)
+   (chk (go "3" "2" "1") 2)
+   (chk (go "2" "3" "4") 8)
+   (chk (go "6" "4" "2") 3))
   (delete-file c-path)
   (delete-file bin-path)
   )
