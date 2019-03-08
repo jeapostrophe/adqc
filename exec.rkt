@@ -1,7 +1,5 @@
 #lang racket/base
-(require (for-syntax racket/base
-                     syntax/parse)
-         racket/contract/base
+(require racket/contract/base
          racket/list
          racket/match
          racket/require
@@ -19,27 +17,19 @@
   (define tys (map Arg-ty args))
   (define fns
     (for/list ([ty (in-list tys)])
-        (define name (match ty
-                       [(FloT 64) "atof"]
-                       [(IntT #t 32) "atoi"]
-                       [(IntT #t 64) "atol"]))
-        (ExtFun stdlib-h (list (Arg 'str char* 'read-only)) ty name)))
+      (define name (match ty
+                     [(FloT 64) "atof"]
+                     [(IntT #t 32) "atoi"]
+                     [(IntT #t 64) "atol"]))
+      (ExtFun stdlib-h (list (Arg 'str char* 'read-only)) ty name)))
   (define arg-xs (map gensym (make-list nargs 'arg)))
-  (define ret-x (gensym 'ret))
   (F ([argc : S32] [argv : (array (add1 nargs) #,char*)]) : S32
      (assert! #:dyn #:msg (format "exactly ~a arguments supplied" nargs)
-             (ieq argc (S32 (add1 nargs))))
+              (ieq argc (S32 (add1 nargs))))
      #,(let ([user-call
-              ;; XXX Instead of using 'Call', I wish I could do something like
-              ;; `(S (let ([ret-x : S32 := #,main <- #,(for/list ... (Var x ty))])
-              ;;       (return ret-x)))`
-              ;; But I think that the `S` macro expects to know how many arguments
-              ;; to use during macro expansion. We get the number of arguments from
-              ;; a `Program` structure at run time, so I don't think they're compatible.
-              (Call ret-x (T S32) main
-                    (for/list ([x (in-list arg-xs)] [ty (in-list tys)])
-                      (Var x ty))
-                    (S (return #,(Read (Var ret-x (T S32))))))])
+              (S (let ([x : S32 := main <- #,@(for/list ([x arg-xs] [ty tys])
+                                                (Var x ty))])
+                   (return x)))])
          (for/fold ([body user-call])
                    ([ty tys] [fn fns] [x arg-xs] [i (in-naturals 1)])
            (Call x ty fn (list (E (argv @ (S32 i)))) body)))))

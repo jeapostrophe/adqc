@@ -325,7 +325,8 @@
 (define-syntax (S stx)
   (with-disappeared-uses
     (syntax-parse stx
-      #:literals (void error begin define set! if let/ec while return let unsyntax)
+      #:literals (void error begin define set! if let/ec while
+                       return let unsyntax unsyntax-splicing)
       [(_ (void))
        (record-disappeared-uses #'void)
        (syntax/loc stx (Skip #f))]
@@ -384,6 +385,20 @@
        (syntax/loc stx
          (let ([the-ty (T ty)])
            (S (let ([x : #,the-ty := (undef #,the-ty)]) . b))))]
+      ;; XXX Good way to support unsyntax-splicing for args without
+      ;; having to duplicate all this parsing code?
+      [(_ (let ([x:id (~datum :) ty (~datum :=) f
+                      (~datum <-) (unsyntax-splicing as)]) . b))
+       #:with x-id (generate-temporary #'x)
+       (record-disappeared-uses #'let)
+       (syntax/loc stx
+         (let ([x-id 'x-id]
+               [the-ty (T ty)])
+           (Call x-id the-ty f as
+                 (let ([the-x-ref (Var x-id the-ty)])
+                   (let-syntax ([x (P-expander
+                                    (syntax-parser [_ #'the-x-ref]))])
+                     (S (begin . b)))))))]
       [(_ (let ([x:id (~datum :) ty (~datum :=) f (~datum <-) a ...]) . b))
        #:with x-id (generate-temporary #'x)
        (record-disappeared-uses #'let)
