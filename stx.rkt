@@ -43,23 +43,29 @@
 (define-syntax (T stx)
   (with-disappeared-uses
     (syntax-parse stx
-      #:literals (unsyntax)
+      #:literals (unsyntax unsyntax-splicing)
       ;; XXX should array, record, and union be literals?
       [(_ ((~datum array) dim elem))
        (syntax/loc stx (ArrT dim (T elem)))]
-      [(_ ((~datum record) (~seq f:id ft) ...))
+      [(_ ((~datum record) (~or (unsyntax-splicing ps)
+                                (~and (~seq (~seq f:id ft) ...)
+                                      (~bind [ps #'(list (cons 'f (T ft)) ...)])))))
        ;; XXX syntax for choosing C stuff
        ;; XXX smarter defaults
-       (syntax/loc stx (RecT (make-immutable-hasheq (list (cons 'f (T ft)) ...))
-                             (make-immutable-hasheq
-                              (list (cons 'f (cify 'f)) ...))
-                             '(f ...)))]
-      [(_ ((~datum union) (~seq m:id mt) ...))
+       (syntax/loc stx
+         (RecT (make-immutable-hasheq ps)
+               (make-immutable-hasheq (for/list ([p (in-list ps)])
+                                        (cons (car p) (cify (car p)))))
+               (map car ps)))]
+      [(_ ((~datum union) (~or (unsyntax-splicing ps)
+                               (~and (~seq (~seq m:id mt) ...)
+                                     (~bind [ps #'(list (cons 'm (T mt)) ...)])))))
        ;; XXX syntax for choosing C stuff
        ;; XXX smarter defaults
-       (syntax/loc stx (UniT (make-immutable-hasheq (list (cons 'm (T mt)) ...))
-                             (make-immutable-hasheq
-                              (list (cons 'm (cify 'm)) ...))))]
+       (syntax/loc stx
+         (UniT (make-immutable-hash ps)
+               (make-immutable-hash (for/list ([p (in-list ps)])
+                                      (cons (car p) (cify (car p)))))))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
        #:when (dict-has-key? T-free-macros #'macro-id)
        (record-disappeared-uses #'macro-id)
@@ -293,12 +299,17 @@
 (define-syntax (I stx)
   (with-disappeared-uses
     (syntax-parse stx
-      #:literals (unsyntax)
+      #:literals (unsyntax unsyntax-splicing)
       [(_ ((~datum undef) ty)) (syntax/loc stx (UndI (T ty)))]
       [(_ ((~datum zero) ty)) (syntax/loc stx (ZedI (T ty)))]
-      [(_ ((~datum array) i ...)) (syntax/loc stx (ArrI (list (I i) ...)))]
-      [(_ ((~datum record) (~seq k:id i) ...))
-       (syntax/loc stx (RecI (make-immutable-hasheq (list (cons 'k (I i)) ...))))]
+      [(_ ((~datum array) (~or (unsyntax-splicing is)
+                               (~and (~seq i ...)
+                                     (~bind [is #'(list (I i) ...)])))))
+       (syntax/loc stx (ArrI is))]
+      [(_ ((~datum record) (~or (unsyntax-splicing ps)
+                                (~and (~seq (~seq k:id i) ...)
+                                      (~bind [ps #'(list (cons 'k (I i)) ...)])))))
+       (syntax/loc stx (RecI (make-immutable-hasheq ps)))]
       [(_ ((~datum union) m:id i))
        (syntax/loc stx (UniI 'm (I i)))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
