@@ -1,11 +1,11 @@
 #lang racket/base
 (require (for-syntax racket/base
-                     racket/syntax
-                     syntax/parse)
+                     racket/syntax)
          adqc
          chk
          racket/file
-         racket/match)
+         racket/match
+         syntax/parse/define)
 
 ;; This assumes the same representation used by the evaluator for data types.
 (define (raw-value ty v)
@@ -122,13 +122,16 @@
      (syntax/loc stx
        (TS the-e (~@ . (~? (ans) ()))))]))
 
-(define-syntax (TTE stx)
-  (syntax-parse stx
-    [(_ the-e)
-     (syntax/loc stx
-       (chk #:x (E the-e) exn:fail:adqc:type?))]))
+(define-simple-macro (TT the-ast)
+  (chk #:x the-ast exn:fail:adqc:type?))
+(define-simple-macro (TTE the-e)
+  (TT (E the-e)))
+(define-simple-macro (TTS the-s)
+  (TT (S the-s)))
+(define-simple-macro (TTN expect-ty the-n ...+)
+  (begin (TTE (let ([x : expect-ty := #,(N the-n)]) x)) ...))
 
-(provide TProg1 TProgN TProg TS TE TTE)
+(provide TProg1 TProgN TProg TS TE TT TTE TTS TTN)
 
 (module+ test
   (chk*
@@ -424,26 +427,45 @@
             #:tests ["foo" (record x (S64 1) y (S64 2)) => (S64 1)])
      )
    ;; Check for false positives on the type checker
+   (TTN S8 128 -129)
+   (TTN U8 256 -1)
+   (TTN S16 (expt 2 15) (sub1 (- (expt 2 15))))
+   (TTN U16 (expt 2 16) -1)
+   (TTN S32 (expt 2 31) (sub1 (- (expt 2 31))))
+   (TTN U32 (expt 2 32) -1)
+   (TTN S64 (expt 2 63) (sub1 (- (expt 2 63))))
+   (TTN U64 (expt 2 64) -1)
+   (TTN F32 23.0 23)
+   (TTN F64 23.0f0 23)
    (TTE (iadd (S32 5) (S64 5)))
    (TTE (fadd (S32 5) (S32 1)))
    (TTE (iadd (F32 5f0) (S32 2)))
    (TTE (let ([x : S32 := (S64 5)]) x))
    (TTE ((S32 5) : (array 1 S32)))
-   #;; Errors with:  P: bad syntax in: (P (array (S64 4) (S64 5)))
-    ;; Should this be valid syntax?
-   (TTE (let ([x : (array 2 S64) := (array (S64 4) (S64 5))])
-          (x : S32)))
    (TTE (iadd (F32 5f0) (F32 6F0)))
    (TTE (fadd (S32 5) (S32 6)))
    (TTE (let ([x : S32 := (S64 5)]) x))
-
-   #;; XXX This currently results in a GCC error, but should
-    ;; probably be caught by the type checker instead. Make
-    ;; sure that types are initialized by the correct 'I' stmt.
-   (TTE (let ([x : (union a S32 b S64) := (S32 5)])
-          (iadd (x as a) (S32 5))))
-   
-   #;; XXX this results in exn:fail... should construct-number throw
-    ;; exn:fail:adqc:type, or is it not considered part of the type system?
-   (TTE (let ([x : S32 := #,(N (expt 2 31))]) x))
+   (TTE (if (F32 2.3f0) (S32 1) (S32 2)))
+   (TTE (if (S32 0) (S16 1) (U32 2)))
+   (TTS (let ([x : S32 := (S32 1)])
+          (x <- (U64 2))))
+   (TTS (let ([x : (array 2 S32) := (array (S32 0) (S32 1))])
+          ((x @ 0) <- (U64 2))))
+   (TTS (if (F32 2.3f0) (void) (void)))
+   (TTS (while (F32 23.f0) (void)))
+   (TTS (let ([x : (array 2 S32) := (array (S32 0) (S32 1))])
+          (while x (void))))
+   (TTS (let ([x : S32 := (U64 5)]) (void)))
+   (TTS (let ([x : (union a S32 b S64) := (S32 6)]) (void)))
+   (TTS (let ([x : (array 2 S32) := (array (S32 1) (S32 2) (S32 3))]) (void)))
+   (let ([square (F ([n : S32]) : S32 (imul n n))])
+     (TTS (let ([x : S32 := square <- (S32 5) (S32 6)]) (void)))
+     (TTS (let ([x : S64 := square <- (S32 5)]) (void)))
+     (TTS (let ([x : S32 := square <- (S64 5)]) (void)))
+     (TTS (let ([x : S32 := square <- (S32 5)])
+            (x <- (S64 10)))))
+   (TT (F ([n : S32]) : S32
+          ((imul n n) : S64)))
+   ;; XXX Tests for coherency of env? I.e., the failure cases in `test.rkt`
+   ;; which read "declaration ... has type ... but is referenced as type ..."
    ))
