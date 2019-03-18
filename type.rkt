@@ -10,7 +10,15 @@
 
 ;; Type for exceptions raised by the ADQC type checker.
 (struct exn:fail:adqc:type exn:fail ())
-(provide (struct-out exn:fail:adqc:type))
+;; This shadows 'raise-type-error' because the procedure
+;; of the same name provided by racket/base is deprecated.
+(define (raise-type-error msg . vs)
+  (raise (exn:fail:adqc:type (apply format msg vs)
+                             (current-continuation-marks))))
+(provide
+ (struct-out exn:fail:adqc:type)
+ (contract-out
+  [raise-type-error (->* [string?] #:rest any/c any/c)]))
 
 ;; XXX Maybe this isn't the best way to do this. My first instinct is to capture
 ;; the AST node which is creating the error and print it along with the error
@@ -105,8 +113,8 @@
                x ty xe-ty))
      (match-define (type-info be-env be-ty)
        (expr-type-info be))
-       ;; If x is not referenced in 'be', x will not be in be-env.
-       ;; In this case, return ty to avoid error.
+     ;; If x is not referenced in 'be', x will not be in be-env.
+     ;; In this case, return ty to avoid error.
      (define be-x-ty (hash-ref be-env x ty))
      (unless (equal? ty be-x-ty)
        (report
@@ -218,7 +226,7 @@
      (unless (equal? ret-ty ty)
        (report
         "Call: declaration '~a' has type ~v but is initialized as type ~v"
-        ret-ty ty))
+        x ret-ty ty))
      (for ([a (in-list as)] [fa (in-list f-as)] [i (in-naturals 1)])
        (define a-ty (type-info-ty
                      (cond [(Expr? a) (expr-type-info a)]
