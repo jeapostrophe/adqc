@@ -201,6 +201,22 @@
                     (let-syntax ([x (P-expander
                                      (syntax-parser [_ #'the-x-ref]))] ...)
                       (E be))))))]
+      [(_ (let ([x (~datum :=) xe] ...) be))
+       #:with (x-id ...) (generate-temporaries #'(x ...))
+       #:with (the-ty ...) (generate-temporaries #'(x ...))
+       (record-disappeared-uses #'let)
+       (syntax/loc stx
+         (let ([x-id 'x-id] ... [the-xe (E xe)] ...)
+           (let ([the-ty (expr-type the-xe)] ...)
+             (Let*E (list x-id ...)
+                    (list the-ty ...)
+                    ;; XXX don't call E on xe again
+                    ;; currently 'the-xe ...' errors
+                    (list (E xe) ...)
+                    (let ([the-x-ref (Var x-id the-ty)] ...)
+                      (let-syntax ([x (P-expander
+                                       (syntax-parser [_ #'the-x-ref]))] ...)
+                        (E be)))))))]
       [(_ (if c t f))
        (record-disappeared-uses #'if)
        (syntax/loc stx (IfE (E c) (E t) (E f)))]
@@ -383,6 +399,9 @@
                    (let ([the-ret (Jump k-id)])
                      (let-syntax ([k (S-expander (syntax-parser [(_) #'the-ret]))])
                        (S (begin . b)))))))]
+      ;; XXX We want a version of this syntax where the type is inferred,
+      ;; but right now there's no way to infer the type of an Init (specifically
+      ;; for records).
       [(_ (let ([x:id (~datum :) ty (~datum :=) xi]) . b))
        #:with x-id (generate-temporary #'x)
        (record-disappeared-uses #'let)
@@ -400,16 +419,20 @@
        (syntax/loc stx
          (let ([the-ty (T ty)])
            (S (let ([x : #,the-ty := (undef #,the-ty)]) . b))))]
-      [(_ (let ([x:id (~datum :) ty (~datum :=) f
-                      (~datum <-)
+      [(_ (let ([x:id (~optional (~seq (~datum :) ty) #:defaults ([ty #'#f]))
+                      (~datum :=) f (~datum <-)
                       (~or (unsyntax-splicing as)
                            (~and (~seq a ...)
                                  (~bind [as #'(list (E a) ...)])))]) . b))
        #:with x-id (generate-temporary #'x)
+       ;; XXX Cleaner way to do this? Couldn't put #'(Fun-ret-ty f)
+       ;; directly in the #:defaults clause because it referenced 'f'
+       ;; before 'f' appears in the pattern.
+       #:with ty* (if (syntax->datum #'ty) #'(T ty) #'(Fun-ret-ty f))
        (record-disappeared-uses #'let)
        (syntax/loc stx
          (let ([x-id 'x-id]
-               [the-ty (T ty)])
+               [the-ty ty*])
            (Call x-id the-ty f as
                  (let ([the-x-ref (Var x-id the-ty)])
                    (let-syntax ([x (P-expander
