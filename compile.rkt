@@ -322,11 +322,15 @@
     [(Begin f s)
      (list* (rec f) ind-nl (rec s))]
     [(If p t f)
+     (define tail
+       (if (If? (unpack-MetaS f))
+           (rec f)
+           (list* "{" ind++ ind-nl
+                  (rec f)
+                  ind-- ind-nl "}")))
      (list* "if " (compile-expr ρ p) " {" ind++ ind-nl
             (rec t)
-            ind-- ind-nl "} else {" ind++ ind-nl
-            (rec f)
-            ind-- ind-nl "}")]
+            ind-- ind-nl "} else " tail)]
     [(While p b)
      (list* "while " (compile-expr ρ p) " {" ind++ ind-nl
             (rec b)
