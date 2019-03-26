@@ -11,17 +11,25 @@
 (define char* (ExtT (ExternSrc '() '()) "char*"))
 (define stdlib-h (ExternSrc '() '("stdlib.h")))
 
+;; Currently fails to compile due to relative path
+(define util-h (ExternSrc '() '("util.h")))
+
+(define (ty->ExtFun ty)
+  (match ty
+    [(FloT 64)
+     (ExtFun stdlib-h (list (Arg 'str char* 'read-only)) ty "atof")]
+    [(IntT #t 8)
+     (ExtFun util-h (list (Arg 'str char* 'read-only)) ty "cstr_first_char")]
+    [(IntT #t 32)
+     (ExtFun stdlib-h (list (Arg 'str char* 'read-only)) ty "atoi")]
+    [(IntT #t 64)
+     (ExtFun stdlib-h (list (Arg 'str char* 'read-only)) ty "atol")]))
+
 (define (wrap-main main)
   (define args (Fun-args main))
   (define nargs (length args))
   (define tys (map Arg-ty args))
-  (define fns
-    (for/list ([ty (in-list tys)])
-      (define name (match ty
-                     [(FloT 64) "atof"]
-                     [(IntT #t 32) "atoi"]
-                     [(IntT #t 64) "atol"]))
-      (ExtFun stdlib-h (list (Arg 'str char* 'read-only)) ty name)))
+  (define fns (map ty->ExtFun tys))
   (define arg-xs (map gensym (make-list nargs 'arg)))
   (F ([argc : S32] [argv : (array (add1 nargs) #,char*)]) : S32
      (assert! #:dyn #:msg (format "exactly ~a arguments supplied" nargs)
