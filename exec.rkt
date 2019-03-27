@@ -36,11 +36,15 @@
      (assert! #:dyn #:msg (format "exactly ~a arguments supplied" nargs)
               (ieq argc (S32 (add1 nargs))))
      #,(let ([user-call
-              (S (let ([x : S32 := main <- #,@(for/list ([x arg-xs] [ty tys])
-                                                (Var x ty))])
+              (S (let ([x := main <- #,@(for/list ([x (in-list arg-xs)]
+                                                   [ty (in-list tys)])
+                                          (Var x ty))])
                    (return x)))])
          (for/fold ([body user-call])
-                   ([ty tys] [fn fns] [x arg-xs] [i (in-naturals 1)])
+                   ([ty (in-list tys)]
+                    [fn (in-list fns)]
+                    [x (in-list arg-xs)]
+                    [i (in-naturals 1)])
            (Call x ty fn (list (E (argv @ (S32 i)))) body)))))
 
 (define (make-exe prog c-path out-path)
