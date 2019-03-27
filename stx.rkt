@@ -204,19 +204,19 @@
       [(_ (let ([x (~datum :=) xe] ...) be))
        #:with (x-id ...) (generate-temporaries #'(x ...))
        #:with (the-ty ...) (generate-temporaries #'(x ...))
+       #:with (the-xe ...) (generate-temporaries #'(xe ...))
        (record-disappeared-uses #'let)
        (syntax/loc stx
-         (let ([x-id 'x-id] ... [the-xe (E xe)] ...)
-           (let ([the-ty (expr-type the-xe)] ...)
-             (Let*E (list x-id ...)
-                    (list the-ty ...)
-                    ;; XXX don't call E on xe again
-                    ;; currently 'the-xe ...' errors
-                    (list (E xe) ...)
-                    (let ([the-x-ref (Var x-id the-ty)] ...)
-                      (let-syntax ([x (P-expander
-                                       (syntax-parser [_ #'the-x-ref]))] ...)
-                        (E be)))))))]
+         (let* ([x-id 'x-id] ...
+                [the-xe (E xe)] ...
+                [the-ty (expr-type the-xe)] ...)
+           (Let*E (list x-id ...)
+                  (list the-ty ...)
+                  (list the-xe ...)
+                  (let ([the-x-ref (Var x-id the-ty)] ...)
+                    (let-syntax ([x (P-expander
+                                     (syntax-parser [_ #'the-x-ref]))] ...)
+                      (E be))))))]
       [(_ (if c t f))
        (record-disappeared-uses #'if)
        (syntax/loc stx (IfE (E c) (E t) (E f)))]
@@ -425,9 +425,6 @@
                            (~and (~seq a ...)
                                  (~bind [as #'(list (E a) ...)])))]) . b))
        #:with x-id (generate-temporary #'x)
-       ;; XXX Cleaner way to do this? Couldn't put #'(Fun-ret-ty f)
-       ;; directly in the #:defaults clause because it referenced 'f'
-       ;; before 'f' appears in the pattern.
        #:with ty* (if (syntax->datum #'ty) #'(T ty) #'(Fun-ret-ty f))
        (record-disappeared-uses #'let)
        (syntax/loc stx
