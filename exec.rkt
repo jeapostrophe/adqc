@@ -3,6 +3,7 @@
          racket/list
          racket/match
          racket/require
+         racket/runtime-path
          (subtract-in "ast.rkt" "type.rkt")
          "compile.rkt"
          "stx.rkt"
@@ -11,8 +12,8 @@
 (define char* (ExtT (ExternSrc '() '()) "char*"))
 (define stdlib-h (ExternSrc '() '("stdlib.h")))
 
-;; Currently fails to compile due to relative path
-(define util-h (ExternSrc '() '("util.h")))
+(define-runtime-path util-path "util.h")
+(define util-h (ExternSrc '() (list (path->string util-path))))
 
 (define (ty->ExtFun ty)
   (match ty
@@ -43,12 +44,9 @@
            (Call x ty fn (list (E (argv @ (S32 i)))) body)))))
 
 (define (make-exe prog c-path out-path)
-  (define name->fun (Program-name->fun prog))
-  (define main (hash-ref name->fun "main"))
-  ;; XXX name->fun is represented as a mutable hash-table... is it okay for
-  ;; this function to mutate that table in-place?
-  (hash-set! name->fun "main" (wrap-main main))
-  (compile-exe prog c-path out-path))
+  (define n->f (hash-copy (Program-name->fun prog)))
+  (hash-set! n->f "main" (wrap-main (hash-ref n->f "main")))
+  (compile-exe (struct-copy Program prog [name->fun n->f]) c-path out-path))
 
 (provide
  (contract-out
