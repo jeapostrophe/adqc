@@ -385,7 +385,10 @@
                 (S (begin . d))))]
       [(_ (set! p e))
        (record-disappeared-uses #'set!)
-       (syntax/loc stx (Assign (P p) (E e)))]
+       (syntax/loc stx
+         (let* ([the-p (P p)] [p-ty (path-type the-p)])
+           (Assign the-p (syntax-parameterize ([expect-ty #'p-ty])
+                           (E e)))))]
       [(_ {p (~datum <-) e}) (syntax/loc stx (S (set! p e)))]
       [(_ (if p t f))
        (record-disappeared-uses #'if)
