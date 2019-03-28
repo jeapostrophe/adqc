@@ -287,7 +287,8 @@
 (define-binop & [(? IntT?) iand])
 (define-binop ^ [(? IntT?) ixor])
 (define-binop = [(? IntT?) ieq] [(? FloT?) foeq])
-(define-binop != [(? IntT?) ine] [(? FloT?) fone])
+;; Note: behavior of C's != operator is unordered for floats
+(define-binop != [(? IntT?) ine] [(? FloT?) fune])
 (define-binop <
   [(IntT #t _) islt]
   [(IntT #f _) iult]
