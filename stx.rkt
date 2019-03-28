@@ -181,7 +181,6 @@
   (with-disappeared-uses
     (syntax-parse stx
       #:literals (if let unsyntax)
-      ;; XXX make generic binops that look at the types and determine the operation
       [(_ (op:id l r))
        #:when (E-bin-op? #'op)
        (syntax/loc stx (BinOp 'op (E l) (E r)))]
@@ -261,6 +260,50 @@
     [(_ (f r ...) e)
      (syntax/loc this-syntax
        (E (let (f) (let* (r ...) e))))]))
+
+(define-simple-macro (define-binop name:id [match-clause op:id] ...+)
+  (define-E-free-syntax name
+    (syntax-parser
+      [(_ l r)
+       (syntax/loc this-syntax
+         (let ([the-lhs (E l)])
+           (match (expr-type the-lhs)
+             [match-clause (E (op #,the-lhs r))] ...)))])))
+(define-binop + [(? IntT?) iadd] [(? FloT?) fadd])
+(define-binop - [(? IntT?) isub] [(? FloT?) fsub])
+(define-binop * [(? IntT?) imul] [(? FloT?) fmul])
+(define-binop /
+  [(IntT #t _) isdiv]
+  [(IntT #f _) iudiv]
+  [(? FloT?) fdiv])
+(define-binop %
+  [(IntT #t _) isrem]
+  [(IntT #f _) iurem]
+  [(? FloT?) frem])
+(define-binop << [(? IntT?) ishl])
+(define-binop >> [(IntT #t _) iashr] [(IntT #f _) ilshr])
+;; XXX Syntax for bitwise-or? `|` is reserved
+(define-binop bitwise-or [(? IntT?) ior])
+(define-binop & [(? IntT?) iand])
+(define-binop ^ [(? IntT?) ixor])
+(define-binop = [(? IntT?) ieq] [(? FloT?) foeq])
+(define-binop != [(? IntT?) ine] [(? FloT?) fone])
+(define-binop <
+  [(IntT #t _) islt]
+  [(IntT #f _) iult]
+  [(? FloT?) folt])
+(define-binop <=
+  [(IntT #t _) isle]
+  [(IntT #f _) iule]
+  [(? FloT?) fole])
+(define-binop >
+  [(IntT #t _) isgt]
+  [(IntT #f _) iugt]
+  [(? FloT?) fogt])
+(define-binop >=
+  [(IntT #t _) isge]
+  [(IntT #f _) iuge]
+  [(? FloT?) foge])
 
 (define-simple-macro (define-flo-stx [name:id bits] ...)
   (begin
@@ -453,6 +496,30 @@
        #:fail-unless (syntax-parameter-value #'S-in-tail?)
        "Cannot end in expression when not in tail position"
        (syntax/loc stx (S (return e)))])))
+
+(define-simple-macro (define-assign-ops [name:id op:id] ...+)
+  (begin
+    (define-S-free-syntax name
+      (syntax-parser
+        [(_ p e)
+         (syntax/loc this-syntax
+           (S (set! p (op p e))))])) ...))
+(define-assign-ops [+= +] [-= -] [*= *] [/= /] [%= %] [<<= <<] [>>= >>])
+
+(define-simple-macro (define-increment-ops [name:id op:id] ...+)
+  (begin
+    (define-S-free-syntax name
+      (syntax-parser
+        [(_ p)
+         (syntax/loc this-syntax
+           (let* ([the-p (P p)] [p-ty (path-type the-p)])
+             (let ([one (match p-ty
+                          [(? IntT?) 1]
+                          [(FloT 32) 1.0f0]
+                          [(FloT 64) 1.0])])
+               (S (set! #,the-p (op #,(Read the-p)
+                                    #,(construct-number p-ty one)))))))])) ...))
+(define-increment-ops [++ +] [-- -])
 
 (define-S-free-syntax cond
   (syntax-parser

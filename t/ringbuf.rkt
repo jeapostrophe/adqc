@@ -18,28 +18,27 @@
        (return 0)))
   (define ringbuf-push
     (F ([rb : #,ringbuf_t] [v : #,ty]) : S32
-       (cond [(ieq (rb -> count) (U32 max-count))
+       (cond [(= (rb -> count) (U32 max-count))
               (return -1)]
              [else
               (define buf : (array max-count #,ty) := (rb -> buf))
               (set! (buf @ (rb -> inptr)) v)
-              ;; XXX It would be nice to have ++, --, +=, %=, etc.
-              (set! (rb -> inptr) (iadd (rb -> inptr) (U32 1)))
-              (set! (rb -> inptr) (iurem (rb -> inptr) (U32 max-count)))
-              (set! (rb -> count) (iadd (rb -> count) (U32 1)))
+              (++ (rb -> inptr))
+              (%= (rb -> inptr) (U32 max-count))
+              (++ (rb -> count))
               (return 0)])))
   (define ringbuf-pop
     ;; XXX It would be nice to have syntax that made returning values
     ;; through reference arguments more ergonomic.
     (F ([rb : #,ringbuf_t] [#:ref out : #,ty]) : S32
-       (cond [(ieq (rb -> count) (U32 0))
+       (cond [(= (rb -> count) (U32 0))
               (return -1)]
              [else
-              (define buf : (array max-count S32) := (rb -> buf))
+              (define buf : (array max-count #,ty) := (rb -> buf))
               (set! out (buf @ (rb -> outptr)))
-              (set! (rb -> outptr) (iadd (rb -> outptr) (U32 1)))
-              (set! (rb -> outptr) (iurem (rb -> outptr) (U32 max-count)))
-              (set! (rb -> count) (isub (rb -> count) (U32 1)))
+              (++ (rb -> outptr))
+              (%= (rb -> outptr) (U32 max-count))
+              (-- (rb -> count))
               (return 0)])))
   (ringbuf-spec ringbuf_t make-ringbuf ringbuf-push ringbuf-pop))
 
