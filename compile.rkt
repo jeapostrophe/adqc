@@ -9,7 +9,8 @@
          racket/set
          racket/string
          racket/system
-         "ast.rkt")
+         "ast.rkt"
+         (only-in "type.rkt" expr-type))
 
 ;; XXX Read through https://queue.acm.org/detail.cfm?id=3212479 and
 ;; see if there are any changes we should have to our language
@@ -54,12 +55,12 @@
   (define b* (compile-expr ρ b))
   (list* "(isnan(" a* ") || isnan(" b* ") || (" a* " " op " " b* "))"))
 
-(define ((c-fun bits->name src) ρ a b)
+(define ((c-fun ty->name src) ρ a b)
   (include-src! src)
   (define a* (compile-expr ρ a))
   (define b* (compile-expr ρ b))
-  ;; XXX dispatch on type
-  (define name* (hash-ref bits->name 64))
+  (define ty (expr-type a))
+  (define name* (hash-ref ty->name ty))
   (list* "(" name* "(" a* ", " b* "))"))
 
 (define (compile-fone ρ a b)
@@ -98,7 +99,7 @@
           'fsub (c-op "-")
           'fmul (c-op "*")
           'fdiv (c-op "/")
-          'frem (c-fun (hasheq 32 "fmodf" 64 "fmod") math-h)
+          'frem (c-fun (hash (FloT 32) "fmodf" (FloT 64) "fmod") math-h)
           'ieq (c-op "==")
           'ine (c-op "!=")
           'iugt (c-op ">")
