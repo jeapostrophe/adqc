@@ -1,18 +1,23 @@
 #lang racket/base
 (require adqc
          racket/file
-         racket/system)
+         racket/system
+         syntax/parse/define)
+
+(define-simple-macro (C c)
+  (E (S8 (char->integer c))))
 
 (define main
   (F ([n1 : S32] [op : S8] [n2 : S32]) : S32
-     (cond [(ieq op (S8 (char->integer #\+)))
-            (iadd n1 n2)]
-           [(ieq op (S8 (char->integer #\-)))
-            (isub n1 n2)]
-           [(ieq op (S8 (char->integer #\*)))
-            (imul n1 n2)]
-           [(ieq op (S8 (char->integer #\/)))
-            (isdiv n1 n2)]
+     ;; XXX Need some way to write result to stdout instead of returning it
+     (cond [(= op #,(C #\+))
+            (+ n1 n2)]
+           [(= op #,(C #\-))
+            (- n1 n2)]
+           [(= op #,(C #\*))
+            (* n1 n2)]
+           [(= op #,(C #\/))
+            (/ n1 n2)]
            [else (error "invalid op\n")])))
 
 (define calc (Prog (include-fun "main" main)))
