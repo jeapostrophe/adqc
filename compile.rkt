@@ -570,7 +570,8 @@
       (λ () (tree-for idisplay (compile-program prog))))
     (define libs (for/list ([l (in-set (current-libs))])
                    (format "-l~a" l)))
-    (define args (list* "-Werror" "-o" out-path "-xc" c-path libs))
+    (define args
+      (list* "-Werror" "-Wno-format-security" "-o" out-path "-xc" c-path libs))
     (define args* (if shared? (list* "-shared" "-fPIC" args) args))
     (apply system* (find-executable-path "cc") args*)))
 

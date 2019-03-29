@@ -2,6 +2,7 @@
 (require racket/contract/base
          racket/list
          racket/match
+         racket/port
          racket/require
          racket/runtime-path
          (subtract-in "ast.rkt" "type.rkt")
@@ -47,11 +48,42 @@
                     [i (in-naturals 1)])
            (Call x ty fn (list (E (argv @ (S32 i)))) body)))))
 
-(define (make-exe prog c-path out-path)
+(struct executable (bin-path) #:transparent)
+
+(define (make-executable prog c-path bin-path)
   (define n->f (hash-copy (Program-name->fun prog)))
   (hash-set! n->f "main" (wrap-main (hash-ref n->f "main")))
-  (compile-exe (struct-copy Program prog [name->fun n->f]) c-path out-path))
+  (define prog* (struct-copy Program prog [name->fun n->f]))
+  (unless (compile-exe prog* c-path bin-path)
+    (newline (current-error-port))
+    (define in (open-input-file c-path))
+    (for ([ch (in-port read-char in)])
+      (display ch (current-error-port)))
+    (close-input-port in)
+    (delete-file c-path)
+    (delete-file bin-path)
+    (error "call to compile-exe failed (see stderr)"))
+  (executable bin-path))
+
+(define (executable-run exe . args)
+  (define bin-path (executable-bin-path exe))
+  (define-values (sp stdout stdin stderr)
+    (apply subprocess #f #f #f bin-path args))
+  (close-output-port stdin)
+  (subprocess-wait sp)
+  (define st (subprocess-status sp))
+  (unless (zero? st)
+    (displayln (port->string stderr #:close? #t) (current-error-port))
+    (error 'executable-run "executable failed with exit status ~a (see stderr)" st))
+  (close-input-port stderr)
+  ;; XXX Should return stdout instead of assuming the program writes 1 value
+  ;; which can be read by racket.
+  (define result (read stdout))
+  (close-input-port stdout)
+  result)
 
 (provide
  (contract-out
-  [make-exe (-> Program? path? path? boolean?)]))
+  [struct executable ([bin-path path?])]
+  [make-executable (-> Program? path? path? executable?)]
+  [executable-run (->* [executable?] #:rest (listof string?) any/c)]))

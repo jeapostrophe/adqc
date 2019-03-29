@@ -592,6 +592,48 @@
      (syntax/loc this-syntax
        (S (begin (set! current-return-var e) (return))))]))
 
+(define stdio-h (ExternSrc '() '("stdio.h")))
+
+;; XXX Had to disable Werror-format-security to get this to work.
+;; Maybe we want move this to a lower level somehow so we can embed
+;; the format string directly in the printf call. Or maybe lifting the
+;; format string out is the right way to do it and we want to have our
+;; own verifier instead of relying on GCC.
+;;
+;; XXX This is suuuuper ugly in general. This macro is generating a new
+;; ExtFun for every invocation, the declaration of which matches the
+;; number (and types) of arguments needed for this particular call to
+;; the macro. So the resulting program will have many conflicting
+;; declarations of printf, which only works because the ADQC compiler
+;; has no way of checking that ExtFun definitions actually match their
+;; real C definitions, and doesn't check if they conflict with each other.
+;;
+;; XXX Not sure why this needs to be defined as S-free-syntax. Gives an error
+;; about expressions not being allowed unless in tail position if it's defined
+;; as an S-expander.
+(define-S-free-syntax printf
+  (syntax-parser
+    #:literals (unsyntax unsyntax-splicing)
+    [(_ fmt:str (~or (unsyntax-splicing es)
+                     (~and (~seq e ...)
+                           (~bind [es #'(list (E e) ...)]))))
+     #:with ret-x (generate-temporary 'ret-x)
+     #:with fmt-x (generate-temporary 'fmt-x)
+     (record-disappeared-uses #'printf)
+     (syntax/loc this-syntax
+       (let* ([fmt-ty (T (array (add1 (string-length fmt)) S8))]
+              [args (cons (Arg 'fmt-arg fmt-ty 'read-only)
+                          (for/list ([e* (in-list es)])
+                            (Arg 'arg (expr-type e*) 'read-only)))]
+              [this-printf (ExtFun stdio-h args (T S32) "printf")]
+              [fmt* (append (map char->integer (string->list fmt)) '(0))]
+              [fmt-init (I (array #,@(for/list ([n (in-list fmt*)])
+                                       (I (S8 n)))))])
+         (S (let* ([fmt-x : #,fmt-ty := #,fmt-init]
+                   [ret-x : S32 := this-printf <- #,@(cons (E fmt-x) es)])
+              ;; XXX Do something with ret-x?
+              (void)))))]))
+
 (begin-for-syntax
   (define-syntax-class Farg
     #:attributes (x ref var arg)
