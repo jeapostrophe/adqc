@@ -76,11 +76,7 @@
     (displayln (port->string stderr #:close? #t) (current-error-port))
     (error 'executable-run "executable failed with exit status ~a (see stderr)" st))
   (close-input-port stderr)
-  ;; XXX Should return stdout instead of assuming the program writes 1 value
-  ;; which can be read by racket.
-  (define result (read stdout))
-  (close-input-port stdout)
-  result)
+  stdout)
 
 (provide
  (contract-out

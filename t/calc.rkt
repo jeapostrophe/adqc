@@ -1,7 +1,6 @@
 #lang racket/base
 (require adqc
          racket/file
-         racket/system
          syntax/parse/define)
 
 (define-simple-macro (C c)
@@ -27,11 +26,16 @@
   (define c-path (make-temporary-file "adqc~a.c"))
   (define bin-path (make-temporary-file "adqc~a"))
   (define exe (make-executable calc c-path bin-path))
+  (define (go args expect)
+    (define output (apply executable-run exe args))
+    (define result (read output))
+    (close-input-port output)
+    (chk result expect))
   (chk*
-   (chk (executable-run exe "2" "+" "3") 5)
-   (chk (executable-run exe "3" "-" "1") 2)
-   (chk (executable-run exe "2" "*" "4") 8)
-   (chk (executable-run exe "6" "/" "2") 3))
+   (go '("2" "+" "3") 5)
+   (go '("3" "-" "1") 2)
+   (go '("2" "*" "4") 8)
+   (go '("6" "/" "2") 3))
   (delete-file c-path)
   (delete-file bin-path)
   )
