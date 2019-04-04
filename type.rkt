@@ -77,10 +77,11 @@
     [(Cast to-ty e)
      (match-define (type-info from-env from-ty)
        (expr-type-info e))
-     (unless (or (IntT? from-ty) (FloT? from-ty))
-       (report "Cast: can't cast from non-numeric type ~v" from-ty))
-     (unless (or (IntT? to-ty) (FloT? to-ty))
-       (report "Cast: can't cast to non-numeric type ~v" to-ty))
+     (unless (or (ExtT? from-ty) (ExtT? to-ty))
+       (unless (or (IntT? from-ty) (FloT? from-ty))
+         (report "Cast: can't cast from non-numeric type ~v" from-ty))
+       (unless (or (IntT? to-ty) (FloT? to-ty))
+         (report "Cast: can't cast to non-numeric type ~v" to-ty)))
      (type-info from-env to-ty)]
     [(Read p) (path-type-info p)]
     [(BinOp op L R)

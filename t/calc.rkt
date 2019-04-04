@@ -16,7 +16,7 @@
              [else 0]
              ;; XXX Can't put error statement inside of LetE
              #;[else (error "invalid op\n")]))
-     (printf "%d\n" result)
+     (print result "\n")
      (return 0)))
 
 (define calc (Prog (include-fun "main" main)))

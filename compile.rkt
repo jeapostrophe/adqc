@@ -571,7 +571,15 @@
     (define libs (for/list ([l (in-set (current-libs))])
                    (format "-l~a" l)))
     (define args
-      (list* "-Werror" "-Wno-format-security" "-o" out-path "-xc" c-path libs))
+      (list*
+       ;; error on any warning, except for...
+       "-Wall" "-Werror"
+       ;; Too pedantic, maybe we should have our own warning for this
+       "-Wno-unused-variable"
+       ;; We don't emit unused functions so all this flag does is
+       ;; complain about unused functions in util.h.
+       "-Wno-unused-function"
+       "-o" out-path "-xc" c-path libs))
     (define args* (if shared? (list* "-shared" "-fPIC" args) args))
     (apply system* (find-executable-path "cc") args*)))
 

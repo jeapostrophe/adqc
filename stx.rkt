@@ -3,6 +3,7 @@
          racket/list
          racket/match
          racket/require
+         racket/runtime-path
          racket/stxparam
          syntax/parse/define
          (for-syntax racket/base
@@ -37,9 +38,35 @@
     (define-simple-macro (define-S-expander id impl)
       (define-syntax id (S-expander impl)))))
 
+#;; XXX Very WIP, doesn't compile atm...
+(define-syntax (define-expanders&macros* stx)
+  (syntax-parse stx
+    [(_ S-free-macros define-S-free-syntax
+        S-expander S-expand define-S-expander)
+     ;#:with gen:S-expander (format-id #'S-expander "gen:~a" 'S-expander)
+     #:with expander-struct (generate-temporary #'S-expander)
+     (syntax/loc stx
+       (begin
+         (begin-for-synax
+           (define S-free-macros (make-free-id-table))
+           (define-generics S-expander [S-expand stx])
+           (struct expander-struct (impl)
+             #:methods gen:S-expander
+             [(define (S-expand stx)
+                (syntax/loc stx impl))]))
+         (define-simple-macro (define-S-free-syntax id impl)
+           (begin-for-syntax (dict-set! S-free-macros #'id impl)))
+         (define-simple-macro (define-S-expander id impl)
+           (define-syntax id (S-expander impl)))))]))
+
+
 (define-expanders&macros
   T-free-macros define-T-free-syntax
   T-expander define-T-expander)
+#;
+(define-expanders&macros*
+  T-free-macros define-T-free-syntax
+  T-expander T-expand define-T-expander)
 (define-syntax (T stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -73,6 +100,8 @@
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
        #:declare macro-id (static T-expander? "T expander")
        (record-disappeared-uses #'macro-id)
+       #;
+       (E-expand (attribute macro-id.value) #'macro-use)
        ((attribute macro-id.value) #'macro-use)]
       [(_ (unsyntax e))
        (record-disappeared-uses #'unsyntax)
@@ -226,7 +255,9 @@
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
        #:declare macro-id (static E-expander? "E expander")
        (record-disappeared-uses #'macro-id)
-       ((attribute macro-id.value) #'macro-use)]
+       ((attribute macro-id.value) #'macro-use)
+       #;; XXX use E-expand
+       (E-expand (attribute macro-id.value) #'macro-use)]
       [(_ (unsyntax e))
        (record-disappeared-uses #'unsyntax)
        #'e]
@@ -592,46 +623,60 @@
      (syntax/loc this-syntax
        (S (begin (set! current-return-var e) (return))))]))
 
-(define stdio-h (ExternSrc '() '("stdio.h")))
+(define unistd-h (ExternSrc '() '("unistd.h")))
+(define void* (ExtT (ExternSrc '() '()) "void*"))
+(define write (ExtFun unistd-h (list (Arg 'fd (T S32) 'read-only)
+                                     (Arg 'buf void* 'read-only)
+                                     (Arg 'count (T U64) 'read-only))
+                      (T S32) "write"))
+(define-runtime-path util-path "util.h")
+(define util-h (ExternSrc '() (list (path->string util-path))))
+(define stdout (ExtVar unistd-h "STDOUT_FILENO" (T S32)))
 
-;; XXX Had to disable Werror-format-security to get this to work.
-;; Maybe we want move this to a lower level somehow so we can embed
-;; the format string directly in the printf call. Or maybe lifting the
-;; format string out is the right way to do it and we want to have our
-;; own verifier instead of relying on GCC.
-;;
-;; XXX This is suuuuper ugly in general. This macro is generating a new
-;; ExtFun for every invocation, the declaration of which matches the
-;; number (and types) of arguments needed for this particular call to
-;; the macro. So the resulting program will have many conflicting
-;; declarations of printf, which only works because the ADQC compiler
-;; has no way of checking that ExtFun definitions actually match their
-;; real C definitions, and doesn't check if they conflict with each other.
-;;
-;; XXX Not sure why this needs to be defined as S-free-syntax. Gives an error
-;; about expressions not being allowed unless in tail position if it's defined
-;; as an S-expander.
-(define-S-free-syntax printf
+(define (ty->printer-name ty)
+  (match ty
+    ;; XXX Array, record, union, ExtT?
+    [(FloT 32) "print_F32"]
+    [(FloT 64) "print_F64"]
+    [(IntT signed? bits)
+     (if signed?
+         (match bits
+           [8 "print_S8"]
+           [16 "print_S16"]
+           [32 "print_S32"]
+           [64 "print_S64"])
+         (match bits
+           [8 "print_U8"]
+           [16 "print_U16"]
+           [32 "print_U32"]
+           [64 "print_U64"]))]))
+
+;; XXX Fix to be unicode-aware (use bytes
+;; instead of string, use U8 instead of S8, etc.)
+(define-S-free-syntax print
   (syntax-parser
-    #:literals (unsyntax unsyntax-splicing)
-    [(_ fmt:str (~or (unsyntax-splicing es)
-                     (~and (~seq e ...)
-                           (~bind [es #'(list (E e) ...)]))))
-     #:with ret-x (generate-temporary 'ret-x)
-     #:with fmt-x (generate-temporary 'fmt-x)
-     (record-disappeared-uses #'printf)
+    #:literals (unsyntax)
+    [(_ e es ...+)
      (syntax/loc this-syntax
-       (let* ([fmt-ty (T (array (add1 (string-length fmt)) S8))]
-              [args (cons (Arg 'fmt-arg fmt-ty 'read-only)
-                          (for/list ([e* (in-list es)])
-                            (Arg 'arg (expr-type e*) 'read-only)))]
-              [this-printf (ExtFun stdio-h args (T S32) "printf")]
-              [fmt* (append (map char->integer (string->list fmt)) '(0))]
-              [fmt-init (I (array #,@(for/list ([n (in-list fmt*)])
-                                       (I (S8 n)))))])
-         (S (let* ([fmt-x : #,fmt-ty := #,fmt-init]
-                   [ret-x : S32 := this-printf <- #,@(cons (E fmt-x) es)])
-              ;; XXX Do something with ret-x?
+       (S (begin (print e) (print es ...))))]
+    [(_ (~or (unsyntax s) s:str))
+     #:with str-x (generate-temporary)
+     #:with ret-x (generate-temporary)
+     (syntax/loc this-syntax
+       (let ([si (I (array #,@(for/list ([ch (in-string s)])
+                                (I (S8 (char->integer ch))))))]
+             [sl (string-length s)])
+         (S (let* ([str-x : (array sl S8) := #,si]
+                   [ret-x := write <- #,(Read stdout) (str-x : #,void*) (U64 sl)])
+              (void)))))]
+    [(_ e)
+     #:with ret-x (generate-temporary)
+     (syntax/loc this-syntax
+       (let* ([the-e (E e)]
+              [e-ty (expr-type the-e)]
+              [printer (ExtFun util-h (list (Arg 'n e-ty 'read-only))
+                               (T S32) (ty->printer-name e-ty))])
+         (S (let ([ret-x := printer <- #,the-e])
               (void)))))]))
 
 (begin-for-syntax
