@@ -20,7 +20,7 @@
   (match ty
     [(FloT 64)
      (ExtFun stdlib-h (list (Arg 'str char* 'read-only)) ty "atof")]
-    [(IntT #t 8)
+    [(IntT #f 8)
      (ExtFun util-h (list (Arg 'str char* 'read-only)) ty "cstr_first_char")]
     [(IntT #t 32)
      (ExtFun stdlib-h (list (Arg 'str char* 'read-only)) ty "atoi")]

@@ -625,59 +625,64 @@
 
 (define unistd-h (ExternSrc '() '("unistd.h")))
 (define void* (ExtT (ExternSrc '() '()) "void*"))
-(define write (ExtFun unistd-h (list (Arg 'fd (T S32) 'read-only)
-                                     (Arg 'buf void* 'read-only)
-                                     (Arg 'count (T U64) 'read-only))
+(define c-write (ExtFun unistd-h (list (Arg 'fd (T S32) 'read-only)
+                                       (Arg 'buf void* 'read-only)
+                                       (Arg 'count (T U64) 'read-only))
                       (T S32) "write"))
 (define-runtime-path util-path "util.h")
 (define util-h (ExternSrc '() (list (path->string util-path))))
 (define stdout (ExtVar unistd-h "STDOUT_FILENO" (T S32)))
 
-(define (ty->printer-name ty)
-  (match ty
-    ;; XXX Array, record, union, ExtT?
-    [(FloT 32) "print_F32"]
-    [(FloT 64) "print_F64"]
-    [(IntT signed? bits)
-     (if signed?
-         (match bits
-           [8 "print_S8"]
-           [16 "print_S16"]
-           [32 "print_S32"]
-           [64 "print_S64"])
-         (match bits
-           [8 "print_U8"]
-           [16 "print_U16"]
-           [32 "print_U32"]
-           [64 "print_U64"]))]))
+(define (print-string s)
+  (define bs (string->bytes/utf-8 s))
+  (define init (I (array #,@(for/list ([b (in-bytes bs)])
+                            (I (U8 b))))))
+  (define len (bytes-length bs))
+  ;; XXX Somehow use generate-temporary here so names can't shadow?
+  (S (let* ([str-x : (array len U8) := #,init]
+            [ret-x := c-write <- #,stdout (str-x : #,void*) (U64 len)])
+       (void))))
 
-;; XXX Fix to be unicode-aware (use bytes
-;; instead of string, use U8 instead of S8, etc.)
+(define (print-expr e)
+  (define e-ty (expr-type e))
+  (define printer-name
+    (match e-ty
+      ;; XXX Array, record, union, ExtT
+      [(FloT 32) "print_F32"]
+      [(FloT 64) "print_F64"]
+      [(IntT signed? bits)
+       (if signed?
+           (match bits
+             [8 "print_S8"]
+             [16 "print_S16"]
+             [32 "print_S32"]
+             [64 "print_S64"])
+           (match bits
+             [8 "print_U8"]
+             [16 "print_U16"]
+             [32 "print_U32"]
+             [64 "print_U64"]))]))
+  (define printer (ExtFun util-h (list (Arg 'n e-ty 'read-only))
+                          (T S32) printer-name))
+  (S (let ([ret-x := printer <- #,e])
+       (void))))
+
 (define-S-free-syntax print
   (syntax-parser
+    ;; XXX unsyntax-splicing?
     #:literals (unsyntax)
     [(_ e es ...+)
      (syntax/loc this-syntax
        (S (begin (print e) (print es ...))))]
-    [(_ (~or (unsyntax s) s:str))
-     #:with str-x (generate-temporary)
-     #:with ret-x (generate-temporary)
+    [(_ (unsyntax exp-or-str))
      (syntax/loc this-syntax
-       (let ([si (I (array #,@(for/list ([ch (in-string s)])
-                                (I (S8 (char->integer ch))))))]
-             [sl (string-length s)])
-         (S (let* ([str-x : (array sl S8) := #,si]
-                   [ret-x := write <- #,(Read stdout) (str-x : #,void*) (U64 sl)])
-              (void)))))]
+       (match exp-or-str
+         [(? string? s) (print-string s)]
+         [(? Expr? the-e) (print-expr the-e)]))]
+    [(_ s:str)
+     (syntax/loc this-syntax (print-string s))]
     [(_ e)
-     #:with ret-x (generate-temporary)
-     (syntax/loc this-syntax
-       (let* ([the-e (E e)]
-              [e-ty (expr-type the-e)]
-              [printer (ExtFun util-h (list (Arg 'n e-ty 'read-only))
-                               (T S32) (ty->printer-name e-ty))])
-         (S (let ([ret-x := printer <- #,the-e])
-              (void)))))]))
+     (syntax/loc this-syntax (print-expr (E e)))]))
 
 (begin-for-syntax
   (define-syntax-class Farg

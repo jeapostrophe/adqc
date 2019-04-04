@@ -5,7 +5,7 @@
 // XXX use write not printf
 #include <stdio.h>
 
-static int8_t cstr_first_char(const char* str)
+static uint8_t cstr_first_char(const char* str)
 {
   return *str;
 }
