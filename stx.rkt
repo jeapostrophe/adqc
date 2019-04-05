@@ -292,7 +292,42 @@
      (syntax/loc this-syntax
        (E (let (f) (let* (r ...) e))))]))
 
-(define-simple-macro (define-binop name:id [match-clause op:id] ...+)
+(define-simple-macro (define-E-increment-ops [name:id op:id] ...+)
+  (begin
+    (define-E-free-syntax name
+      (syntax-parser
+        [(_ e)
+         (syntax/loc this-syntax
+           (let* ([the-e (E e)] [e-ty (expr-type the-e)])
+             (let ([one (match e-ty
+                          [(? IntT?) 1]
+                          [(FloT 32) 1.0f0]
+                          [(FloT 64) 1.0])])
+               (E (op #,the-e #,(construct-number e-ty one))))))])) ...))
+(define-E-increment-ops [add1 +] [sub1 -])
+
+;; 'subract' is not provided, it's just a back-end for '-'
+(define-E-expander subtract
+  (syntax-parser
+    [(_ l r)
+     (syntax/loc this-syntax
+       (let ([the-lhs (E l)])
+         (match (expr-type the-lhs)
+           [(? IntT?) (E (isub #,the-lhs r))]
+           [(? FloT?) (E (fsub #,the-lhs r))])))]))
+(define-E-free-syntax -
+  (syntax-parser
+    [(_ e)
+     (syntax/loc this-syntax
+       (let* ([the-e (E e)] [e-ty (expr-type the-e)])
+         (let ([zero (match e-ty
+                       [(? IntT?) 0]
+                       [(FloT 32) 0.0f0]
+                       [(FloT 64) 0.0])])
+           (E (subtract #,(construct-number e-ty zero) e)))))]
+    [(_ l r) (syntax/loc this-syntax (E (subtract l r)))]))
+
+(define-simple-macro (define-free-binop name:id [match-clause op:id] ...+)
   (define-E-free-syntax name
     (syntax-parser
       [(_ l r)
@@ -300,42 +335,61 @@
          (let ([the-lhs (E l)])
            (match (expr-type the-lhs)
              [match-clause (E (op #,the-lhs r))] ...)))])))
-(define-binop + [(? IntT?) iadd] [(? FloT?) fadd])
-(define-binop - [(? IntT?) isub] [(? FloT?) fsub])
-(define-binop * [(? IntT?) imul] [(? FloT?) fmul])
-(define-binop /
+(define-free-binop + [(? IntT?) iadd] [(? FloT?) fadd])
+(define-free-binop * [(? IntT?) imul] [(? FloT?) fmul])
+(define-free-binop /
   [(IntT #t _) isdiv]
   [(IntT #f _) iudiv]
   [(? FloT?) fdiv])
-(define-binop %
+(define-free-binop modulo
   [(IntT #t _) isrem]
   [(IntT #f _) iurem]
   [(? FloT?) frem])
-(define-binop << [(? IntT?) ishl])
-(define-binop >> [(IntT #t _) iashr] [(IntT #f _) ilshr])
-;; XXX Syntax for bitwise-or? `|` is reserved
-(define-binop bitwise-or [(? IntT?) ior])
-(define-binop & [(? IntT?) iand])
-(define-binop ^ [(? IntT?) ixor])
-(define-binop = [(? IntT?) ieq] [(? FloT?) foeq])
-;; Note: behavior of C's != operator is unordered for floats
-(define-binop != [(? IntT?) ine] [(? FloT?) fune])
-(define-binop <
+(define-free-binop bitwise-ior [(? IntT?) ior])
+(define-free-binop bitwise-and [(? IntT?) iand])
+(define-free-binop bitwise-xor [(? IntT?) ixor])
+(define-free-binop = [(? IntT?) ieq] [(? FloT?) foeq])
+(define-free-binop <
   [(IntT #t _) islt]
   [(IntT #f _) iult]
   [(? FloT?) folt])
-(define-binop <=
+(define-free-binop <=
   [(IntT #t _) isle]
   [(IntT #f _) iule]
   [(? FloT?) fole])
-(define-binop >
+(define-free-binop >
   [(IntT #t _) isgt]
   [(IntT #f _) iugt]
   [(? FloT?) fogt])
-(define-binop >=
+(define-free-binop >=
   [(IntT #t _) isge]
   [(IntT #f _) iuge]
   [(? FloT?) foge])
+
+(define-simple-macro (define-binop name:id [match-clause op:id] ...+)
+  (begin
+    (define-E-expander name
+      (syntax-parser
+        [(_ l r)
+         (syntax/loc this-syntax
+           (let ([the-lhs (E l)])
+             (match (expr-type the-lhs)
+               [match-clause (E (op #,the-lhs r))] ...)))]))
+    (provide name)))
+(define-binop << [(? IntT?) ishl])
+(define-binop >> [(IntT #t _) iashr] [(IntT #f _) ilshr])
+;; Note: behavior of C's != operator is unordered for floats
+(define-binop != [(? IntT?) ine] [(? FloT?) fune])
+
+(define-simple-macro (define-E-aliases [name:id op:id] ...)
+  (begin
+    (begin
+      (define-E-expander name
+        (syntax-parser
+          [(_ . vs)
+           (syntax/loc this-syntax (E (op . vs)))]))
+      (provide name)) ...))
+(define-E-aliases [% modulo] [& bitwise-and] [^ bitwise-xor])
 
 (define-simple-macro (define-flo-stx [name:id bits] ...)
   (begin
@@ -531,27 +585,24 @@
 
 (define-simple-macro (define-assign-ops [name:id op:id] ...+)
   (begin
-    (define-S-free-syntax name
-      (syntax-parser
-        [(_ p e)
-         (syntax/loc this-syntax
-           (S (set! p (op p e))))])) ...))
+    (begin
+      (define-S-expander name
+        (syntax-parser
+          [(_ p e)
+           (syntax/loc this-syntax
+             (S (set! p (op p e))))]))
+      (provide name)) ...))
 (define-assign-ops [+= +] [-= -] [*= *] [/= /] [%= %] [<<= <<] [>>= >>])
 
-(define-simple-macro (define-increment-ops [name:id op:id] ...+)
-  (begin
-    (define-S-free-syntax name
-      (syntax-parser
-        [(_ p)
-         (syntax/loc this-syntax
-           (let* ([the-p (P p)] [p-ty (path-type the-p)])
-             (let ([one (match p-ty
-                          [(? IntT?) 1]
-                          [(FloT 32) 1.0f0]
-                          [(FloT 64) 1.0])])
-               (S (set! #,the-p (op #,(Read the-p)
-                                    #,(construct-number p-ty one)))))))])) ...))
-(define-increment-ops [++ +] [-- -])
+(define-S-expander +=1
+  (syntax-parser
+    [(_ p)
+     (syntax/loc this-syntax (S (set! p (add1 p))))]))
+(define-S-expander -=1
+  (syntax-parser
+    [(_ p)
+     (syntax/loc this-syntax (S (set! p (sub1 p))))]))
+(provide +=1 -=1)
 
 (define-S-free-syntax cond
   (syntax-parser
@@ -669,7 +720,6 @@
 
 (define-S-free-syntax print
   (syntax-parser
-    ;; XXX unsyntax-splicing?
     #:literals (unsyntax)
     [(_ e es ...+)
      (syntax/loc this-syntax

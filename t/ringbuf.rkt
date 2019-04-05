@@ -23,9 +23,9 @@
              [else
               (define buf : (array max-count #,ty) := (rb -> buf))
               (set! (buf @ (rb -> inptr)) v)
-              (++ (rb -> inptr))
+              (+=1 (rb -> inptr))
               (%= (rb -> inptr) (U32 max-count))
-              (++ (rb -> count))
+              (+=1 (rb -> count))
               (return 0)])))
   (define ringbuf-pop
     ;; XXX It would be nice to have syntax that made returning values
@@ -36,9 +36,9 @@
              [else
               (define buf : (array max-count #,ty) := (rb -> buf))
               (set! out (buf @ (rb -> outptr)))
-              (++ (rb -> outptr))
+              (+=1 (rb -> outptr))
               (%= (rb -> outptr) (U32 max-count))
-              (-- (rb -> count))
+              (-=1 (rb -> count))
               (return 0)])))
   (ringbuf-spec ringbuf_t make-ringbuf ringbuf-push ringbuf-pop))
 
