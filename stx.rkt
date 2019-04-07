@@ -38,26 +38,35 @@
     (define-simple-macro (define-S-expander id impl)
       (define-syntax id (S-expander impl)))))
 
-#;; XXX Very WIP, doesn't compile atm...
-(define-syntax (define-expanders&macros* stx)
+;; XXX Fails with:
+;;
+;; stx.rkt:77:13: struct: the first argument to the #:methods
+;; specification is not a name for a generi...:methods gen:T-expander
+;; ((define (T-expand this stx*) (syntax/loc stx* (T-expander1-impl this)))))
+;;
+;; This happens despite the fact that I take gen-S-expander as an agument so
+;; I think there's something more sophisticated here than #:methods expecting
+;; an identifier equivalent to (format-id "gen:~a" #'S-expander)
+#;(define-syntax (define-expanders&macros* stx)
   (syntax-parse stx
     [(_ S-free-macros define-S-free-syntax
-        S-expander S-expand define-S-expander)
-     ;#:with gen:S-expander (format-id #'S-expander "gen:~a" 'S-expander)
+        S-expander gen-S-expander S-expand define-S-expander)
      #:with expander-struct (generate-temporary #'S-expander)
+     #:with expander-struct-impl (format-id #'expander-struct
+                                            "~a-impl" #'expander-struct)
      (syntax/loc stx
        (begin
-         (begin-for-synax
+         (begin-for-syntax
            (define S-free-macros (make-free-id-table))
-           (define-generics S-expander [S-expand stx])
+           (define-generics S-expander [S-expand S-expander stx])
            (struct expander-struct (impl)
-             #:methods gen:S-expander
-             [(define (S-expand stx)
-                (syntax/loc stx impl))]))
+             #:methods gen-S-expander
+             [(define (S-expand this stx*)
+                (syntax/loc stx* (expander-struct-impl this)))]))
          (define-simple-macro (define-S-free-syntax id impl)
            (begin-for-syntax (dict-set! S-free-macros #'id impl)))
          (define-simple-macro (define-S-expander id impl)
-           (define-syntax id (S-expander impl)))))]))
+           (define-syntax id (expander-struct impl)))))]))
 
 
 (define-expanders&macros
@@ -66,7 +75,7 @@
 #;
 (define-expanders&macros*
   T-free-macros define-T-free-syntax
-  T-expander T-expand define-T-expander)
+  T-expander gen:T-expander T-expand define-T-expander)
 (define-syntax (T stx)
   (with-disappeared-uses
     (syntax-parse stx
