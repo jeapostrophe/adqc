@@ -11,6 +11,7 @@
                      racket/list
                      racket/syntax
                      racket/dict
+                     racket/generic
                      syntax/id-table)
          (subtract-in "ast.rkt" "type.rkt")
          "type.rkt")
@@ -38,22 +39,14 @@
     (define-simple-macro (define-S-expander id impl)
       (define-syntax id (S-expander impl)))))
 
-;; XXX Fails with:
-;;
-;; stx.rkt:77:13: struct: the first argument to the #:methods
-;; specification is not a name for a generi...:methods gen:T-expander
-;; ((define (T-expand this stx*) (syntax/loc stx* (T-expander1-impl this)))))
-;;
-;; This happens despite the fact that I take gen-S-expander as an agument so
-;; I think there's something more sophisticated here than #:methods expecting
-;; an identifier equivalent to (format-id "gen:~a" #'S-expander)
-#;(define-syntax (define-expanders&macros* stx)
+(define-syntax (define-expanders&macros* stx)
   (syntax-parse stx
     [(_ S-free-macros define-S-free-syntax
-        S-expander gen-S-expander S-expand define-S-expander)
+        S-expander S-expand define-S-expander)
      #:with expander-struct (generate-temporary #'S-expander)
      #:with expander-struct-impl (format-id #'expander-struct
                                             "~a-impl" #'expander-struct)
+     #:with gen-S-expander (format-id #'S-expander "gen:~a" #'S-expander)
      (syntax/loc stx
        (begin
          (begin-for-syntax
@@ -62,20 +55,24 @@
            (struct expander-struct (impl)
              #:methods gen-S-expander
              [(define (S-expand this stx*)
-                (syntax/loc stx* (expander-struct-impl this)))]))
+                ((expander-struct-impl this) stx*))]))
+         ;; XXX Some macro for anonymous expanders? Right now
+         ;; S and P won't compile with this version of the macro
+         ;; because 'P-expander' and 'S-expander' are used to
+         ;; create anonymous expanders. Below is naive version which
+         ;; doesn't compile (still complains that P/S-expander is
+         ;; referenced before definition).
+         (define-simple-macro (S-expander impl)
+           ;; This should be a value that's returned during macro expansion
+           (expander-struct impl))
          (define-simple-macro (define-S-free-syntax id impl)
            (begin-for-syntax (dict-set! S-free-macros #'id impl)))
          (define-simple-macro (define-S-expander id impl)
            (define-syntax id (expander-struct impl)))))]))
 
-
-(define-expanders&macros
-  T-free-macros define-T-free-syntax
-  T-expander define-T-expander)
-#;
 (define-expanders&macros*
   T-free-macros define-T-free-syntax
-  T-expander gen:T-expander T-expand define-T-expander)
+  T-expander T-expand define-T-expander)
 (define-syntax (T stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -109,9 +106,7 @@
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
        #:declare macro-id (static T-expander? "T expander")
        (record-disappeared-uses #'macro-id)
-       #;
-       (E-expand (attribute macro-id.value) #'macro-use)
-       ((attribute macro-id.value) #'macro-use)]
+       (T-expand (attribute macro-id.value) #'macro-use)]
       [(_ (unsyntax e))
        (record-disappeared-uses #'unsyntax)
        #'e])))
@@ -119,6 +114,11 @@
 (define-expanders&macros
   P-free-macros define-P-free-syntax
   P-expander define-P-expander)
+;; XXX This fails
+#;
+(define-expanders&macros*
+  P-free-macros define-P-free-syntax
+  P-expander P-expand define-P-expander)
 (define-syntax (P stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -139,7 +139,7 @@
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
        #:declare macro-id (static P-expander? "P expander")
        (record-disappeared-uses #'macro-id)
-       ((attribute macro-id.value) #'macro-use)]
+       (#;P-expand (attribute macro-id.value) #'macro-use)]
       [(_ x:id) #'x]
       [(_ (x:id)) #'x])))
 
@@ -194,9 +194,9 @@
      (syntax/loc stx
        (construct-number ty n))]))
 
-(define-expanders&macros
+(define-expanders&macros*
   E-free-macros define-E-free-syntax
-  E-expander define-E-expander)
+  E-expander E-expand define-E-expander)
 
 (begin-for-syntax
   (define-literal-set E-bin-op
@@ -264,8 +264,6 @@
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
        #:declare macro-id (static E-expander? "E expander")
        (record-disappeared-uses #'macro-id)
-       ((attribute macro-id.value) #'macro-use)
-       #;; XXX use E-expand
        (E-expand (attribute macro-id.value) #'macro-use)]
       [(_ (unsyntax e))
        (record-disappeared-uses #'unsyntax)
@@ -301,49 +299,57 @@
      (syntax/loc this-syntax
        (E (let (f) (let* (r ...) e))))]))
 
-(define-simple-macro (define-E-increment-ops [name:id op:id] ...+)
-  (begin
-    (define-E-free-syntax name
-      (syntax-parser
-        [(_ e)
-         (syntax/loc this-syntax
-           (let* ([the-e (E e)] [e-ty (expr-type the-e)])
-             (let ([one (match e-ty
-                          [(? IntT?) 1]
-                          [(FloT 32) 1.0f0]
-                          [(FloT 64) 1.0])])
-               (E (op #,the-e #,(construct-number e-ty one))))))])) ...))
+(define-syntax (define-E-increment-ops stx)
+  (syntax-parse stx
+    [(_ [name:id op:id] ...+)
+     #:with (name^ ...) (generate-temporaries #'(name ...))
+     (syntax/loc stx
+       (begin
+         (begin
+           (define (name^ the-e)
+             (define e-ty (expr-type the-e))
+             (define one
+               (match e-ty
+                 [(? IntT?) 1]
+                 [(FloT 32) 1.0f0]
+                 [(FloT 64) 1.0]))
+             (E (op #,the-e #,(construct-number e-ty one))))
+           (define-E-free-syntax name
+             (syntax-parser
+               [(_ e) (syntax/loc this-syntax (name^ (E e)))]))) ...))]))
 (define-E-increment-ops [add1 +] [sub1 -])
 
-;; 'subract' is not provided, it's just a back-end for '-'
-(define-E-expander subtract
-  (syntax-parser
-    [(_ l r)
-     (syntax/loc this-syntax
-       (let ([the-lhs (E l)])
-         (match (expr-type the-lhs)
-           [(? IntT?) (E (isub #,the-lhs r))]
-           [(? FloT?) (E (fsub #,the-lhs r))])))]))
+(define (subtract the-lhs the-rhs)
+  (match (expr-type the-lhs)
+    [(? IntT?) (E (isub #,the-lhs #,the-rhs))]
+    [(? FloT?) (E (fsub #,the-lhs #,the-rhs))]))
+(define (negate the-e)
+  (define e-ty (expr-type the-e))
+  (define zero
+    (match e-ty
+      [(? IntT?) 0]
+      [(FloT 32) 0.0f0]
+      [(FloT 64) 0.0]))
+  (subtract (construct-number e-ty zero) the-e))
 (define-E-free-syntax -
   (syntax-parser
-    [(_ e)
-     (syntax/loc this-syntax
-       (let* ([the-e (E e)] [e-ty (expr-type the-e)])
-         (let ([zero (match e-ty
-                       [(? IntT?) 0]
-                       [(FloT 32) 0.0f0]
-                       [(FloT 64) 0.0])])
-           (E (subtract #,(construct-number e-ty zero) e)))))]
-    [(_ l r) (syntax/loc this-syntax (E (subtract l r)))]))
+    [(_ e) (syntax/loc this-syntax (negate (E e)))]
+    [(_ l r) (syntax/loc this-syntax (subtract (E l) (E r)))]))
 
-(define-simple-macro (define-free-binop name:id [match-clause op:id] ...+)
-  (define-E-free-syntax name
-    (syntax-parser
-      [(_ l r)
-       (syntax/loc this-syntax
-         (let ([the-lhs (E l)])
+(define-syntax (define-free-binop stx)
+  (syntax-parse stx
+    [(_ name:id [match-clause op:id] ...+)
+     #:with name^ (generate-temporary #'name)
+     (syntax/loc stx
+       (begin
+         (define (name^ the-lhs the-rhs)
            (match (expr-type the-lhs)
-             [match-clause (E (op #,the-lhs r))] ...)))])))
+             [match-clause (E (op #,the-lhs #,the-rhs))] ...))
+         (define-E-free-syntax name
+           (syntax-parser
+             [(_ l r)
+              (syntax/loc this-syntax
+                (name^ (E l) (E r)))]))))]))
 (define-free-binop + [(? IntT?) iadd] [(? FloT?) fadd])
 (define-free-binop * [(? IntT?) imul] [(? FloT?) fmul])
 (define-free-binop /
@@ -375,16 +381,21 @@
   [(IntT #f _) iuge]
   [(? FloT?) foge])
 
-(define-simple-macro (define-binop name:id [match-clause op:id] ...+)
-  (begin
-    (define-E-expander name
-      (syntax-parser
-        [(_ l r)
-         (syntax/loc this-syntax
-           (let ([the-lhs (E l)])
-             (match (expr-type the-lhs)
-               [match-clause (E (op #,the-lhs r))] ...)))]))
-    (provide name)))
+(define-syntax (define-binop stx)
+  (syntax-parse stx
+    [(_ name:id [match-clause op:id] ...+)
+     #:with name^ (generate-temporary #'name)
+     (syntax/loc stx
+       (begin
+         (define (name^ the-lhs the-rhs)
+           (match (expr-type the-lhs)
+             [match-clause (E (op #,the-lhs #,the-rhs))] ...))
+         (define-E-expander name
+           (syntax-parser
+             [(_ l r)
+              (syntax/loc this-syntax
+                (name^ (E l) (E r)))]))
+         (provide name)))]))
 (define-binop << [(? IntT?) ishl])
 (define-binop >> [(IntT #t _) iashr] [(IntT #f _) ilshr])
 ;; Note: behavior of C's != operator is unordered for floats
@@ -450,9 +461,9 @@
   [U32 #f 32]
   [U64 #f 64])
 
-(define-expanders&macros
+(define-expanders&macros*
   I-free-macros define-I-free-syntax
-  I-expander define-I-expander)
+  I-expander I-expand define-I-expander)
 ;; XXX should undef, zero, array, record, and union be literals?
 (define-syntax (I stx)
   (with-disappeared-uses
@@ -477,15 +488,20 @@
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
        #:declare macro-id (static I-expander? "I expander")
        (record-disappeared-uses #'macro-id)
-       ((attribute macro-id.value) #'macro-use)]
+       (I-expand (attribute macro-id.value) #'macro-use)]
       [(_ (unsyntax e))
        (record-disappeared-uses #'unsyntax)
        #'e]
       [(_ x) (syntax/loc stx (ConI (E x)))])))
 
+
 (define-expanders&macros
   S-free-macros define-S-free-syntax
   S-expander define-S-expander)
+#;
+(define-expanders&macros*
+  S-free-macros define-S-free-syntax
+  S-expander S-expand define-S-expander)
 
 (define-syntax-parameter current-return #f)
 (define-syntax-parameter current-return-var #f)
@@ -583,7 +599,7 @@
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
        #:declare macro-id (static S-expander? "S expander")
        (record-disappeared-uses #'macro-id)
-       ((attribute macro-id.value) #'macro-use)]
+       (#;S-expand (attribute macro-id.value) #'macro-use)]
       [(_ (unsyntax e))
        (record-disappeared-uses #'unsyntax)
        #'e]
