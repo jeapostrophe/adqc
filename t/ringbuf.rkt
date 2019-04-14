@@ -31,7 +31,7 @@
     ;; XXX It would be nice to have syntax that made returning values
     ;; through reference arguments more ergonomic.
     (F ([rb : #,ringbuf_t] [#:ref out : #,ty]) : S32
-       (cond [(= (rb -> count) (U32 0))
+       (cond [(zero? (rb -> count))
               (return -1)]
              [else
               (define buf : (array max-count #,ty) := (rb -> buf))

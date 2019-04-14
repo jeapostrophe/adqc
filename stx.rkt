@@ -324,6 +324,18 @@
      (syntax/loc this-syntax
        (E (let (f) (let* (r ...) e))))]))
 
+(define (zero?* the-e)
+  (define e-ty (expr-type the-e))
+  (define zero
+    (match e-ty
+      [(? IntT?) 0]
+      [(FloT 32) 0.0f0]
+      [(FloT 64) 0.0]))
+  (E (= #,the-e #,(construct-number e-ty zero))))
+(define-E-free-syntax zero?
+  (syntax-parser
+    [(_ e) (syntax/loc this-syntax (zero?* (E e)))]))
+
 (define-syntax (define-E-increment-ops stx)
   (syntax-parse stx
     [(_ [name:id op:id] ...+)
