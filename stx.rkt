@@ -55,16 +55,8 @@
            (struct expander-struct (impl)
              #:methods gen-S-expander
              [(define (S-expand this stx*)
-                ((expander-struct-impl this) stx*))]))
-         ;; XXX Some macro for anonymous expanders? Right now
-         ;; S and P won't compile with this version of the macro
-         ;; because 'P-expander' and 'S-expander' are used to
-         ;; create anonymous expanders. Below is naive version which
-         ;; doesn't compile (still complains that P/S-expander is
-         ;; referenced before definition).
-         (define-simple-macro (S-expander impl)
-           ;; This should be a value that's returned during macro expansion
-           (expander-struct impl))
+                ((expander-struct-impl this) stx*))])
+           (define (S-expander x) (expander-struct x)))
          (define-simple-macro (define-S-free-syntax id impl)
            (begin-for-syntax (dict-set! S-free-macros #'id impl)))
          (define-simple-macro (define-S-expander id impl)
@@ -143,6 +135,17 @@
       [(_ x:id) #'x]
       [(_ (x:id)) #'x])))
 
+;; freenums can be implicitly cast to a larger type by BinOp
+(struct freenum-tag ())
+(define freenum! (freenum-tag))
+(define (freenum? e)
+  (match e
+    [(MetaE (== freenum!) _) #t]
+    [(MetaE _ e) (freenum? e)]
+    [(? Expr?) #f]))
+(define (freenum e)
+  (MetaE freenum! e))
+
 (define (construct-number ty n)
   (match ty
     [(IntT signed? bits)
@@ -166,8 +169,8 @@
         "construct-number: floating-point value ~a will not fit type ~v" n ty))
      (Flo bits n)]
     [#f (cond
-          [(single-flonum? n) (Flo 32 n)]
-          [(double-flonum? n) (Flo 64 n)]
+          [(single-flonum? n) (freenum (Flo 32 n))]
+          [(double-flonum? n) (freenum (Flo 64 n))]
           [(exact-integer? n)
            (define 2^7  (expt 2 7))
            (define 2^15 (expt 2 15))
@@ -183,7 +186,7 @@
                    [(and (< n 2^15) (>= n (- 2^15))) 16]
                    [(and (< n 2^31) (>= n (- 2^31))) 32]
                    [else 64]))
-           (Int (not unsigned?) bits n)])]))
+           (freenum (Int (not unsigned?) bits n))])]))
 
 (define-syntax-parameter expect-ty #f)
 
@@ -215,13 +218,35 @@
          (LetE (first xs) (first tys) (first xes)
                (Let*E (rest xs) (rest tys) (rest xes) be))]))
 
+(define (implicit-castable? to from)
+  (match-define (IntT to-signed? to-bits) to)
+  (match-define (IntT from-signed? from-bits) from)
+  (cond [(and from-signed? (not to-signed?)) #f]
+        [else (> to-bits from-bits)]))
+
+(define (make-binop op the-lhs the-rhs)
+  (define l-ty (expr-type the-lhs))
+  (define r-ty (expr-type the-rhs))
+  ;; XXX Should resulting expression be freenum if both
+  ;; lhs and rhs are freenum? (If so, only when return
+  ;; type is integral)
+  ;; XXX This code could examine the actual values of constant
+  ;; expressions so it could be even more permissive, allowing
+  ;; e.g. for (< (U32 some-val) 0), which right now fails
+  ;; because signed values can never be implicitly cast to unsigned.
+  (cond [(and (freenum? the-lhs) (implicit-castable? r-ty l-ty))
+         (BinOp op (Cast r-ty the-lhs) the-rhs)]
+        [(and (freenum? the-rhs) (implicit-castable? l-ty r-ty))
+         (BinOp op the-lhs (Cast l-ty the-rhs))]
+        [else (BinOp op the-lhs the-rhs)]))
+
 (define-syntax (E stx)
   (with-disappeared-uses
     (syntax-parse stx
       #:literals (if let unsyntax)
       [(_ (op:id l r))
        #:when (E-bin-op? #'op)
-       (syntax/loc stx (BinOp 'op (E l) (E r)))]
+       (syntax/loc stx (make-binop 'op (E l) (E r)))]
       [(_ (e (~datum :) ty))
        (syntax/loc stx (Cast (T ty) (E e)))]
       [(_ (let ([x (~datum :) xty (~datum :=) xe] ...) be))
