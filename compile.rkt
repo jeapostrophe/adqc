@@ -212,9 +212,16 @@
     [(Int signed? bits val)
      (list* "((" (compile-type (IntT signed? bits)) ")" (~a val) ")")]
     [(Flo bits val)
+     #;
      (define val* (cond [(equal? val +nan.0)
                          (include-src! math-h)
                          "(NAN)"]
+                        [else (~a val)]))
+     (define val* (cond [(equal? val +nan.0)
+                         (include-src! math-h)
+                         "NAN"]
+                        [(single-flonum? val)
+                         (~a (real->double-flonum val))]
                         [else (~a val)]))
      (list* "((" (compile-type (FloT bits)) ")" val* ")")]
     [(Cast ty e)
