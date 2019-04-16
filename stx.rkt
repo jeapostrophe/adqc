@@ -240,19 +240,47 @@
          (BinOp op the-lhs (Cast l-ty the-rhs))]
         [else (BinOp op the-lhs the-rhs)]))
 
+;; XXX Maybe these can be used in other places?
+(define-match-expander any-non-meta
+  (λ (stx)
+    (syntax-parse stx
+      [(_ v)
+       (syntax/loc stx
+         (or (MetaE _ v) (MetaP _ v) (MetaS _ v) (MetaFun _ v)))])))
+(define-match-expander any-meta
+  (λ (stx)
+    (syntax-parse stx
+      [(_ data-expander)
+       (syntax/loc stx
+         (or (MetaE data-expander _) (MetaP data-expander _)
+             (MetaS data-expander _) (MetaFun data-expander _)))])))
+
+(struct astsrc (stx) #:transparent)
+(define (get-astsrc v)
+  (match v
+    [(any-meta (astsrc stx)) stx]
+    [(any-non-meta v) (get-astsrc v)]
+    [_ #f]))
+
+(define (MetaE/src stx e)
+  (MetaE (astsrc stx) e))
+
 (define-syntax (E stx)
   (with-disappeared-uses
     (syntax-parse stx
       #:literals (if let unsyntax)
       [(_ (op:id l r))
        #:when (E-bin-op? #'op)
-       (syntax/loc stx (make-binop 'op (E l) (E r)))]
+       (quasisyntax/loc stx
+         (MetaE/src #'#,stx (make-binop 'op (E l) (E r))))]
       [(_ (e (~datum :) ty))
-       (syntax/loc stx (Cast (T ty) (E e)))]
+       (quasisyntax/loc stx
+         (MetaE/src #'#,stx (Cast (T ty) (E e))))]
       [(_ (let ([x (~datum :) xty (~datum :=) xe] ...) be))
        #:with (x-id ...) (generate-temporaries #'(x ...))
        #:with (the-ty ...) (generate-temporaries #'(xty ...))
        (record-disappeared-uses #'let)
+       ;; MetaE/src
        (syntax/loc stx
          (let ([x-id 'x-id] ... [the-ty (T xty)] ...)
            (Let*E (list x-id ...)
@@ -268,6 +296,7 @@
        #:with (the-ty ...) (generate-temporaries #'(x ...))
        #:with (the-xe ...) (generate-temporaries #'(xe ...))
        (record-disappeared-uses #'let)
+       ;; XXX MetaE/src
        (syntax/loc stx
          (let* ([x-id 'x-id] ...
                 [the-xe (E xe)] ...
@@ -281,11 +310,15 @@
                       (E be))))))]
       [(_ (if c t f))
        (record-disappeared-uses #'if)
-       (syntax/loc stx (IfE (E c) (E t) (E f)))]
+       (quasisyntax/loc stx
+         (MetaE/src #'#,stx (IfE (E c) (E t) (E f))))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
        #:when (dict-has-key? E-free-macros #'macro-id)
        (record-disappeared-uses #'macro-id)
-       ((dict-ref E-free-macros #'macro-id) #'macro-use)]
+       (quasisyntax/loc stx
+         (MetaE/src
+          #'#,stx #,((dict-ref E-free-macros #'macro-id) #'macro-use)))]
+      ;; XXX MetaE/src for remaining cases
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
        #:declare macro-id (static E-expander? "E expander")
        (record-disappeared-uses #'macro-id)
@@ -304,26 +337,33 @@
      (syntax/loc this-syntax (E (if q a (cond . more))))]))
 (define-E-free-syntax and
   (syntax-parser
-    [(_) (syntax/loc this-syntax (E #t))]
+    [(_) (syntax/loc this-syntax (N 1))]
     [(_ e) (syntax/loc this-syntax (E e))]
-    [(_ x e ...) (syntax/loc this-syntax (E (if x (and e ...) #f)))]))
+    [(_ x e ...) (syntax/loc this-syntax (E (if x (and e ...) (N 0))))]))
 (define-E-free-syntax or
   (syntax-parser
-    [(_) (syntax/loc this-syntax (E #f))]
+    [(_) (syntax/loc this-syntax (N 0))]
     [(_ e) (syntax/loc this-syntax (E e))]
     [(_ x e ...)
      (syntax/loc this-syntax
        (E (let ([tmp x]) (if tmp tmp (or e ...)))))]))
+(define (not* the-e)
+  (define e-ty (expr-type the-e))
+  (define one
+    (match e-ty
+      [(? IntT?) 1]
+      [(FloT 32) 1.0f0]
+      [(FloT 64) 1.0]))
+  (E (bitwise-xor #,the-e #,(construct-number e-ty one))))
 (define-E-free-syntax not
   (syntax-parser
-    [(_ e) (syntax/loc this-syntax (E (ieq #f e)))]))
+    [(_ e) (syntax/loc this-syntax (not* (E e)))]))
 (define-E-free-syntax let*
   (syntax-parser
     [(_ () e) (syntax/loc this-syntax (E e))]
     [(_ (f r ...) e)
      (syntax/loc this-syntax
        (E (let (f) (let* (r ...) e))))]))
-
 (define (zero?* the-e)
   (define e-ty (expr-type the-e))
   (define zero
