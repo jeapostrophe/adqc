@@ -262,25 +262,19 @@
     [(any-non-meta v) (get-astsrc v)]
     [_ #f]))
 
-(define (MetaE/src stx e)
-  (MetaE (astsrc stx) e))
-
 (define-syntax (E stx)
   (with-disappeared-uses
     (syntax-parse stx
       #:literals (if let unsyntax)
       [(_ (op:id l r))
        #:when (E-bin-op? #'op)
-       (quasisyntax/loc stx
-         (MetaE/src #'#,stx (make-binop 'op (E l) (E r))))]
+       (syntax/loc stx (make-binop 'op (E l) (E r)))]
       [(_ (e (~datum :) ty))
-       (quasisyntax/loc stx
-         (MetaE/src #'#,stx (Cast (T ty) (E e))))]
+       (syntax/loc stx (Cast (T ty) (E e)))]
       [(_ (let ([x (~datum :) xty (~datum :=) xe] ...) be))
        #:with (x-id ...) (generate-temporaries #'(x ...))
        #:with (the-ty ...) (generate-temporaries #'(xty ...))
        (record-disappeared-uses #'let)
-       ;; MetaE/src
        (syntax/loc stx
          (let ([x-id 'x-id] ... [the-ty (T xty)] ...)
            (Let*E (list x-id ...)
@@ -296,7 +290,6 @@
        #:with (the-ty ...) (generate-temporaries #'(x ...))
        #:with (the-xe ...) (generate-temporaries #'(xe ...))
        (record-disappeared-uses #'let)
-       ;; XXX MetaE/src
        (syntax/loc stx
          (let* ([x-id 'x-id] ...
                 [the-xe (E xe)] ...
@@ -310,15 +303,11 @@
                       (E be))))))]
       [(_ (if c t f))
        (record-disappeared-uses #'if)
-       (quasisyntax/loc stx
-         (MetaE/src #'#,stx (IfE (E c) (E t) (E f))))]
+       (syntax/loc stx (IfE (E c) (E t) (E f)))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
        #:when (dict-has-key? E-free-macros #'macro-id)
        (record-disappeared-uses #'macro-id)
-       (quasisyntax/loc stx
-         (MetaE/src
-          #'#,stx #,((dict-ref E-free-macros #'macro-id) #'macro-use)))]
-      ;; XXX MetaE/src for remaining cases
+       ((dict-ref E-free-macros #'macro-id) #'macro-use)]
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
        #:declare macro-id (static E-expander? "E expander")
        (record-disappeared-uses #'macro-id)
@@ -793,7 +782,7 @@
   (define len (bytes-length bs))
   ;; XXX Somehow use generate-temporary here so names can't shadow?
   (S (let* ([str-x : (array len U8) := #,init]
-            [ret-x := c-write <- #,stdout (str-x : #,void*) (U64 len)])
+            [ret-x := c-write <- #,(Read stdout) (str-x : #,void*) (U64 len)])
        (void))))
 
 (define (print-expr e)
