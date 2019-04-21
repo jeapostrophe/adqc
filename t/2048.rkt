@@ -4,7 +4,7 @@
          racket/runtime-path)
 
 (define-runtime-path 2048-h-path "2048.h")
-(define 2048-h (ExternSrc '() (list 2048-h-path)))
+(define 2048-h (ExternSrc '() (list (path->string 2048-h-path))))
 (define set-buffered-input
   (ExtFun 2048-h (list (Arg 'enable (T S32) 'read-only))
           (T S32) "set_buffered_input"))
@@ -29,5 +29,5 @@
      (define board : #,board_t :=
        (array #,@(make-list SIZE (I (zero (array SIZE U8))))))
      ;; XXX void function, syntax so we don't have to store result?
-     (define unused := set-buffered-input <- 1)
+     (define unused := set-buffered-input <- (S32 1))
      (return 0)))
