@@ -124,8 +124,11 @@
                          (cond [(typed-pointer? a)
                                 (typed-pointer-ptr a)]
                                [else a]))))
+  (define ret-ty (hash-ref ret-tys n))
   (cond [(cpointer? r)
-         (typed-pointer (hash-ref ret-tys n) r)]
+         (typed-pointer ret-ty r)]
+        [(equal? ret-ty (FloT 32))
+         (real->single-flonum r)]
         [else r]))
 
 (define (linked-program-alloc lp ty)
@@ -153,6 +156,7 @@
                  (typed-pointer ety e)]
                 [else e]))]
        ;; XXX UniT?
+       [(FloT 32) (real->single-flonum r)]
        [_ r])]
     [_ maybe-tp]))
 
