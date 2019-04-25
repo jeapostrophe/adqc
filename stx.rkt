@@ -135,17 +135,17 @@
                                      [else bits]))))
      (cond
        [(< n min)
-        (raise-type-error
+        (adqc-type-error
          "construct-number: integer value ~a too small for type ~v" n ty)]
        [(> n max)
-        (raise-type-error
+        (adqc-type-error
          "construct-number: integer value ~a too large for type ~v" n ty)]
        [else
         (Int signed? bits n)])]
     [(FloT bits)
      (unless (or (and (single-flonum? n) (= bits 32))
                  (and (double-flonum? n) (= bits 64)))
-       (raise-type-error
+       (adqc-type-error
         "construct-number: floating-point value ~a will not fit type ~v" n ty))
      (Flo bits n)]
     [#f (cond
@@ -158,7 +158,7 @@
            (define 2^63 (expt 2 63))
            (unless (and (< n (expt 2 64))
                         (>= n (- 2^63)))
-             (raise-type-error
+             (adqc-type-error
               "construct-number: ~a is too large to fit in 64 bits" n))
            (define unsigned? (>= n 2^63))
            (define bits

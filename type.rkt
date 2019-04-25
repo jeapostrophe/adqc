@@ -9,16 +9,15 @@
          "ast.rkt")
 
 ;; Type for exceptions raised by the ADQC type checker.
+;; Also raised in some circumstances by stx.rkt
 (struct exn:fail:adqc:type exn:fail ())
-;; This shadows 'raise-type-error' because the procedure
-;; of the same name provided by racket/base is deprecated.
-(define (raise-type-error msg . vs)
+(define (adqc-type-error msg . vs)
   (raise (exn:fail:adqc:type (apply format msg vs)
                              (current-continuation-marks))))
 (provide
  (struct-out exn:fail:adqc:type)
  (contract-out
-  [raise-type-error (->* [string?] #:rest any/c any/c)]))
+  [adqc-type-error (->* [string?] #:rest any/c any/c)]))
 
 ;; XXX Maybe this isn't the best way to do this. My first instinct is to capture
 ;; the AST node which is creating the error and print it along with the error
@@ -37,9 +36,7 @@
                              #'msg (string-append
                                     (syntax->datum #'msg) "\nBlaming AST: ~v"))
             (syntax/loc stx*
-              (raise
-               (exn:fail:adqc:type (format msg-full args (... ...) blame-ast)
-                                   (current-continuation-marks))))])))]))
+              (adqc-type-error msg-full args (... ...) blame-ast))])))]))
 
 (struct env-info (env) #:transparent)
 (struct type-info env-info (ty) #:transparent)
