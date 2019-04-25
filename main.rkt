@@ -8,3 +8,5 @@
  "linker.rkt"
  "type.rkt"
  "exec.rkt")
+(module reader syntax/module-reader
+  adqc/module)
