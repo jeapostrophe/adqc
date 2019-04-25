@@ -31,8 +31,6 @@
     [(_ S-free-macros define-S-free-syntax
         S-expander S-expand define-S-expander)
      #:with expander-struct (generate-temporary #'S-expander)
-     #:with expander-struct-impl (format-id #'expander-struct
-                                            "~a-impl" #'expander-struct)
      #:with gen-S-expander (format-id #'S-expander "gen:~a" #'S-expander)
      (syntax/loc stx
        (begin
@@ -43,8 +41,7 @@
              #:extra-constructor-name S-expander
              #:property prop:procedure (struct-field-index impl)
              #:methods gen-S-expander
-             [(define (S-expand this stx*)
-                ((expander-struct-impl this) stx*))]))
+             [(define (S-expand this stx*) (this stx*))]))
          (define-simple-macro (define-S-free-syntax id impl)
            (begin-for-syntax (dict-set! S-free-macros #'id impl)))
          (define-simple-macro (define-S-expander id impl)
