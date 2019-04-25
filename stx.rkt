@@ -53,10 +53,11 @@
            (define S-free-macros (make-free-id-table))
            (define-generics S-expander [S-expand S-expander stx])
            (struct expander-struct (impl)
+             #:extra-constructor-name S-expander
+             #:property prop:procedure (struct-field-index impl)
              #:methods gen-S-expander
              [(define (S-expand this stx*)
-                ((expander-struct-impl this) stx*))])
-           (define (S-expander x) (expander-struct x)))
+                ((expander-struct-impl this) stx*))]))
          (define-simple-macro (define-S-free-syntax id impl)
            (begin-for-syntax (dict-set! S-free-macros #'id impl)))
          (define-simple-macro (define-S-expander id impl)
@@ -103,11 +104,6 @@
        (record-disappeared-uses #'unsyntax)
        #'e])))
 
-(define-expanders&macros
-  P-free-macros define-P-free-syntax
-  P-expander define-P-expander)
-;; XXX This fails
-#;
 (define-expanders&macros*
   P-free-macros define-P-free-syntax
   P-expander P-expand define-P-expander)
@@ -131,7 +127,7 @@
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
        #:declare macro-id (static P-expander? "P expander")
        (record-disappeared-uses #'macro-id)
-       (#;P-expand (attribute macro-id.value) #'macro-use)]
+       (P-expand (attribute macro-id.value) #'macro-use)]
       [(_ x:id) #'x]
       [(_ (x:id)) #'x])))
 
@@ -846,7 +842,7 @@
      #:attr var (syntax/loc this-syntax (Var 'ref (T ty)))]
     [pattern
      ty
-     #:attr x (generate-temporary)
+     #:attr x (generate-temporary #'ty)
      #:attr ref (generate-temporary #'x)
      #:attr var (syntax/loc this-syntax (Var 'ref (T ty)))]))
 (define-syntax (F stx)
