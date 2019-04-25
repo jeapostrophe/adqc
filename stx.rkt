@@ -26,20 +26,7 @@
 
 ;; XXX Use remix for #%dot and #%braces
 
-(define-syntax-rule (define-expanders&macros
-                      S-free-macros define-S-free-syntax
-                      S-expander define-S-expander)
-  (begin
-    (begin-for-syntax
-      (define S-free-macros (make-free-id-table))
-      (struct S-expander (impl)
-        #:property prop:procedure (struct-field-index impl)))
-    (define-simple-macro (define-S-free-syntax id impl)
-      (begin-for-syntax (dict-set! S-free-macros #'id impl)))
-    (define-simple-macro (define-S-expander id impl)
-      (define-syntax id (S-expander impl)))))
-
-(define-syntax (define-expanders&macros* stx)
+(define-syntax (define-expanders&macros stx)
   (syntax-parse stx
     [(_ S-free-macros define-S-free-syntax
         S-expander S-expand define-S-expander)
@@ -63,7 +50,7 @@
          (define-simple-macro (define-S-expander id impl)
            (define-syntax id (expander-struct impl)))))]))
 
-(define-expanders&macros*
+(define-expanders&macros
   T-free-macros define-T-free-syntax
   T-expander T-expand define-T-expander)
 (define-syntax (T stx)
@@ -104,7 +91,7 @@
        (record-disappeared-uses #'unsyntax)
        #'e])))
 
-(define-expanders&macros*
+(define-expanders&macros
   P-free-macros define-P-free-syntax
   P-expander P-expand define-P-expander)
 (define-syntax (P stx)
@@ -193,7 +180,7 @@
      (syntax/loc stx
        (construct-number ty n))]))
 
-(define-expanders&macros*
+(define-expanders&macros
   E-free-macros define-E-free-syntax
   E-expander E-expand define-E-expander)
 
@@ -523,7 +510,7 @@
   [U32 #f 32]
   [U64 #f 64])
 
-(define-expanders&macros*
+(define-expanders&macros
   I-free-macros define-I-free-syntax
   I-expander I-expand define-I-expander)
 ;; XXX should undef, zero, array, record, and union be literals?
@@ -556,19 +543,13 @@
        #'e]
       [(_ x) (syntax/loc stx (ConI (E x)))])))
 
-
-(define-expanders&macros
-  S-free-macros define-S-free-syntax
-  S-expander define-S-expander)
-#;
-(define-expanders&macros*
-  S-free-macros define-S-free-syntax
-  S-expander S-expand define-S-expander)
-
 (define-syntax-parameter current-return #f)
 (define-syntax-parameter current-return-var #f)
 (define-syntax-parameter S-in-tail? #f)
 
+(define-expanders&macros
+  S-free-macros define-S-free-syntax
+  S-expander S-expand define-S-expander)
 (define-syntax (S stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -661,7 +642,7 @@
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
        #:declare macro-id (static S-expander? "S expander")
        (record-disappeared-uses #'macro-id)
-       (#;S-expand (attribute macro-id.value) #'macro-use)]
+       (S-expand (attribute macro-id.value) #'macro-use)]
       [(_ (unsyntax e))
        (record-disappeared-uses #'unsyntax)
        #'e]
