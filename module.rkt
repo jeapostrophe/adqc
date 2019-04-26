@@ -7,6 +7,10 @@
 ;; XXX support require
 ;; XXX fix syntax so that failures blame consuming module, not this one
 ;; XXX issue with '*' as command line argument? creates huge vector of useless stuff
+;; XXX Some way to write tests for '#lang adqc' code without having a different
+;; module? Maybe enabling @ reader can help with this?
+;; XXX Disable REPL after running? Right now the user gets dumped into a racket/base
+;; REPL after running, which is awkward/misleading.
 
 (define (echo-port port [out (current-output-port)])
   (for ([ch (in-port read-char port)])
