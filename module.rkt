@@ -1,6 +1,6 @@
 #lang racket/base
 (require racket/file
-         racket/port
+         syntax/parse/define
          "exec.rkt"
          "stx.rkt")
 
@@ -8,16 +8,37 @@
 ;; XXX fix syntax so that failures blame consuming module, not this one
 ;; XXX issue with '*' as command line argument? creates huge vector of useless stuff
 
-(define-syntax-rule (adqc-module-begin . more)
+(define (echo-port port [out (current-output-port)])
+  (for ([ch (in-port read-char port)])
+    (display ch)))
+
+(define (run-module the-p)
+  (define c-path (make-temporary-file "adqc~a.c"))
+  (define bin-path (make-temporary-file "adqc~a"))
+  (define (cleanup! exn)
+    (define in (open-input-file c-path))
+    (echo-port in (current-error-port))
+    (newline (current-error-port))
+    (close-input-port in)
+    (delete-file c-path)
+    (delete-file bin-path)
+    (raise exn))
+  (define exe (make-executable the-p c-path bin-path))
+  (with-handlers ([exn:fail? cleanup!])
+    (define args (vector->list (current-command-line-arguments)))
+    (define stdout (apply executable-run exe args))
+    (echo-port stdout)
+    (close-input-port stdout))
+  (delete-file c-path)
+  (delete-file bin-path))
+
+(define-simple-macro (adqc-module-begin body ...+)
   (#%module-begin
-   ;; XXX delete files after
-   (let* ([c-path (make-temporary-file "adqc~a.c")]
-          [bin-path (make-temporary-file "adqc~a")]
-          [args (vector->list (current-command-line-arguments))]
-          [exe (make-executable (Prog . more) c-path bin-path)]
-          [res (apply executable-run exe args)])
-     ;; XXX don't use port->string
-     (displayln (port->string res)))))
+   (run-module
+    (Prog
+     (define-fun (main) : S32
+       body ...
+       (return 0))))))
 
 (provide
  (all-from-out "stx.rkt")
