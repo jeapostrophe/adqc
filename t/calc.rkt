@@ -6,9 +6,8 @@
 (define-simple-macro (C c)
   (E (U8 (char->integer c))))
 
-(define main
-  (F ([n1 : S32] [op : U8] [n2 : S32]) : S32
-     (define result : S32 :=
+(define-fun (main [n1 : S32] [op : U8] [n2 : S32]) : S32
+  (define result : S32 :=
        (cond [(= op #,(C #\+)) (+ n1 n2)]
              [(= op #,(C #\-)) (- n1 n2)]
              [(= op #,(C #\*)) (* n1 n2)]
@@ -17,9 +16,9 @@
              ;; XXX Can't put error statement inside of LetE
              #;[else (error "invalid op\n")]))
      (print result "\n")
-     (return 0)))
+     (return 0))
 
-(define calc (Prog (include-fun "main" main)))
+(define calc (Prog (include-fun main)))
 
 (module+ test
   (require chk)

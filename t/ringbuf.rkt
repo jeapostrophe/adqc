@@ -5,41 +5,39 @@
 (struct ringbuf-spec (ty make push pop) #:transparent)
 
 (define (specify-ringbuf max-count ty)
-  (define ringbuf_t (T (record buf (array max-count #,ty)
+  (define buf_t (T (array max-count #,ty)))
+  (define ringbuf_t (T (record buf #,buf_t
                                count U32
                                inptr U32
                                outptr U32)))
-  (define make-ringbuf
-    (F ([rb : #,ringbuf_t] [arr : (array max-count #,ty)]) : S32
-       (set! (rb -> buf) arr)
-       (set! (rb -> count) 0)
-       (set! (rb -> inptr) 0)
-       (set! (rb -> outptr) 0)
-       (return 0)))
-  (define ringbuf-push
-    (F ([rb : #,ringbuf_t] [v : #,ty]) : S32
-       (cond [(= (rb -> count) (U32 max-count))
-              (return -1)]
-             [else
-              (define buf : (array max-count #,ty) := (rb -> buf))
-              (set! (buf @ (rb -> inptr)) v)
-              (+=1 (rb -> inptr))
-              (%= (rb -> inptr) (U32 max-count))
-              (+=1 (rb -> count))
-              (return 0)])))
-  (define ringbuf-pop
-    ;; XXX It would be nice to have syntax that made returning values
-    ;; through reference arguments more ergonomic.
-    (F ([rb : #,ringbuf_t] [#:ref out : #,ty]) : S32
-       (cond [(zero? (rb -> count))
-              (return -1)]
-             [else
-              (define buf : (array max-count #,ty) := (rb -> buf))
-              (set! out (buf @ (rb -> outptr)))
-              (+=1 (rb -> outptr))
-              (%= (rb -> outptr) (U32 max-count))
-              (-=1 (rb -> count))
-              (return 0)])))
+  (define-fun (make-ringbuf [rb : #,ringbuf_t] [arr : #,buf_t]) : S32
+    (set! (rb -> buf) arr)
+    (set! (rb -> count) 0)
+    (set! (rb -> inptr) 0)
+    (set! (rb -> outptr) 0)
+    (return 0))
+  (define-fun (ringbuf-push [rb : #,ringbuf_t] [v : #,ty]) : S32
+    (cond [(= (rb -> count) (U32 max-count))
+           (return -1)]
+          [else
+           (define buf : #,buf_t := (rb -> buf))
+           (set! (buf @ (rb -> inptr)) v)
+           (+=1 (rb -> inptr))
+           (%= (rb -> inptr) (U32 max-count))
+           (+=1 (rb -> count))
+           (return 0)]))
+  ;; XXX It would be nice to have syntax that made returning values
+  ;; through reference arguments more ergonomic.
+  (define-fun (ringbuf-pop [rb : #,ringbuf_t] [#:ref out : #,ty]) : S32
+    (cond [(zero? (rb -> count))
+           (return -1)]
+          [else
+           (define buf : #,buf_t := (rb -> buf))
+           (set! out (buf @ (rb -> outptr)))
+           (+=1 (rb -> outptr))
+           (%= (rb -> outptr) (U32 max-count))
+           (-=1 (rb -> count))
+           (return 0)]))
   (ringbuf-spec ringbuf_t make-ringbuf ringbuf-push ringbuf-pop))
 
 (provide
