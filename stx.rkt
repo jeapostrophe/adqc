@@ -749,6 +749,79 @@
 (define util-h (ExternSrc '() (list (path->string util-path))))
 (define stdout (ExtVar unistd-h "STDOUT_FILENO" (T S32)))
 
+;; XXX Use ephemeron to remove circular reference
+;; XXX Getting error when printint array or record type,
+;; related to the same (generate-temporary #'ty) inside of F
+;; that was causing issues before with anonymous expanders.
+;; Maybe the rename transformer parameters are needed after all?
+(define printers (make-weak-hash))
+(define array-printers (make-weak-hash))
+(define ((new-printer! ty))
+  (define print-fn
+    (match ty
+      ;; XXX UniT, ExtT
+      [(RecT _ _ c-order)
+       (F ([rec : #,ty]) : S32
+          (print "{")
+          #,(let loop ([f (first c-order)] [fs (rest c-order)])
+              (cond [(empty? fs)
+                     (S (print #,(Read (Field (P rec) f))))]
+                    [else
+                     (S (begin (print #,(Read (Field (P rec) f)) ", ")
+                               #,(loop (first fs) (rest fs))))]))
+          (print "}"))]))
+  (hash-set! printers ty print-fn)
+  print-fn)
+(define ((new-array-printer! ty))
+  (define ety (ArrT-ety ty))
+  (define print-fn
+    ;; XXX Wrong to use #,ty, assume translation to a pointer to ety?
+    (F ([arr : #,ty] [count : U64]) : S32
+       (let ([i : U64 := (U64 0)])
+         (print "[")
+         (while (< i count)
+                (print (arr @ i))
+                (define next : U64 := (add1 i))
+                (when (< next count)
+                  (print ", "))
+                (set! i next))
+         (print "]"))))
+  (hash-set! array-printers ety print-fn)
+  print-fn)
+(define (get-printer ty)
+  (match ty
+    [(ArrT _ ety)
+     (hash-ref array-printers ety (new-array-printer! ty))]
+    [_ (hash-ref printers ty (new-printer! ty))]))
+
+(define (print-expr the-e)
+  (define e-ty (expr-type the-e))
+  (define printer
+    (cond
+      [(or (IntT? e-ty) (FloT? e-ty))
+       (define fn-name
+         (match e-ty
+           [(FloT 32) "print_F32"]
+           [(FloT 64) "print_F64"]
+           [(IntT signed? bits)
+            (if signed?
+                (match bits
+                  [8 "print_S8"]
+                  [16 "print_S16"]
+                  [32 "print_S32"]
+                  [64 "print_S64"])
+                (match bits
+                  [8 "print_U8"]
+                  [16 "print_U16"]
+                  [32 "print_U32"]
+                  [64 "print_U64"]))]))
+       (ExtFun util-h (list (Arg 'n e-ty 'read-only)) (T S32) fn-name)]
+      [else (get-printer e-ty)]))
+  (match e-ty
+    [(ArrT dim _)
+     (S (let ([ret-x := printer <- #,the-e (U64 dim)]) (void)))]
+    [_ (S (let ([ret-x := printer <- #,the-e]) (void)))]))
+
 (define (print-string s)
   (define bs (string->bytes/utf-8 s))
   (define init (I (array #,@(for/list ([b (in-bytes bs)])
@@ -757,30 +830,6 @@
   ;; XXX Somehow use generate-temporary here so names can't shadow?
   (S (let* ([str-x : (array len U8) := #,init]
             [ret-x := c-write <- #,(Read stdout) (str-x : #,void*) (U64 len)])
-       (void))))
-
-(define (print-expr e)
-  (define e-ty (expr-type e))
-  (define printer-name
-    (match e-ty
-      ;; XXX Array, record, union, ExtT
-      [(FloT 32) "print_F32"]
-      [(FloT 64) "print_F64"]
-      [(IntT signed? bits)
-       (if signed?
-           (match bits
-             [8 "print_S8"]
-             [16 "print_S16"]
-             [32 "print_S32"]
-             [64 "print_S64"])
-           (match bits
-             [8 "print_U8"]
-             [16 "print_U16"]
-             [32 "print_U32"]
-             [64 "print_U64"]))]))
-  (define printer (ExtFun util-h (list (Arg 'n e-ty 'read-only))
-                          (T S32) printer-name))
-  (S (let ([ret-x := printer <- #,e])
        (void))))
 
 (define-S-free-syntax print
