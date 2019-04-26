@@ -14,7 +14,7 @@
 
 (define (echo-port port [out (current-output-port)])
   (for ([ch (in-port read-char port)])
-    (display ch)))
+    (display ch out)))
 
 (define (run-module the-p)
   (define c-path (make-temporary-file "adqc~a.c"))
