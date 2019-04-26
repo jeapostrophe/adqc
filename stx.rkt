@@ -551,7 +551,7 @@
   (with-disappeared-uses
     (syntax-parse stx
       #:literals (void error begin define set! if let/ec while
-                       return let unsyntax unsyntax-splicing)
+                       return let unsyntax unsyntax-splicing define-fun)
       [(_ (void))
        (record-disappeared-uses #'void)
        (syntax/loc stx (Skip #f))]
@@ -568,6 +568,15 @@
        ;; XXX define is not getting bound
        (record-disappeared-uses (list #'begin #'define))
        (syntax/loc stx (S (let (d) . b)))]
+      [(_ (begin (~and (define-fun (x:id . args) . body) fun) . more))
+       ;; XXX Is this good, or is there a way to do this without
+       ;; this macro knowing what kind of syntax define-fun expects?
+       ;; XXX record-disappeared-uses for define-fun?
+       ;; XXX Some way to lift this to top of the containing function?
+       (record-disappeared-uses (list #'begin #'define-fun))
+       (quasisyntax/loc stx
+         (let ([x #,(syntax/loc #'fun (F args . body))])
+           (S (begin . more))))]
       [(_ (begin s))
        (record-disappeared-uses #'begin)
        (syntax/loc stx (S s))]
