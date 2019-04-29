@@ -858,6 +858,34 @@
      (syntax/loc this-syntax (print-expr (E e)))]))
 
 (begin-for-syntax
+  (struct T/I-expander (T-impl I-impl)
+    #:property prop:procedure (struct-field-index T-impl)
+    #:methods gen:T-expander
+    [(define (T-expand this stx)
+       ((T/I-expander-T-impl this) stx))]
+    #:methods gen:I-expander
+    [(define (I-expand this stx)
+       ((T/I-expander-I-impl this) stx))]))
+(define-syntax (define-type stx)
+  (syntax-parse stx
+    ;; XXX More types (Rec, Uni, maybe even Int and Flo so this can
+    ;; act as a typedef)
+    ;; XXX Should probably dispatch on type at run time, not during
+    ;; macro expansion. How to do this while still resulting in a
+    ;; syntax-parser for the I portion of the expander?
+    [(_ name:id ((~datum array) dim ety))
+     (syntax/loc stx
+       (define-syntax name
+         (T/I-expander
+          (syntax-parser
+            [_ (syntax/loc this-syntax (T (array dim ety)))])
+          (syntax-parser
+            [(_ ei (... ...))
+             (syntax/loc this-syntax
+               (I (array ei (... ...))))]))))]))
+(provide define-type)
+
+(begin-for-syntax
   (define-syntax-class Farg
     #:attributes (x ref var arg)
     #:description "function argument"
