@@ -569,10 +569,8 @@
        (record-disappeared-uses (list #'begin #'define))
        (syntax/loc stx (S (let (d) . b)))]
       [(_ (begin (~and (define-fun (x:id . args) . body) fun) . more))
-       ;; XXX Is this good, or is there a way to do this without
-       ;; this macro knowing what kind of syntax define-fun expects?
-       ;; XXX record-disappeared-uses for define-fun?
-       ;; XXX Some way to lift this to top of the containing function?
+       ;; XXX implement Prog*, which lifts function definitions,
+       ;; then delete this
        (record-disappeared-uses (list #'begin #'define-fun))
        (quasisyntax/loc stx
          (let ([x #,(syntax/loc #'fun (F args . body))])
@@ -748,21 +746,28 @@
      (syntax/loc this-syntax
        (S (begin (set! current-return-var e) (return))))]))
 
-(define unistd-h (ExternSrc '() '("unistd.h")))
-(define void* (ExtT (ExternSrc '() '()) "void*"))
-(define c-write (ExtFun unistd-h (list (Arg 'fd (T S32) 'read-only)
-                                       (Arg 'buf void* 'read-only)
-                                       (Arg 'count (T U64) 'read-only))
-                      (T S32) "write"))
 (define-runtime-path util-path "util.h")
 (define util-h (ExternSrc '() (list (path->string util-path))))
-(define stdout (ExtVar unistd-h "STDOUT_FILENO" (T S32)))
+(define char* (ExtT (ExternSrc '() '()) "char*"))
+(define c-print-string
+  (ExtFun util-h (list (Arg 'str char* 'read-only)
+                       (Arg 'n (T S32) 'read-only))
+          (T S32) "print_string"))
+#;; XXX syntax for define-extern-fun? Below giving "bad syntax"
+(define-extern-fun c-print-string #:name "print_string"
+  ([str : #,char*] [n : S32]) : (T S32) #:src util-h)
+
+(define (print-string s)
+  (define bs (string->bytes/utf-8 s))
+  (define init (I (array #,@(for/list ([b (in-bytes bs)])
+                            (I (U8 b))))))
+  (define len (bytes-length bs))
+  ;; XXX Somehow use generate-temporary here so names can't shadow?
+  (S (let* ([str-x : (array len U8) := #,init]
+            [ret-x := c-print-string <- (str-x : #,char*) (S32 len)])
+       (void))))
 
 ;; XXX Use ephemeron to remove circular reference
-;; XXX Getting error when printint array or record type,
-;; related to the same (generate-temporary #'ty) inside of F
-;; that was causing issues before with anonymous expanders.
-;; Maybe the rename transformer parameters are needed after all?
 (define printers (make-weak-hash))
 (define array-printers (make-weak-hash))
 (define ((new-printer! ty))
@@ -778,13 +783,13 @@
                     [else
                      (S (begin (print #,(Read (Field (P rec) f)) ", ")
                                #,(loop (first fs) (rest fs))))]))
-          (print "}"))]))
+          (print "}")
+          (return 0))]))
   (hash-set! printers ty print-fn)
   print-fn)
 (define ((new-array-printer! ty))
   (define ety (ArrT-ety ty))
   (define print-fn
-    ;; XXX Wrong to use #,ty, assume translation to a pointer to ety?
     (F ([arr : #,ty] [count : U64]) : S32
        (let ([i : U64 := (U64 0)])
          (print "[")
@@ -794,7 +799,8 @@
                 (when (< next count)
                   (print ", "))
                 (set! i next))
-         (print "]"))))
+         (print "]")
+         (return 0))))
   (hash-set! array-printers ety print-fn)
   print-fn)
 (define (get-printer ty)
@@ -831,16 +837,6 @@
      (S (let ([ret-x := printer <- #,the-e (U64 dim)]) (void)))]
     [_ (S (let ([ret-x := printer <- #,the-e]) (void)))]))
 
-(define (print-string s)
-  (define bs (string->bytes/utf-8 s))
-  (define init (I (array #,@(for/list ([b (in-bytes bs)])
-                            (I (U8 b))))))
-  (define len (bytes-length bs))
-  ;; XXX Somehow use generate-temporary here so names can't shadow?
-  (S (let* ([str-x : (array len U8) := #,init]
-            [ret-x := c-write <- #,(Read stdout) (str-x : #,void*) (U64 len)])
-       (void))))
-
 (define-S-free-syntax print
   (syntax-parser
     #:literals (unsyntax)
@@ -856,6 +852,10 @@
      (syntax/loc this-syntax (print-string s))]
     [(_ e)
      (syntax/loc this-syntax (print-expr (E e)))]))
+(define-S-free-syntax println
+  (syntax-parser
+    [(_ es ...)
+     (syntax/loc this-syntax (S (print es ... "\n")))]))
 
 (begin-for-syntax
   (struct T/I-expander (T-impl I-impl)

@@ -2,10 +2,12 @@
 #define ADQC_UTIL_H
 
 #include <stdint.h>
-// XXX use write not printf
 #include <stdio.h>
 
 static uint8_t cstr_first_char(const char* str) { return *str; }
+
+static int32_t print_string(const char* str, int32_t n) {
+  return printf("%.*s", n, str); }
 
 static int32_t print_S8(int8_t n)  { return printf("%hhd", n); }
 
