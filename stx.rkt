@@ -762,52 +762,60 @@
   (define init (I (array #,@(for/list ([b (in-bytes bs)])
                             (I (U8 b))))))
   (define len (bytes-length bs))
-  ;; XXX Somehow use generate-temporary here so names can't shadow?
   (S (let* ([str-x : (array len U8) := #,init]
             [ret-x := c-print-string <- (str-x : #,char*) (S32 len)])
        (void))))
 
-;; XXX Use ephemeron to remove circular reference
 (define printers (make-weak-hash))
 (define array-printers (make-weak-hash))
-(define ((new-printer! ty))
-  (define print-fn
-    (match ty
-      ;; XXX UniT, ExtT
-      [(RecT _ _ c-order)
-       (F ([rec : #,ty]) : S32
-          (print "{")
-          #,(let loop ([f (first c-order)] [fs (rest c-order)])
-              (cond [(empty? fs)
-                     (S (print #,(Read (Field (P rec) f))))]
-                    [else
-                     (S (begin (print #,(Read (Field (P rec) f)) ", ")
-                               #,(loop (first fs) (rest fs))))]))
-          (print "}")
-          (return 0))]))
-  (hash-set! printers ty print-fn)
-  print-fn)
-(define ((new-array-printer! ty))
-  (define ety (ArrT-ety ty))
-  (define print-fn
-    (F ([arr : #,ty] [count : U64]) : S32
-       (let ([i : U64 := (U64 0)])
-         (print "[")
-         (while (< i count)
-                (print (arr @ i))
-                (define next : U64 := (add1 i))
-                (when (< next count)
-                  (print ", "))
-                (set! i next))
-         (print "]")
-         (return 0))))
-  (hash-set! array-printers ety print-fn)
-  print-fn)
 (define (get-printer ty)
+  (define (new-printer!)
+    (define print-fn
+      (match ty
+        ;; XXX UniT, ExtT (?)
+        [(RecT _ _ c-order)
+         (F ([rec : #,ty]) : S32
+            (print "{")
+            #,(let loop ([f (first c-order)] [fs (rest c-order)])
+                (cond [(empty? fs)
+                       (S (print #,(Read (Field (P rec) f))))]
+                      [else
+                       (S (begin (print #,(Read (Field (P rec) f)) ", ")
+                                 #,(loop (first fs) (rest fs))))]))
+            (print "}")
+            (return 0))]))
+    (define value (make-ephemeron ty print-fn))
+    (hash-set! printers ty value)
+    value)
+  (define (new-array-printer!)
+    (define ety (ArrT-ety ty))
+    (define print-fn
+      (F ([arr : #,ty] [count : U64]) : S32
+         (let ([i : U64 := (U64 0)])
+           (print "[")
+           (while (< i count)
+                  (print (arr @ i))
+                  (define next : U64 := (add1 i))
+                  (when (< next count)
+                    (print ", "))
+                  (set! i next))
+           (print "]")
+           (return 0))))
+    (define value (make-ephemeron ety print-fn))
+    (hash-set! array-printers ety value)
+    value)
   (match ty
+    ;; 'ephemeron-value' may produce #f if the key was GC'd between our
+    ;; call to 'hash-ref' and 'ephemeron-value'. In this case, we call
+    ;; 'new-*-printer' directly, and we know that the subsequent call
+    ;; to 'ephemeron-value' cannot produce #f because the key is used
+    ;; within this function (and thus will not be GC'd).
     [(ArrT _ ety)
-     (hash-ref array-printers ety (new-array-printer! ty))]
-    [_ (hash-ref printers ty (new-printer! ty))]))
+     (or (ephemeron-value (hash-ref array-printers ety new-array-printer!))
+         (ephemeron-value (new-array-printer!)))]
+    [_
+     (or (ephemeron-value (hash-ref printers ty new-printer!))
+         (ephemeron-value (new-printer!)))]))
 
 (define (print-expr the-e)
   (define e-ty (expr-type the-e))
