@@ -281,8 +281,10 @@
     [(IntFun args ret-x ret-ty _ body)
      (match-define (env-info env)
        (stmt-env-info body))
-     ;; XXX Do we want to fail if ret-x is not referenced inside of body?
-     (define body-ret-x-ty (hash-ref env ret-x))
+     (define (ret-x-not-referenced!)
+       (report "IntFun: return type declared as ~v, but no value is returned"
+               ret-ty))
+     (define body-ret-x-ty (hash-ref env ret-x ret-x-not-referenced!))
      (unless (equal? ret-ty body-ret-x-ty)
        (report
         "IntFun: return type declared as ~v but returns value of type ~v"
