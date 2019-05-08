@@ -862,6 +862,12 @@
      (syntax/loc this-syntax (print-expr (E e)))]))
 (define-S-free-syntax println
   (syntax-parser
+    [(_ es ... e:str)
+     ;; XXX Look into a better, more general way to coalesce adjacent
+     ;; string arguments (so it works on more than just this special case).
+     ;; Or maybe that's not desirable, and we want to hoist user supplied
+     ;; strings to the top level as-is, to avoid duplication?
+     (syntax/loc this-syntax (S (print es ... #,(string-append e "\n"))))]
     [(_ es ...)
      (syntax/loc this-syntax (S (print es ... "\n")))]))
 
