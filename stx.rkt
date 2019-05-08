@@ -888,16 +888,21 @@
     [(RecT _ _ c-order)
      ;; XXX Error message if # of inits is not same as # of fields.
      (I (record #,@(map cons c-order is)))]))
-(define-simple-macro (define-type name:id ty-stx)
-  (define-syntax name
-    (T/I-expander
-     ;; XXX Eliminate duplicate '(T ty-stx)'
-     (syntax-parser
-       [_ (syntax/loc this-syntax (T ty-stx))])
-     (syntax-parser
-       [(_ i (... ...))
-        (syntax/loc this-syntax
-          (apply-ctor-inits (T ty-stx) (list (I i) (... ...))))]))))
+(define-syntax (define-type stx)
+  (syntax-parse stx
+    [(_ name:id ty-stx)
+     #:with ty (generate-temporary 'ty)
+     (syntax/loc stx
+       (begin
+         (define ty (T ty-stx))
+         (define-syntax name
+           (T/I-expander
+            (syntax-parser
+              [_ (syntax/loc this-syntax ty)])
+            (syntax-parser
+              [(_ i (... ...))
+               (syntax/loc this-syntax
+                 (apply-ctor-inits ty (list (I i) (... ...))))])))))]))
 (provide define-type)
 
 (begin-for-syntax
