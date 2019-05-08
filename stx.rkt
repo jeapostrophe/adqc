@@ -1,18 +1,17 @@
 #lang racket/base
-(require racket/contract/base
+(require (for-syntax racket/base
+                     racket/contract/base
+                     racket/dict
+                     racket/generic
+                     racket/list
+                     racket/syntax
+                     syntax/id-table)
          racket/list
          racket/match
          racket/require
          racket/runtime-path
          racket/stxparam
          syntax/parse/define
-         (for-syntax racket/base
-                     syntax/parse
-                     racket/list
-                     racket/syntax
-                     racket/dict
-                     racket/generic
-                     syntax/id-table)
          (subtract-in "ast.rkt" "type.rkt")
          "type.rkt")
 
@@ -603,9 +602,10 @@
                    (let ([the-ret (Jump k-id)])
                      (let-syntax ([k (S-expander (syntax-parser [(_) #'the-ret]))])
                        (S (begin . b)))))))]
-      ;; XXX We want a version of this syntax where the type is inferred,
-      ;; but right now there's no way to infer the type of an Init (specifically
-      ;; for records).
+      [(_ (let ([x:id (~datum :=) (~and ctor-use (ctor-id . _))]) . b))
+       #:declare ctor-id (static (and/c T-expander? I-expander?) "T/I expander")
+       (record-disappeared-uses #'let)
+       (syntax/loc stx (S (let ([x : ctor-id := ctor-use]) . b)))]
       [(_ (let ([x:id (~datum :) ty (~datum :=) xi]) . b))
        #:with x-id (generate-temporary #'x)
        (record-disappeared-uses #'let)
@@ -874,23 +874,27 @@
     #:methods gen:I-expander
     [(define (I-expand this stx)
        ((T/I-expander-I-impl this) stx))]))
+(define (apply-ctor-inits ty is)
+  (match ty
+    ;; XXX UniT, maybe Int/Flo types?
+    [(? ArrT?)
+     (I (array #,@is))]
+    [(RecT _ _ c-order)
+     ;; XXX Error message if # of inits is not same as # of fields.
+     (I (record #,@(map cons c-order is)))]))
 (define-syntax (define-type stx)
   (syntax-parse stx
-    ;; XXX More types (Rec, Uni, maybe even Int and Flo so this can
-    ;; act as a typedef)
-    ;; XXX Should probably dispatch on type at run time, not during
-    ;; macro expansion. How to do this while still resulting in a
-    ;; syntax-parser for the I portion of the expander?
-    [(_ name:id ((~datum array) dim ety))
+    [(_ name:id ty-stx)
+     ;; XXX Eliminate duplicate '(T ty-stx)'
      (syntax/loc stx
        (define-syntax name
          (T/I-expander
           (syntax-parser
-            [_ (syntax/loc this-syntax (T (array dim ety)))])
+            [_ (syntax/loc this-syntax (T ty-stx))])
           (syntax-parser
-            [(_ ei (... ...))
+            [(_ i (... ...))
              (syntax/loc this-syntax
-               (I (array ei (... ...))))]))))]))
+               (apply-ctor-inits (T ty-stx) (list (I i) (... ...))))]))))]))
 (provide define-type)
 
 (begin-for-syntax
