@@ -602,10 +602,25 @@
                    (let ([the-ret (Jump k-id)])
                      (let-syntax ([k (S-expander (syntax-parser [(_) #'the-ret]))])
                        (S (begin . b)))))))]
+      ;; let with T/I expander
       [(_ (let ([x:id (~datum :=) (~and ctor-use (ctor-id . _))]) . b))
        #:declare ctor-id (static (and/c T-expander? I-expander?) "T/I expander")
        (record-disappeared-uses #'let)
        (syntax/loc stx (S (let ([x : ctor-id := ctor-use]) . b)))]
+      ;; let with implicit type from expr initializaiton
+      [(_ (let ([x:id (~datum :=) e]) . b))
+       #:with x-id (generate-temporary #'x)
+       (record-disappeared-uses #'let)
+       (syntax/loc stx
+         (let* ([x-id 'x-id]
+                [the-e (E e)]
+                [the-ty (expr-type the-e)])
+           (Let x-id the-ty (ConI the-e)
+                (let ([the-x-ref (Var x-id the-ty)])
+                  (let-syntax ([x (P-expander
+                                   (syntax-parser [_ #'the-x-ref]))])
+                    (S (begin . b)))))))]
+      ;; let with full type annotation
       [(_ (let ([x:id (~datum :) ty (~datum :=) xi]) . b))
        #:with x-id (generate-temporary #'x)
        (record-disappeared-uses #'let)
@@ -618,11 +633,13 @@
                   (let-syntax ([x (P-expander
                                    (syntax-parser [_ #'the-x-ref]))])
                     (S (begin . b)))))))]
+      ;; let with uninitialized variable
       [(_ (let ([x:id (~datum :) ty]) . b))
        (record-disappeared-uses #'let)
        (syntax/loc stx
          (let ([the-ty (T ty)])
            (S (let ([x : #,the-ty := (undef #,the-ty)]) . b))))]
+      ;; let with function call
       [(_ (let ([x:id (~optional (~seq (~datum :) ty) #:defaults ([ty #'#f]))
                       (~datum :=) f (~datum <-)
                       (~or (unsyntax-splicing as)
