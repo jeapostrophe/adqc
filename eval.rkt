@@ -190,9 +190,7 @@
     [(IfE ce te fe)
      (eval-expr σ (if (eval-expr-pred σ ce) te fe))]
     [(MetaE _ e)
-     (eval-expr σ e)]
-    [(Fail msg)
-     (error 'eval-expr msg)]))
+     (eval-expr σ e)]))
 
 (define (eval-expr-pred σ pred)
   (not (zero? (Int-val (eval-expr σ pred)))))
@@ -260,7 +258,9 @@
                     [(? Expr? e)
                      (hash-set σ* x (box (eval-expr σ e)))])))
      (define xv (eval-fun Σ σ* f))
-     (eval-stmt Σ γ (hash-set σ x (box xv)) bs)]))
+     (eval-stmt Σ γ (hash-set σ x (box xv)) bs)]
+    [(Fail msg)
+     (error 'eval-stmt msg)]))
 
 (define (eval-fun Σ σ f)
   (match f
