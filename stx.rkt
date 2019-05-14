@@ -526,7 +526,7 @@
                                       (~bind [ps #'(list (cons 'k (I i)) ...)])))))
        (syntax/loc stx (RecI (make-immutable-hasheq ps)))]
       [(_ ((~datum union) (~or (unsyntax m-id)
-                               (~and m:id (~bind [m-id 'm]))) i))
+                               (~and m:id (~bind [m-id #''m]))) i))
        (syntax/loc stx (UniI m-id (I i)))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
        #:when (dict-has-key? I-free-macros #'macro-id)
