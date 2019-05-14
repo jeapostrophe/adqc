@@ -3,6 +3,7 @@
 (define deps '("reprovide-lang"
                "threading-lib"
                "graph"
+               "mischief"
                "base"))
 (define build-deps '("chk-lib"))
 (define version "0.1")

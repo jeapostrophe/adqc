@@ -6,6 +6,7 @@
                      racket/list
                      racket/syntax
                      syntax/id-table)
+         mischief/keyword
          racket/list
          racket/match
          racket/require
@@ -524,8 +525,9 @@
                                 (~and (~seq (~seq k:id i) ...)
                                       (~bind [ps #'(list (cons 'k (I i)) ...)])))))
        (syntax/loc stx (RecI (make-immutable-hasheq ps)))]
-      [(_ ((~datum union) m:id i))
-       (syntax/loc stx (UniI 'm (I i)))]
+      [(_ ((~datum union) (~or (unsyntax m-id)
+                               (~and m:id (~bind [m-id 'm]))) i))
+       (syntax/loc stx (UniI m-id (I i)))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
        #:when (dict-has-key? I-free-macros #'macro-id)
        (record-disappeared-uses #'macro-id)
@@ -893,14 +895,19 @@
     #:methods gen:I-expander
     [(define (I-expand this stx)
        ((T/I-expander-I-impl this) stx))]))
-(define (apply-ctor-inits ty is)
+(define (apply-union-ctor-init stx ctor-id ty m i)
+  (unless (UniT? ty)
+    (raise-syntax-error ctor-id "union syntax used for non-union type" stx))
+  (I (union #,m #,i)))
+(define (apply-ctor-inits stx ctor-id ty is)
   (match ty
-    ;; XXX UniT, maybe Int/Flo types?
     [(? ArrT?)
      (I (array #,@is))]
     [(RecT _ _ c-order)
-     ;; XXX Error message if # of inits is not same as # of fields.
-     (I (record #,@(map cons c-order is)))]))
+     (unless (= (length c-order) (length is))
+       (raise-syntax-error ctor-id "constructor arity mismatch" stx))
+     (I (record #,@(map cons c-order is)))]
+    [_ (raise-syntax-error ctor-id "invalid constructor syntax" stx)]))
 (define-syntax (define-type stx)
   (syntax-parse stx
     [(_ name:id ty-stx)
@@ -913,9 +920,14 @@
             (syntax-parser
               [_ (syntax/loc this-syntax ty)])
             (syntax-parser
-              [(_ i (... ...))
-               (syntax/loc this-syntax
-                 (apply-ctor-inits ty (list (I i) (... ...))))])))))]))
+              [(me:id m:keyword i:expr)
+               (quasisyntax/loc this-syntax
+                 (apply-union-ctor-init
+                  #'#,this-syntax 'me ty (keyword->symbol 'm) (I i)))]
+              [(me:id i:expr (... ...))
+               (quasisyntax/loc this-syntax
+                 (apply-ctor-inits
+                  #'#,this-syntax 'me ty (list (I i) (... ...))))])))))]))
 (provide define-type)
 
 (begin-for-syntax
