@@ -6,7 +6,6 @@
                      racket/list
                      racket/syntax
                      syntax/id-table)
-         mischief/keyword
          racket/list
          racket/match
          racket/require
@@ -908,6 +907,8 @@
        (raise-syntax-error ctor-id "constructor arity mismatch" stx))
      (I (record #,@(map cons c-order is)))]
     [_ (raise-syntax-error ctor-id "invalid constructor syntax" stx)]))
+(define (keyword->symbol kw)
+  (string->symbol (keyword->string kw)))
 (define-syntax (define-type stx)
   (syntax-parse stx
     [(_ name:id ty-stx)
