@@ -129,7 +129,9 @@
 (define-simple-macro (TTS the-s)
   (TT (S the-s)))
 (define-simple-macro (TTN expect-ty the-n ...+)
-  (begin (TTE (let ([x : expect-ty := #,(N the-n)]) x)) ...))
+  (begin
+    (chk #:x (E (let ([x : expect-ty := #,(N the-n)]) x)) exn:fail?)
+    ...))
 
 (provide TProg1 TProgN TProg TS TE TT TTE TTS TTN)
 

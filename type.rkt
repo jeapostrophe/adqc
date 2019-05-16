@@ -9,15 +9,8 @@
          "ast.rkt")
 
 ;; Type for exceptions raised by the ADQC type checker.
-;; Also raised in some circumstances by stx.rkt
 (struct exn:fail:adqc:type exn:fail ())
-(define (adqc-type-error msg . vs)
-  (raise (exn:fail:adqc:type (apply format msg vs)
-                             (current-continuation-marks))))
-(provide
- (struct-out exn:fail:adqc:type)
- (contract-out
-  [adqc-type-error (->* [string?] #:rest any/c any/c)]))
+(provide (struct-out exn:fail:adqc:type))
 
 ;; XXX Maybe this isn't the best way to do this. My first instinct is to capture
 ;; the AST node which is creating the error and print it along with the error
@@ -36,7 +29,9 @@
                              #'msg (string-append
                                     (syntax->datum #'msg) "\nBlaming AST: ~v"))
             (syntax/loc stx*
-              (adqc-type-error msg-full args (... ...) blame-ast))])))]))
+              (raise (exn:fail:adqc:type
+                      (apply format msg-full (list args (... ...) blame-ast))
+                      (current-continuation-marks))))])))]))
 
 (struct env-info (env) #:transparent)
 (struct type-info env-info (ty) #:transparent)

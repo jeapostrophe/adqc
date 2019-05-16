@@ -125,27 +125,22 @@
 (define (freenum e)
   (MetaE freenum! e))
 
-(define (construct-number ty n)
+(define (construct-number stx ty n)
+  (define (report fmt . vs)
+    ;; XXX Maybe these are contract or range exceptions, not syntax errors?
+    (raise-syntax-error #f (apply format fmt vs) stx))
   (match ty
     [(IntT signed? bits)
-     (define min (cond [signed? (- (expt 2 (sub1 bits)))]
-                       [else 0]))
-     (define max (sub1 (expt 2 (cond [signed? (sub1 bits)]
-                                     [else bits]))))
-     (cond
-       [(< n min)
-        (adqc-type-error
-         "construct-number: integer value ~a too small for type ~v" n ty)]
-       [(> n max)
-        (adqc-type-error
-         "construct-number: integer value ~a too large for type ~v" n ty)]
-       [else
-        (Int signed? bits n)])]
+     (define prefix (if signed? #\S #\U))
+     (when (< n (if signed? (- (expt 2 (sub1 bits))) 0))
+       (report "integer value ~a too small for ~a~a" n prefix bits))
+     (when (> n (sub1 (expt 2 (if signed? (sub1 bits) bits))))
+       (report "integer value ~a too large for ~a~a" n prefix bits))
+     (Int signed? bits n)]
     [(FloT bits)
      (unless (or (and (single-flonum? n) (= bits 32))
                  (and (double-flonum? n) (= bits 64)))
-       (adqc-type-error
-        "construct-number: floating-point value ~a will not fit type ~v" n ty))
+       (report "floating point value ~a will not fit type ~v" n ty))
      (Flo bits n)]
     [#f (cond
           [(single-flonum? n) (freenum (Flo 32 n))]
@@ -155,10 +150,8 @@
            (define 2^15 (expt 2 15))
            (define 2^31 (expt 2 31))
            (define 2^63 (expt 2 63))
-           (unless (and (< n (expt 2 64))
-                        (>= n (- 2^63)))
-             (adqc-type-error
-              "construct-number: ~a is too large to fit in 64 bits" n))
+           (unless (and (< n (expt 2 64)) (>= n (- 2^63)))
+             (report "~a is too large to fit in 64 bits" n))
            (define unsigned? (>= n 2^63))
            (define bits
              (cond [(and (< n 2^7)  (>= n (- 2^7)))   8]
@@ -169,12 +162,15 @@
 
 (define-syntax-parameter expect-ty #f)
 
+;; XXX Why does (N (expt 2 64)) give an error which references '(N #f (expt 2 64))'?
+;; Shouldn't the recursive call forward the original user-supplied syntax?
 (define-syntax (N stx)
   (syntax-parse stx
     [(_ n)
      #:with ty (or (syntax-parameter-value #'expect-ty) #'#f)
-     (syntax/loc stx
-       (construct-number ty n))]))
+     (syntax/loc stx (N ty n))]
+    [(_ ty n)
+     (quasisyntax/loc stx (construct-number #'#,stx ty n))]))
 
 (define-expanders&macros
   E-free-macros define-E-free-syntax
@@ -322,7 +318,7 @@
       [(? IntT?) 1]
       [(FloT 32) 1.0f0]
       [(FloT 64) 1.0]))
-  (E (bitwise-xor #,the-e #,(construct-number e-ty one))))
+  (E (bitwise-xor #,the-e #,(N e-ty one))))
 (define-E-free-syntax not
   (syntax-parser
     [(_ e) (syntax/loc this-syntax (not* (E e)))]))
@@ -339,7 +335,7 @@
       [(? IntT?) 0]
       [(FloT 32) 0.0f0]
       [(FloT 64) 0.0]))
-  (E (= #,the-e #,(construct-number e-ty zero))))
+  (E (= #,the-e #,(N e-ty zero))))
 (define-E-free-syntax zero?
   (syntax-parser
     [(_ e) (syntax/loc this-syntax (zero?* (E e)))]))
@@ -358,7 +354,7 @@
                  [(? IntT?) 1]
                  [(FloT 32) 1.0f0]
                  [(FloT 64) 1.0]))
-             (E (op #,the-e #,(construct-number e-ty one))))
+             (E (op #,the-e #,(N e-ty one))))
            (define-E-free-syntax name
              (syntax-parser
                [(_ e) (syntax/loc this-syntax (name^ (E e)))]))) ...))]))
@@ -375,7 +371,7 @@
       [(? IntT?) 0]
       [(FloT 32) 0.0f0]
       [(FloT 64) 0.0]))
-  (subtract (construct-number e-ty zero) the-e))
+  (subtract (N e-ty zero) the-e))
 (define-E-free-syntax -
   (syntax-parser
     [(_ e) (syntax/loc this-syntax (negate (E e)))]
@@ -469,8 +465,8 @@
         (syntax-parser
           [(_ n:expr)
            (record-disappeared-uses #'name)
-           (syntax/loc this-syntax
-             (construct-number (FloT bits) n))]))
+           (quasisyntax/loc this-syntax
+             (construct-number #'#,this-syntax (FloT bits) n))]))
       (provide name))
     ...))
 
@@ -491,8 +487,8 @@
         (syntax-parser
           [(_ n:expr)
            (record-disappeared-uses #'name)
-           (syntax/loc this-syntax
-             (construct-number (IntT signed? bits) n))]))
+           (quasisyntax/loc this-syntax
+             (construct-number #'#,this-syntax (IntT signed? bits) n))]))
       (provide name))
     ...))
 
