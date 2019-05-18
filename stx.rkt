@@ -138,9 +138,10 @@
        (report "integer value ~a too large for ~a~a" n prefix bits))
      (Int signed? bits n)]
     [(FloT bits)
-     (unless (or (and (single-flonum? n) (= bits 32))
-                 (and (double-flonum? n) (= bits 64)))
-       (report "floating point value ~a will not fit type ~v" n ty))
+     (when (and (single-flonum? n) (not (= bits 32)))
+       (report "expected single-flonum?\n  given: ~v" n))
+     (when (and (double-flonum? n) (not (= bits 64)))
+       (report "expected double-flonum?\n  given: ~v" n))
      (Flo bits n)]
     [#f (cond
           [(single-flonum? n) (freenum (Flo 32 n))]
