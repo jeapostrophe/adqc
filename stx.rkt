@@ -565,13 +565,6 @@
        ;; XXX define is not getting bound
        (record-disappeared-uses (list #'begin #'define))
        (syntax/loc stx (S (let (d) . b)))]
-      [(_ (begin (~and (define-fun (x:id . args) . body) fun) . more))
-       ;; XXX implement Prog*, which lifts function definitions,
-       ;; then delete this
-       (record-disappeared-uses (list #'begin #'define-fun))
-       (quasisyntax/loc stx
-         (let ([x #,(syntax/loc #'fun (F args . body))])
-           (S (begin . more))))]
       [(_ (begin s))
        (record-disappeared-uses #'begin)
        (syntax/loc stx (S s))]
@@ -1095,12 +1088,35 @@
              pf ...)
            the-prog))])))
 
+;; XXX Use let-syntaxes to handle multiple return values
+;; from partition, instead of let-values?
+;; XXX Should inline function definitions be public?
+(define-syntax (Prog* stx)
+  (with-disappeared-uses
+    (syntax-parse stx
+      [(_ pf ...)
+       #:with (defs nons)
+       (let-values ([(defs nons)
+                     (partition
+                      (syntax-parser
+                        [((~datum define-fun) . _) #t]
+                        [_ #f])
+                      (syntax->list #'(pf ...)))])
+         (list defs nons))
+       #:with (def ...) #'defs
+       #:with (non ...) #'nons
+       (syntax/loc stx
+         (Prog def ...
+               (define-fun main () : S32
+                 non ...
+                 (return 0))))])))
+
 (provide T P N E I
          while assert! return S
          define-S-free-syntax define-S-expander
          F
          define-fun include-fun include-ty define-extern-fun define-global
-         Prog)
+         Prog Prog*)
 
 ;; XXX Array Slice
 ;; XXX data types

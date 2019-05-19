@@ -37,12 +37,7 @@
   (delete-file bin-path))
 
 (define-simple-macro (adqc-module-begin body ...+)
-  (#%module-begin
-   (run-module
-    (Prog
-     (define-fun (main) : S32
-       body ...
-       (return 0))))))
+  (#%module-begin (run-module (Prog* body ...))))
 
 (provide
  (all-from-out "stx.rkt")
