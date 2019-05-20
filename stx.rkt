@@ -1095,7 +1095,7 @@
   (with-disappeared-uses
     (syntax-parse stx
       [(_ pf ...)
-       #:with (defs nons)
+       #:with ((def ...) (non ...))
        (let-values ([(defs nons)
                      (partition
                       (syntax-parser
@@ -1103,8 +1103,6 @@
                         [_ #f])
                       (syntax->list #'(pf ...)))])
          (list defs nons))
-       #:with (def ...) #'defs
-       #:with (non ...) #'nons
        (syntax/loc stx
          (Prog def ...
                (define-fun main () : S32
