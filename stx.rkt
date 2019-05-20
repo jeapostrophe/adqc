@@ -884,19 +884,19 @@
     #:methods gen:I-expander
     [(define (I-expand this stx)
        ((T/I-expander-I-impl this) stx))]))
-(define (apply-union-ctor-init stx ctor-id ty m i)
+(define (apply-union-ctor-init stx ty m i)
   (unless (UniT? ty)
-    (raise-syntax-error ctor-id "union syntax used for non-union type" stx))
+    (raise-syntax-error #f "union syntax used for non-union type" stx))
   (I (union #,m #,i)))
-(define (apply-ctor-inits stx ctor-id ty is)
+(define (apply-ctor-inits stx ty is)
   (match ty
     [(? ArrT?)
      (I (array #,@is))]
     [(RecT _ _ c-order)
      (unless (= (length c-order) (length is))
-       (raise-syntax-error ctor-id "constructor arity mismatch" stx))
+       (raise-syntax-error #f "constructor arity mismatch" stx))
      (I (record #,@(map cons c-order is)))]
-    [_ (raise-syntax-error ctor-id "invalid constructor syntax" stx)]))
+    [_ (raise-syntax-error #f "invalid constructor syntax" stx)]))
 (define (keyword->symbol kw)
   (string->symbol (keyword->string kw)))
 (define-syntax (define-type stx)
@@ -911,14 +911,14 @@
             (syntax-parser
               [_ (syntax/loc this-syntax ty)])
             (syntax-parser
-              [(me:id m:keyword i:expr)
+              [(_ m:keyword i:expr)
                (quasisyntax/loc this-syntax
                  (apply-union-ctor-init
-                  #'#,this-syntax 'me ty (keyword->symbol 'm) (I i)))]
-              [(me:id i:expr (... ...))
+                  #'#,this-syntax ty (keyword->symbol 'm) (I i)))]
+              [(_ i:expr (... ...))
                (quasisyntax/loc this-syntax
                  (apply-ctor-inits
-                  #'#,this-syntax 'me ty (list (I i) (... ...))))])))))]))
+                  #'#,this-syntax ty (list (I i) (... ...))))])))))]))
 (provide define-type)
 
 (begin-for-syntax
