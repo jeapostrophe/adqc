@@ -902,7 +902,7 @@
 (define-syntax (define-type stx)
   (syntax-parse stx
     [(_ name:id ty-stx)
-     #:with ty (generate-temporary 'ty)
+     #:with ty (generate-temporary #'name)
      (syntax/loc stx
        (begin
          (define ty (T ty-stx))
