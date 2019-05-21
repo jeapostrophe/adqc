@@ -11,6 +11,8 @@
 
 (define const? (or/c Int? Flo?))
 
+(define current-partial-eval? (make-parameter #t))
+
 (define-match-expander BinOp^
   (λ (stx)
     (syntax-parse stx
@@ -24,7 +26,8 @@
           (-> symbol? Expr? Expr? (or/c BinOp? MetaE? const?))
           (λ (op the-lhs the-rhs)
             (define the-binop (BinOp op the-lhs the-rhs))
-            (cond [(and (const? the-lhs) (const? the-rhs))
+            (define eval? (current-partial-eval?))
+            (cond [(and eval? (const? the-lhs) (const? the-rhs))
                    (eval-expr #hasheq() the-binop)]
                   [else the-binop]))
           (syntax-source #'BinOp) #'#,stx 'me #'BinOp))]
@@ -46,4 +49,6 @@
             (define the-cast (Cast ty the-e))
             (|#
 
-(provide (rename-out [BinOp^ BinOp]))
+(provide
+ current-partial-eval?
+ (rename-out [BinOp^ BinOp]))
