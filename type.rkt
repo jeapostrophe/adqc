@@ -39,7 +39,8 @@
 (define i-arith-ops '(iadd isub imul iudiv isdiv iurem isrem ishl ilshr iashr iand ior ixor))
 (define f-arith-ops '(fadd fsub fmul fdiv frem))
 (define i-cmp-ops '(ieq ine iugt iuge iult iule isgt isge islt isle))
-(define f-cmp-ops '(foeq fone fogt foge folt fole fueq fune fugt fuge fult fule ffalse ftrue ford funo))
+(define f-cmp-ops '(foeq fone fogt foge folt fole fueq fune
+                         fugt fuge fult fule ffalse ftrue ford funo))
 
 (define (union-subset? u ty)
   (match-define (UniT m->ty _) u)
