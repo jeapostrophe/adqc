@@ -33,6 +33,7 @@
   (syntax-parse stx
     [(_ name:id base:id meta-base:id unpack:id ([field:id ctc:expr] ...))
      #:with name? (format-id #'name "~a?" #'name)
+     #:with name?^ (generate-temporary #'name?)
      #:with (field-accessor ...) (for/list ([f (in-list (syntax->list #'(field ...)))])
                                    (format-id f "~a-~a" #'name f))
      #:with (field-accessor^ ...) (generate-temporaries #'(field-accessor ...))
@@ -44,13 +45,15 @@
        (begin
          (struct name base (field ...) #:transparent)
          (define-syntax ctor (constructor-instance #'ctor-ctc #'name))
+         (define (name?^ v)
+           (name? (unpack v)))
          (define (field-accessor^ v)
            (field-accessor (unpack v)))
          ...
          (provide
           (rename-out [ctor name])
           (contract-out
-           [name? predicate/c]
+           [rename name?^ name? predicate/c]
            [rename field-accessor^ field-accessor (-> meta-ctc ctc)] ...))))]))
 
 (define-simple-macro (define-unpacker name:id meta-type:id base-type?:id)

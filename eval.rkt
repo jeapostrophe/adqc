@@ -4,9 +4,11 @@
          racket/flonum
          racket/function
          racket/match
+         racket/require
          racket/undefined
          threading
-         "ast.rkt")
+         (subtract-in "ast.rkt" "type.rkt")
+         "type.rkt")
 
 (define (arithmetic-shift-left n m) (arithmetic-shift n m))
 (define (arithmetic-shift-right n m) (arithmetic-shift n (- m)))
@@ -32,8 +34,8 @@
     (signed->unsigned bits val)))
 
 (define (((int-op signed?) op) a b)
-  (match-define (Int a-signed? a-bits a-val) a)
-  (match-define (Int b-signed? b-bits b-val) b)
+  (match-define (Int a-signed? a-bits a-val) (unpack-MetaE a))
+  (match-define (Int b-signed? b-bits b-val) (unpack-MetaE b))
   (unless (eq? a-signed? b-signed?)
     (error "Mismatched signs" a b))
   (unless (= a-bits b-bits)
@@ -47,8 +49,8 @@
 (define uint-op (int-op #f))
 
 (define (((int-cmp signed?) op) a b)
-  (match-define (Int a-signed? a-bits a-val) a)
-  (match-define (Int b-signed? b-bits b-val) b)
+  (match-define (Int a-signed? a-bits a-val) (unpack-MetaE a))
+  (match-define (Int b-signed? b-bits b-val) (unpack-MetaE b))
   (unless (eq? a-signed? b-signed?)
     (error "Mismatched signs" a b))
   (unless (= a-bits b-bits)
@@ -61,15 +63,15 @@
 (define uint-cmp (int-cmp #f))
 
 (define ((flo-op op) a b)
-  (match-define (Flo a-bits a-val) a)
-  (match-define (Flo b-bits b-val) b)
+  (match-define (Flo a-bits a-val) (unpack-MetaE a))
+  (match-define (Flo b-bits b-val) (unpack-MetaE b))
   (unless (= a-bits b-bits)
     (error 'flo-op "Mismatched bit widths" a b))
   (Flo a-bits (op a-val b-val)))
 
 (define ((flo-cmp op) a b)
-  (match-define (Flo a-bits a-val) a)
-  (match-define (Flo b-bits b-val) b)
+  (match-define (Flo a-bits a-val) (unpack-MetaE a))
+  (match-define (Flo b-bits b-val) (unpack-MetaE b))
   (unless (= a-bits b-bits)
     (error 'flo-cmp "Mismatched bit widths" a b))
   (Int #t 32 (if (op a-val b-val) 1 0)))
@@ -140,7 +142,8 @@
           'funo (unord-flo-cmp (const #f))))
 
 (define (type-cast ty v)
-  (match-define (or (Int _ _ val) (Flo _ val)) v)
+  (match-define (or (Int _ _ val) (Flo _ val))
+    (unpack-MetaE v))
   (match ty
     [(IntT signed? bits)
      (define cast (int-cast signed? bits))
@@ -291,6 +294,8 @@
   [Value/c contract?]
   [eval-init
    (-> hash? Init? (box/c Value/c))]
+  [eval-expr
+   (-> hash? Expr? Value/c)]
   [eval-program
    (-> Program? string? (listof Init?)
        Value/c)]))

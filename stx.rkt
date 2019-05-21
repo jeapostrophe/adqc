@@ -13,7 +13,8 @@
          racket/stxparam
          syntax/parse/define
          (subtract-in "ast.rkt" "type.rkt")
-         "type.rkt")
+         (subtract-in "type.rkt" "partial-eval.rkt")
+         "partial-eval.rkt")
 
 ;; XXX This module should use plus not ast (i.e. the thing that does
 ;; type checking, termination checking, and resource analysis). And

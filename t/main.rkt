@@ -39,10 +39,12 @@
     (unpack-MetaFun (hash-ref (Program-name->fun the-p) n)))
   (define args (for/list ([ai (in-list args-i)])
                  (unbox (eval-init (hash) ai))))
-  (define eval-expect-ans (unbox (eval-init (hash) expect-ans-i)))
+  (define eval-expect-ans (unpack-MetaE
+                           (unbox (eval-init (hash) expect-ans-i))))
   (define eval-ans #f)
   (define comp-ans #f)
-  (chk #:t (#:src stx (set! eval-ans (eval-program the-p n args-i))))
+  (chk #:t (#:src stx (set! eval-ans (unpack-MetaE
+                                      (eval-program the-p n args-i)))))
   (when eval-ans
     (chk (#:src stx eval-ans)
          (#:src stx eval-expect-ans)))
