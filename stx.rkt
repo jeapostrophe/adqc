@@ -217,28 +217,6 @@
          (BinOp op the-lhs (Cast l-ty the-rhs))]
         [else (BinOp op the-lhs the-rhs)]))
 
-;; XXX Maybe these can be used in other places?
-(define-match-expander any-non-meta
-  (λ (stx)
-    (syntax-parse stx
-      [(_ v)
-       (syntax/loc stx
-         (or (MetaE _ v) (MetaP _ v) (MetaS _ v) (MetaFun _ v)))])))
-(define-match-expander any-meta
-  (λ (stx)
-    (syntax-parse stx
-      [(_ data-expander)
-       (syntax/loc stx
-         (or (MetaE data-expander _) (MetaP data-expander _)
-             (MetaS data-expander _) (MetaFun data-expander _)))])))
-
-(struct astsrc (stx) #:transparent)
-(define (get-astsrc v)
-  (match v
-    [(any-meta (astsrc stx)) stx]
-    [(any-non-meta v) (get-astsrc v)]
-    [_ #f]))
-
 (define-syntax (E stx)
   (with-disappeared-uses
     (syntax-parse stx
