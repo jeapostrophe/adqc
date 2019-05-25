@@ -716,6 +716,15 @@
                      (syntax-parameterize ([S-in-tail? #f])
                        (S (begin . b))))))]))
 
+(define-S-free-syntax for
+  (syntax-parser
+    [(_ (~optional (~seq #:I I) #:defaults ([I #'(U32 1)]))
+        init pred inc body ...)
+     (record-disappeared-uses #'for)
+     (syntax/loc this-syntax
+       (S (let (init)
+            (while #:I I pred body ... inc))))]))
+
 (define-S-expander return
   (syntax-parser
     [(_)
