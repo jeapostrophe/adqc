@@ -164,8 +164,6 @@
 
 (define-syntax-parameter expect-ty #f)
 
-;; XXX Why does (N (expt 2 64)) give an error which references '(N #f (expt 2 64))'?
-;; Shouldn't the recursive call forward the original user-supplied syntax?
 (define-syntax (N stx)
   (syntax-parse stx
     [(_ n)
