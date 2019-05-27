@@ -887,6 +887,12 @@
   (string->symbol (keyword->string kw)))
 (define-syntax (define-type stx)
   (syntax-parse stx
+    [(_ #:public name:id ty-stx)
+     #:fail-unless (syntax-parameter-value #'current-Prog)
+     "Cannot define public type outside of Prog"
+     (syntax/loc stx
+       (begin (define-type name ty-stx)
+              (include-type name)))]
     [(_ name:id ty-stx)
      #:with ty (generate-temporary #'name)
      (syntax/loc stx
@@ -905,7 +911,23 @@
                (quasisyntax/loc this-syntax
                  (apply-ctor-inits
                   #'#,this-syntax ty (list (I i) (... ...))))])))))]))
-(provide define-type)
+
+(define-syntax (include-type stx)
+  (with-disappeared-uses
+    (syntax-parse stx
+      [(_ #:maybe n:expr ty:expr)
+       (if (syntax-parameter-value #'current-Prog)
+           (syntax/loc stx
+             (hash-set! (Program-name->ty current-Prog) n ty))
+           #'(void))]
+      [(_ n:expr ty:expr)
+       #:fail-unless (syntax-parameter-value #'current-Prog)
+       "Cannot include type outside of Prog"
+       (syntax/loc stx (include-type #:maybe n ty))]
+      [(_ x:id)
+       (syntax/loc stx (include-type (symbol->string 'x) x))]
+      [(_ #:maybe x:id)
+       (syntax/loc stx (include-type #:maybe (symbol->string 'x) x))])))
 
 (begin-for-syntax
   (define-syntax-class Farg
@@ -1059,9 +1081,31 @@
            (begin (hash-set! (Program-globals current-Prog) 'x x)
                   make-public))
          #'(void))
+       #:with the-ty (generate-temporary #'x)
        (syntax/loc stx
-         (begin (define x (Global (T ty) (I xi)))
-                install-in-Prog))])))
+         (begin
+           (define the-ty (T ty))
+           (define x
+             (Global the-ty (syntax-parameterize ([expect-ty #'the-ty])
+                              (I xi))))
+           install-in-Prog))])))
+
+(define-syntax (include-global stx)
+  (with-disappeared-uses
+    (syntax-parse stx
+      [(_ #:maybe n:expr g:expr)
+       (if (syntax-parameter-value #'current-Prog)
+           (syntax/loc stx
+             (hash-set! (Program-globals current-Prog) n g))
+           #'(void))]
+      [(_ n:expr g:expr)
+       #:fail-unless (syntax-parameter-value #'current-Prog)
+       "Cannot include global outside of Prog"
+       (syntax/loc stx (include-global #:maybe n g))]
+      [(_ x:id)
+       (syntax/loc stx (include-global (symbol->string 'x) x))]
+      [(_ #:maybe x:id)
+       (syntax/loc stx (include-global #:maybe (symbol->string 'x) x))])))
 
 (define-syntax-parameter current-Prog #f)
 (define-syntax (Prog stx)
@@ -1102,7 +1146,8 @@
          while assert! return S
          define-S-free-syntax define-S-expander
          F
-         define-fun include-fun include-ty define-extern-fun define-global
+         define-type define-fun define-extern-fun define-global
+         include-fun include-ty include-global
          Prog Prog* define-prog)
 
 ;; XXX Array Slice

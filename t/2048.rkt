@@ -11,6 +11,8 @@
 (define-type Row (array SIZE U8))
 (define-type Board (array SIZE Row))
 
+(define-global score : U32 := (U32 0))
+
 (define-fun (make-board [b : Board] [r1 : Row] [r2 : Row] [r3 : Row] [r4 : Row]) : S32
   (set! (b @ 0) r1)
   (set! (b @ 1) r2)
@@ -49,7 +51,9 @@
                  [(= (r @ t) (r @ x))
                   ;; merge (increase power of two)
                   (+=1 (r @ t))
-                  ;; XXX increase score
+                  ;; increase score
+                  ;; XXX Globals not working
+                  ;; (+= score (<< 1 ((r @ t) : U32)))
                   ;; set stop to avoid double merge
                   (set! stop (add1 t))]
                  [else (void)])
@@ -64,3 +68,13 @@
 
 (define-fun (step [b : Board] [c : S8]) : S32
   (return 0))
+
+
+(define-prog 2048-prog
+  (include-global score)
+  (include-fun step))
+
+(module+ test
+  (require chk)
+  (void)
+  )
