@@ -1095,12 +1095,15 @@
                  non ...
                  (return 0))))])))
 
+(define-simple-macro (define-prog name:id pf ...+)
+  (define name (Prog pf ...)))
+
 (provide T P N E I
          while assert! return S
          define-S-free-syntax define-S-expander
          F
          define-fun include-fun include-ty define-extern-fun define-global
-         Prog Prog*)
+         Prog Prog* define-prog)
 
 ;; XXX Array Slice
 ;; XXX data types
