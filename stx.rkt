@@ -882,6 +882,16 @@
       [(_ #:maybe x:id)
        (syntax/loc stx (include-type #:maybe (symbol->string 'x) x))])))
 
+(define-syntax (define-extern-type stx)
+  (with-disappeared-uses
+    (syntax-parse stx
+      [(_ x:id
+          (~optional (~seq #:name name:expr)
+                     #:defaults ([name #'(symbol->string 'x)]))
+          (~optional (~seq #:src es:expr)
+                     #:defaults ([es #'(ExternSrc '() '())])))
+       (syntax/loc stx (define x (ExtT es name)))])))
+
 (define-syntax (include-fun stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -1018,13 +1028,14 @@
 
 (provide while assert! return
          define-S-free-syntax define-S-expander
-         define-type define-fun define-extern-fun define-global
+         define-type define-fun define-global
+         define-extern-fun define-extern-type
          include-fun include-type include-global
          Prog Prog* define-prog define-prog*)
 
 (define-runtime-path util-path "util.h")
 (define util-h (ExternSrc '() (list (path->string util-path))))
-(define char* (ExtT (ExternSrc '() '()) "char*"))
+(define-extern-type char*)
 (define-extern-fun c-print-string #:name "print_string"
   ([str : #,char*] [n : S32]) : (T S32) #:src util-h)
 
