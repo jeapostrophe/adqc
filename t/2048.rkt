@@ -71,7 +71,8 @@
 
 
 (define-prog 2048-prog
-  (include-global score)
+  ;; XXX Include when new globals work.
+  #;(include-global score)
   (include-fun step))
 
 (module+ test

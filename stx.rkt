@@ -1020,19 +1020,6 @@
       [(_ #:maybe x:id)
        (syntax/loc stx (include-fun #:maybe (symbol->string 'x) x))])))
 
-(define-syntax (include-ty stx)
-  (with-disappeared-uses
-    (syntax-parse stx
-      [(_ #:maybe n:expr ty:expr)
-       (if (syntax-parameter-value #'current-Prog)
-           (syntax/loc stx
-             (hash-set! (Program-name->ty current-Prog) n ty))
-           #'(void))]
-      [(_ n:expr ty:expr)
-       #:fail-unless (syntax-parameter-value #'current-Prog)
-       "Cannot include type outside of Prog"
-       (syntax/loc stx (include-ty #:maybe n ty))])))
-
 (define-syntax (define-fun stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -1096,7 +1083,12 @@
       [(_ #:maybe n:expr g:expr)
        (if (syntax-parameter-value #'current-Prog)
            (syntax/loc stx
-             (hash-set! (Program-globals current-Prog) n g))
+             ;; XXX Do this better when new globals work.
+             (let ([globals (Program-globals current-Prog)]
+                   [priv->pub (Program-private->public current-Prog)]
+                   [n-id (string->symbol n)])
+               (hash-set! globals n-id g)
+               (hash-set! priv->pub n-id n)))
            #'(void))]
       [(_ n:expr g:expr)
        #:fail-unless (syntax-parameter-value #'current-Prog)
@@ -1147,7 +1139,7 @@
          define-S-free-syntax define-S-expander
          F
          define-type define-fun define-extern-fun define-global
-         include-fun include-ty include-global
+         include-fun include-type include-global
          Prog Prog* define-prog)
 
 ;; XXX Array Slice
