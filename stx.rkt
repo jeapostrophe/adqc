@@ -741,74 +741,6 @@
        (S (begin (set! current-return-var e) (return))))]))
 
 (begin-for-syntax
-  (struct T/I-expander (T-impl I-impl)
-    #:property prop:procedure (struct-field-index T-impl)
-    #:methods gen:T-expander
-    [(define (T-expand this stx)
-       ((T/I-expander-T-impl this) stx))]
-    #:methods gen:I-expander
-    [(define (I-expand this stx)
-       ((T/I-expander-I-impl this) stx))]))
-(define (apply-union-ctor-init stx ty m i)
-  (unless (UniT? ty)
-    (raise-syntax-error #f "union syntax used for non-union type" stx))
-  (I (union #,m #,i)))
-(define (apply-ctor-inits stx ty is)
-  (match ty
-    [(? ArrT?)
-     (I (array #,@is))]
-    [(RecT _ _ c-order)
-     (unless (= (length c-order) (length is))
-       (raise-syntax-error #f "constructor arity mismatch" stx))
-     (I (record #,@(map cons c-order is)))]
-    [_ (raise-syntax-error #f "invalid constructor syntax" stx)]))
-(define (keyword->symbol kw)
-  (string->symbol (keyword->string kw)))
-(define-syntax (define-type stx)
-  (syntax-parse stx
-    [(_ #:public name:id ty-stx)
-     #:fail-unless (syntax-parameter-value #'current-Prog)
-     "Cannot define public type outside of Prog"
-     (syntax/loc stx
-       (begin (define-type name ty-stx)
-              (include-type name)))]
-    [(_ name:id ty-stx)
-     #:with ty (generate-temporary #'name)
-     (syntax/loc stx
-       (begin
-         (define ty (T ty-stx))
-         (define-syntax name
-           (T/I-expander
-            (syntax-parser
-              [_ (syntax/loc this-syntax ty)])
-            (syntax-parser
-              [(_ m:keyword i:expr)
-               (quasisyntax/loc this-syntax
-                 (apply-union-ctor-init
-                  #'#,this-syntax ty (keyword->symbol 'm) (I i)))]
-              [(_ i:expr (... ...))
-               (quasisyntax/loc this-syntax
-                 (apply-ctor-inits
-                  #'#,this-syntax ty (list (I i) (... ...))))])))))]))
-
-(define-syntax (include-type stx)
-  (with-disappeared-uses
-    (syntax-parse stx
-      [(_ #:maybe n:expr ty:expr)
-       (if (syntax-parameter-value #'current-Prog)
-           (syntax/loc stx
-             (hash-set! (Program-name->ty current-Prog) n ty))
-           #'(void))]
-      [(_ n:expr ty:expr)
-       #:fail-unless (syntax-parameter-value #'current-Prog)
-       "Cannot include type outside of Prog"
-       (syntax/loc stx (include-type #:maybe n ty))]
-      [(_ x:id)
-       (syntax/loc stx (include-type (symbol->string 'x) x))]
-      [(_ #:maybe x:id)
-       (syntax/loc stx (include-type #:maybe (symbol->string 'x) x))])))
-
-(begin-for-syntax
   (define-syntax-class Farg
     #:attributes (x ref var arg)
     #:description "function argument"
@@ -881,6 +813,74 @@
                 (IntFun (list a.arg ...)
                         (Var-x r.ref) (Var-ty r.ref)
                         ret-lab-id the-body))))))])))
+
+(begin-for-syntax
+  (struct T/I-expander (T-impl I-impl)
+    #:property prop:procedure (struct-field-index T-impl)
+    #:methods gen:T-expander
+    [(define (T-expand this stx)
+       ((T/I-expander-T-impl this) stx))]
+    #:methods gen:I-expander
+    [(define (I-expand this stx)
+       ((T/I-expander-I-impl this) stx))]))
+(define (apply-union-ctor-init stx ty m i)
+  (unless (UniT? ty)
+    (raise-syntax-error #f "union syntax used for non-union type" stx))
+  (I (union #,m #,i)))
+(define (apply-ctor-inits stx ty is)
+  (match ty
+    [(? ArrT?)
+     (I (array #,@is))]
+    [(RecT _ _ c-order)
+     (unless (= (length c-order) (length is))
+       (raise-syntax-error #f "constructor arity mismatch" stx))
+     (I (record #,@(map cons c-order is)))]
+    [_ (raise-syntax-error #f "invalid constructor syntax" stx)]))
+(define (keyword->symbol kw)
+  (string->symbol (keyword->string kw)))
+(define-syntax (define-type stx)
+  (syntax-parse stx
+    [(_ #:public name:id ty-stx)
+     #:fail-unless (syntax-parameter-value #'current-Prog)
+     "Cannot define public type outside of Prog"
+     (syntax/loc stx
+       (begin (define-type name ty-stx)
+              (include-type name)))]
+    [(_ name:id ty-stx)
+     #:with ty (generate-temporary #'name)
+     (syntax/loc stx
+       (begin
+         (define ty (T ty-stx))
+         (define-syntax name
+           (T/I-expander
+            (syntax-parser
+              [_ (syntax/loc this-syntax ty)])
+            (syntax-parser
+              [(_ m:keyword i:expr)
+               (quasisyntax/loc this-syntax
+                 (apply-union-ctor-init
+                  #'#,this-syntax ty (keyword->symbol 'm) (I i)))]
+              [(_ i:expr (... ...))
+               (quasisyntax/loc this-syntax
+                 (apply-ctor-inits
+                  #'#,this-syntax ty (list (I i) (... ...))))])))))]))
+
+(define-syntax (include-type stx)
+  (with-disappeared-uses
+    (syntax-parse stx
+      [(_ #:maybe n:expr ty:expr)
+       (if (syntax-parameter-value #'current-Prog)
+           (syntax/loc stx
+             (hash-set! (Program-name->ty current-Prog) n ty))
+           #'(void))]
+      [(_ n:expr ty:expr)
+       #:fail-unless (syntax-parameter-value #'current-Prog)
+       "Cannot include type outside of Prog"
+       (syntax/loc stx (include-type #:maybe n ty))]
+      [(_ x:id)
+       (syntax/loc stx (include-type (symbol->string 'x) x))]
+      [(_ #:maybe x:id)
+       (syntax/loc stx (include-type #:maybe (symbol->string 'x) x))])))
 
 (define-syntax (include-fun stx)
   (with-disappeared-uses
