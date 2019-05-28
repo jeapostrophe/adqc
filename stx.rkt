@@ -718,8 +718,8 @@
 
 (define-S-free-syntax for
   (syntax-parser
-    [(_ (~optional (~seq #:I I) #:defaults ([I #'(U32 1)]))
-        init pred inc body ...)
+    [(_ ((~optional (~seq #:I I) #:defaults ([I #'(U32 1)]))
+         init pred inc) body ...)
      (record-disappeared-uses #'for)
      (syntax/loc this-syntax
        (S (let (init)
