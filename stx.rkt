@@ -930,12 +930,12 @@
           (~optional (~seq #:name name:expr)
                      #:defaults ([name #'(symbol->string 'x)]))
           (a:Farg ...)
-          (~datum :) ret-ty:expr
+          (~datum :) ret-ty
           #:src es:expr)
        (syntax/loc stx
          (define x
            (ExtFun es (let ([a.ref a.var] ...) (list a.arg ...))
-                   ret-ty name)))])))
+                   (T ret-ty) name)))])))
 
 (define-syntax (define-global stx)
   (with-disappeared-uses
@@ -1037,7 +1037,7 @@
 (define util-h (ExternSrc '() (list (path->string util-path))))
 (define-extern-type char*)
 (define-extern-fun c-print-string #:name "print_string"
-  ([str : #,char*] [n : S32]) : (T S32) #:src util-h)
+  ([str : #,char*] [n : S32]) : S32 #:src util-h)
 
 (define (print-string s)
   (define bs (string->bytes/utf-8 s))
