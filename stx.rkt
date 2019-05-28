@@ -740,127 +740,6 @@
      (syntax/loc this-syntax
        (S (begin (set! current-return-var e) (return))))]))
 
-(define-runtime-path util-path "util.h")
-(define util-h (ExternSrc '() (list (path->string util-path))))
-(define char* (ExtT (ExternSrc '() '()) "char*"))
-(define c-print-string
-  (ExtFun util-h (list (Arg 'str char* 'read-only)
-                       (Arg 'n (T S32) 'read-only))
-          (T S32) "print_string"))
-#;; XXX syntax for define-extern-fun? Below giving "bad syntax"
-(define-extern-fun c-print-string #:name "print_string"
-  ([str : #,char*] [n : S32]) : (T S32) #:src util-h)
-
-(define (print-string s)
-  (define bs (string->bytes/utf-8 s))
-  (define init (I (array #,@(for/list ([b (in-bytes bs)])
-                            (I (U8 b))))))
-  (define len (bytes-length bs))
-  (S (let* ([str-x : (array len U8) := #,init]
-            [ret-x := c-print-string <- (str-x : #,char*) (S32 len)])
-       (void))))
-
-(define printers (make-weak-hash))
-(define array-printers (make-weak-hash))
-(define (get-printer ty)
-  (define (new-printer!)
-    (define print-fn
-      (match ty
-        ;; XXX UniT, ExtT (?)
-        [(RecT _ _ c-order)
-         (F ([rec : #,ty]) : S32
-            (print "{")
-            #,(let loop ([f (first c-order)] [fs (rest c-order)])
-                (cond [(empty? fs)
-                       (S (print #,(Read (Field (P rec) f))))]
-                      [else
-                       (S (begin (print #,(Read (Field (P rec) f)) ", ")
-                                 #,(loop (first fs) (rest fs))))]))
-            (print "}")
-            (return 0))]))
-    (define value (make-ephemeron ty print-fn))
-    (hash-set! printers ty value)
-    value)
-  (define (new-array-printer!)
-    (define ety (ArrT-ety ty))
-    (define print-fn
-      (F ([arr : #,ty] [count : U64]) : S32
-         (let ([i : U64 := (U64 0)])
-           (print "[")
-           (while (< i count)
-                  (print (arr @ i))
-                  (define next : U64 := (add1 i))
-                  (when (< next count)
-                    (print ", "))
-                  (set! i next))
-           (print "]")
-           (return 0))))
-    (define value (make-ephemeron ety print-fn))
-    (hash-set! array-printers ety value)
-    value)
-  (match ty
-    ;; 'ephemeron-value' may produce #f if the key was GC'd between our
-    ;; call to 'hash-ref' and 'ephemeron-value'. In this case, we call
-    ;; 'new-*-printer' directly, and we know that the subsequent call
-    ;; to 'ephemeron-value' cannot produce #f because the key is used
-    ;; within this function (and thus will not be GC'd).
-    [(ArrT _ ety)
-     (or (ephemeron-value (hash-ref array-printers ety new-array-printer!))
-         (ephemeron-value (new-array-printer!)))]
-    [_
-     (or (ephemeron-value (hash-ref printers ty new-printer!))
-         (ephemeron-value (new-printer!)))]))
-
-(define (print-expr the-e)
-  (define e-ty (expr-type the-e))
-  (define printer
-    (cond
-      [(or (IntT? e-ty) (FloT? e-ty))
-       (define fn-name
-         (match e-ty
-           [(FloT 32) "print_F32"]
-           [(FloT 64) "print_F64"]
-           [(IntT signed? bits)
-            (if signed?
-                (match bits
-                  [8 "print_S8"]
-                  [16 "print_S16"]
-                  [32 "print_S32"]
-                  [64 "print_S64"])
-                (match bits
-                  [8 "print_U8"]
-                  [16 "print_U16"]
-                  [32 "print_U32"]
-                  [64 "print_U64"]))]))
-       (ExtFun util-h (list (Arg 'n e-ty 'read-only)) (T S32) fn-name)]
-      [else (get-printer e-ty)]))
-  (match e-ty
-    [(ArrT dim _)
-     (S (let ([ret-x := printer <- #,the-e (U64 dim)]) (void)))]
-    [_ (S (let ([ret-x := printer <- #,the-e]) (void)))]))
-
-(define-S-free-syntax print
-  (syntax-parser
-    #:literals (unsyntax)
-    [(_ e es ...+)
-     (syntax/loc this-syntax
-       (S (begin (print e) (print es ...))))]
-    [(_ (unsyntax exp-or-str))
-     (syntax/loc this-syntax
-       (match exp-or-str
-         [(? string? s) (print-string s)]
-         [(? Expr? the-e) (print-expr the-e)]))]
-    [(_ s:str)
-     (syntax/loc this-syntax (print-string s))]
-    [(_ e)
-     (syntax/loc this-syntax (print-expr (E e)))]))
-(define-S-free-syntax println
-  (syntax-parser
-    [(_ es ... e:str)
-     (syntax/loc this-syntax (S (print es ... #,(string-append e "\n"))))]
-    [(_ es ...)
-     (syntax/loc this-syntax (S (print es ... "\n")))]))
-
 (begin-for-syntax
   (struct T/I-expander (T-impl I-impl)
     #:property prop:procedure (struct-field-index T-impl)
@@ -1134,13 +1013,130 @@
 (define-simple-macro (define-prog name:id pf ...+)
   (define name (Prog pf ...)))
 
-(provide T P N E I
-         while assert! return S
+(provide while assert! return
          define-S-free-syntax define-S-expander
-         F
          define-type define-fun define-extern-fun define-global
          include-fun include-type include-global
          Prog Prog* define-prog)
+
+(define-runtime-path util-path "util.h")
+(define util-h (ExternSrc '() (list (path->string util-path))))
+(define char* (ExtT (ExternSrc '() '()) "char*"))
+(define-extern-fun c-print-string #:name "print_string"
+  ([str : #,char*] [n : S32]) : (T S32) #:src util-h)
+
+(define (print-string s)
+  (define bs (string->bytes/utf-8 s))
+  (define init (I (array #,@(for/list ([b (in-bytes bs)])
+                            (I (U8 b))))))
+  (define len (bytes-length bs))
+  (S (let* ([str-x : (array len U8) := #,init]
+            [ret-x := c-print-string <- (str-x : #,char*) (S32 len)])
+       (void))))
+
+(define printers (make-weak-hash))
+(define array-printers (make-weak-hash))
+(define (get-printer ty)
+  (define (new-printer!)
+    (define print-fn
+      (match ty
+        ;; XXX UniT, ExtT (?)
+        [(RecT _ _ c-order)
+         (F ([rec : #,ty]) : S32
+            (print "{")
+            #,(let loop ([f (first c-order)] [fs (rest c-order)])
+                (cond [(empty? fs)
+                       (S (print #,(Read (Field (P rec) f))))]
+                      [else
+                       (S (begin (print #,(Read (Field (P rec) f)) ", ")
+                                 #,(loop (first fs) (rest fs))))]))
+            (print "}")
+            (return 0))]))
+    (define value (make-ephemeron ty print-fn))
+    (hash-set! printers ty value)
+    value)
+  (define (new-array-printer!)
+    (define ety (ArrT-ety ty))
+    (define print-fn
+      (F ([arr : #,ty] [count : U64]) : S32
+         (let ([i : U64 := (U64 0)])
+           (print "[")
+           (while (< i count)
+                  (print (arr @ i))
+                  (define next : U64 := (add1 i))
+                  (when (< next count)
+                    (print ", "))
+                  (set! i next))
+           (print "]")
+           (return 0))))
+    (define value (make-ephemeron ety print-fn))
+    (hash-set! array-printers ety value)
+    value)
+  (match ty
+    ;; 'ephemeron-value' may produce #f if the key was GC'd between our
+    ;; call to 'hash-ref' and 'ephemeron-value'. In this case, we call
+    ;; 'new-*-printer' directly, and we know that the subsequent call
+    ;; to 'ephemeron-value' cannot produce #f because the key is used
+    ;; within this function (and thus will not be GC'd).
+    [(ArrT _ ety)
+     (or (ephemeron-value (hash-ref array-printers ety new-array-printer!))
+         (ephemeron-value (new-array-printer!)))]
+    [_
+     (or (ephemeron-value (hash-ref printers ty new-printer!))
+         (ephemeron-value (new-printer!)))]))
+
+(define (print-expr the-e)
+  (define e-ty (expr-type the-e))
+  (define printer
+    (cond
+      [(or (IntT? e-ty) (FloT? e-ty))
+       (define fn-name
+         (match e-ty
+           [(FloT 32) "print_F32"]
+           [(FloT 64) "print_F64"]
+           [(IntT signed? bits)
+            (if signed?
+                (match bits
+                  [8 "print_S8"]
+                  [16 "print_S16"]
+                  [32 "print_S32"]
+                  [64 "print_S64"])
+                (match bits
+                  [8 "print_U8"]
+                  [16 "print_U16"]
+                  [32 "print_U32"]
+                  [64 "print_U64"]))]))
+       (ExtFun util-h (list (Arg 'n e-ty 'read-only)) (T S32) fn-name)]
+      [else (get-printer e-ty)]))
+  (match e-ty
+    [(ArrT dim _)
+     (S (let ([ret-x := printer <- #,the-e (U64 dim)]) (void)))]
+    [_ (S (let ([ret-x := printer <- #,the-e]) (void)))]))
+
+(define-S-free-syntax print
+  (syntax-parser
+    #:literals (unsyntax)
+    [(_ e es ...+)
+     (syntax/loc this-syntax
+       (S (begin (print e) (print es ...))))]
+    [(_ (unsyntax exp-or-str))
+     (syntax/loc this-syntax
+       (match exp-or-str
+         [(? string? s) (print-string s)]
+         [(? Expr? the-e) (print-expr the-e)]))]
+    [(_ s:str)
+     (syntax/loc this-syntax (print-string s))]
+    [(_ e)
+     (syntax/loc this-syntax (print-expr (E e)))]))
+(define-S-free-syntax println
+  (syntax-parser
+    [(_ es ... e:str)
+     (syntax/loc this-syntax (S (print es ... #,(string-append e "\n"))))]
+    [(_ es ...)
+     (syntax/loc this-syntax (S (print es ... "\n")))]))
+
+(provide T P N E I F S)
+
 
 ;; XXX Array Slice
 ;; XXX data types
