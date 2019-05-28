@@ -1013,11 +1013,14 @@
 (define-simple-macro (define-prog name:id pf ...+)
   (define name (Prog pf ...)))
 
+(define-simple-macro (define-prog* name:id pf ...)
+  (define name (Prog* pf ...)))
+
 (provide while assert! return
          define-S-free-syntax define-S-expander
          define-type define-fun define-extern-fun define-global
          include-fun include-type include-global
-         Prog Prog* define-prog)
+         Prog Prog* define-prog define-prog*)
 
 (define-runtime-path util-path "util.h")
 (define util-h (ExternSrc '() (list (path->string util-path))))
