@@ -890,7 +890,12 @@
                      #:defaults ([name #'(symbol->string 'x)]))
           (~optional (~seq #:src es:expr)
                      #:defaults ([es #'(ExternSrc '() '())])))
-       (syntax/loc stx (define x (ExtT es name)))])))
+       #:with the-ext (generate-temporary #'x)
+       (syntax/loc stx
+         (begin
+           (define the-ext (ExtT es name))
+           (define-syntax x
+             (T-expander (syntax-parser [_ #'the-ext])))))])))
 
 (define-syntax (include-fun stx)
   (with-disappeared-uses
@@ -1037,7 +1042,7 @@
 (define util-h (ExternSrc '() (list (path->string util-path))))
 (define-extern-type char*)
 (define-extern-fun c-print-string #:name "print_string"
-  ([str : #,char*] [n : S32]) : S32 #:src util-h)
+  ([str : char*] [n : S32]) : S32 #:src util-h)
 
 (define (print-string s)
   (define bs (string->bytes/utf-8 s))
