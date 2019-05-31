@@ -11,7 +11,7 @@
 
 (define const? (or/c Int? Flo?))
 
-(define current-partial-eval? (make-parameter #t))
+(define current-partial-eval? (make-parameter #f))
 
 (define-match-expander BinOp^
   (λ (stx)
