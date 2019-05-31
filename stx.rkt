@@ -1022,6 +1022,14 @@
              pf ...)
            the-prog))])))
 
+(begin-for-syntax
+  (define-literal-set def-forms
+    #:datum-literals (
+                      define-type define-fun define-global
+                      define-extern-fun define-extern-type
+                      include-fun include-type include-global) ())
+  (define def-form? (literal-set->predicate def-forms)))
+
 ;; XXX Use let-syntaxes to handle multiple return values
 ;; from partition, instead of let-values?
 ;; XXX Should inline function definitions be public?
@@ -1033,7 +1041,7 @@
        (let-values ([(defs nons)
                      (partition
                       (syntax-parser
-                        [((~datum define-fun) . _) #t]
+                        [(x:id . _) #:when (def-form? #'x) #t]
                         [_ #f])
                       (syntax->list #'(pf ...)))])
          (list defs nons))
