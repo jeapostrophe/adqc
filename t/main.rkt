@@ -447,6 +447,39 @@
                 (define r : S32 := c-add1 <- x)
                 r)
               #:tests ["foo" (S32 5) => (S32 6)]))
+     ;; Globals
+     (TProg (define-global x : S32 := 5)
+            (define-fun (plus_x [n : S32]) : S32
+              (+ n x))
+            #:tests ["plus_x" (S32 2) => (S32 7)])
+     (TProg (define-global arr : (array 3 S32) := (array (S32 0) (S32 0) (S32 0)))
+            (define-fun (set_arr) : S32
+              (set! (arr @ 0) (S32 2))
+              (set! (arr @ 1) (S32 3))
+              (set! (arr @ 2) (S32 4))
+              (return 0))
+            (define-fun (arr_sum) : S32
+              (+ (arr @ 0) (+ (arr @ 1) (arr @ 2))))
+            (define-fun (go) : S32
+              (define x := set_arr <-)
+              (define y := arr_sum <-)
+              y)
+            #:tests ["go" => (S32 9)])
+     ;; XXX Errors with "let-values: no expression after a sequence of internal defs"
+     #;
+     (TProg (define-type Coord (record x S32 y S32))
+            (define-global crd : Coord := (Coord (S32 0) (S32 0)))
+            (define-fun (set_crd) : S32
+              (set! (crd -> x) 2)
+              (set! (crd -> y) 3)
+              (return 0))
+            (define-fun (crd_sum) : S32
+              (+ (crd -> x) (crd -> y)))
+            (define (go) : S32
+              (define x := set_crd <-)
+              (define y := crd_sum <-)
+              (return y))
+            #:tests ["go" => (S32 5)])
      ;; Structs
      (let ([Coord (T (record x S64 y S64))])
        (TS (begin (define c : #,Coord := (record x (S64 5) y (S64 4)))

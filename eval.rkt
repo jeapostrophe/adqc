@@ -10,6 +10,8 @@
          (subtract-in "ast.rkt" "type.rkt")
          "type.rkt")
 
+(define current-globals (make-parameter #f))
+
 (define (arithmetic-shift-left n m) (arithmetic-shift n m))
 (define (arithmetic-shift-right n m) (arithmetic-shift n (- m)))
 (define (logical-shift-right n m) (quotient n (expt 2 m)))
@@ -156,10 +158,18 @@
          [64 real->double-flonum]))
      (Flo bits (cast val))]))
 
+(define ((new-global! the-glob))
+  (define v (eval-init (hasheq) (Global-xi the-glob)))
+  (hash-set! (current-globals) the-glob v)
+  v)
+
 (define (path-read σ p)
   (define (rec p) (unbox (path-read σ p)))
   (match (unpack-MetaP p)
     [(Var x _) (hash-ref σ x)]
+    [(and the-glob (Global _ xi))
+     (define globals (current-globals))
+     (hash-ref globals the-glob (new-global! the-glob))]
     [(Select p ie) (vector-ref (rec p) (Int-val (eval-expr σ ie)))]
     [(Field p f) (hash-ref (rec p) f)]
     [(Mode p m) (hash-ref (rec p) m)]
@@ -170,6 +180,9 @@
   (match (unpack-MetaP p)
     [(Var x _)
      (set-box! (hash-ref σ x) v)]
+    [(and the-glob (Global _ xi))
+     (define globals (current-globals))
+     (set-box! (hash-ref globals the-glob (new-global! the-glob)) v)]
     [(Select p ie)
      (set-box! (vector-ref (unbox (path-read σ p)) (Int-val (eval-expr σ ie))) v)]
     [(Field p f)
@@ -277,14 +290,16 @@
 
 (define (eval-program p n is)
   (match-define (Program gs _ _ n->f) p)
-  (define Σ
-    (for/hasheq ([(x g) (in-hash gs)])
-      (match-define (Global ty xi) g)
-      (values x (eval-init (hasheq) xi))))
-  (define f (hash-ref n->f n))
-  (define σ (for/fold ([σ Σ]) ([i (in-list is)] [a (in-list (Fun-args f))])
-              (hash-set σ (Arg-x a) (eval-init (hasheq) i))))
-  (eval-fun Σ σ f))
+  (parameterize ([current-globals (make-hasheq)])
+    ;; XXX Don't need Sigma with new globals
+    (define Σ
+      (for/hasheq ([(x g) (in-hash gs)])
+        (match-define (Global ty xi) g)
+        (values x (eval-init (hasheq) xi))))
+    (define f (hash-ref n->f n))
+    (define σ (for/fold ([σ Σ]) ([i (in-list is)] [a (in-list (Fun-args f))])
+                (hash-set σ (Arg-x a) (eval-init (hasheq) i))))
+    (eval-fun Σ σ f)))
 
 (define Value/c
   (or/c Int? Flo? vector? hash?))

@@ -945,6 +945,23 @@
 (define-syntax (define-global stx)
   (with-disappeared-uses
     (syntax-parse stx
+      [(_ x:id (~datum :) ty (~datum :=) xi)
+       #:with the-ty (generate-temporary #'x)
+       #:with the-glob (generate-temporary #'x)
+       (syntax/loc stx
+         (begin
+           (define the-ty (T ty))
+           (define the-glob
+             (Global the-ty
+                     (syntax-parameterize ([expect-ty #'the-ty])
+                       (I xi))))
+           (define-syntax x
+             (P-expander (syntax-parser [_ #'the-glob])))))])))
+
+#;
+(define-syntax (define-global stx)
+  (with-disappeared-uses
+    (syntax-parse stx
       [(_ (~optional (~and #:public (~bind [public? #t]))
                      #:defaults ([public? #f]))
           x:id (~datum :) ty (~datum :=) xi)
@@ -971,6 +988,7 @@
                               (I xi))))
            install-in-Prog))])))
 
+#;
 (define-syntax (include-global stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -1035,7 +1053,7 @@
          define-S-free-syntax define-S-expander
          define-type define-fun define-global
          define-extern-fun define-extern-type
-         include-fun include-type include-global
+         include-fun include-type #;include-global
          Prog Prog* define-prog define-prog*)
 
 (define-runtime-path util-path "util.h")

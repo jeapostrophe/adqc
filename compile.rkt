@@ -31,6 +31,7 @@
 (define current-type-queue (make-parameter (make-queue)))
 (define current-type-graph (make-parameter (unweighted-graph/directed empty)))
 (define current-type-table (make-parameter (make-hash)))
+(define current-globals (make-parameter (make-hasheq)))
 
 (define (include-src! src)
   (match-define (ExternSrc ls hs) src)
@@ -173,6 +174,13 @@
   (match (unpack-MetaP path)
     [(Var x ty)
      (values (hash-ref ρ x) ty)]
+    [(and the-glob (Global ty _))
+     (define globals (current-globals))
+     (define (new-global!)
+       (define x (cify 'glob))
+       (hash-set! globals the-glob x)
+       x)
+     (values (hash-ref globals the-glob new-global!) ty)]
     [(Select path ie)
      (define-values (p-ast pty) (rec path))
      (match-define (ArrT _ ety) pty)
@@ -262,6 +270,17 @@
      (list* ext " " name assign ";")]
     ))
 
+;; returns (values storage-ast x-init-ast)
+;; storage-ast is #f if no storage is required
+(define (compile-storage/init ty xi [val #f])
+  (cond [(and (or (ArrT? ty) (RecT? ty) (UniT? ty)) (not (ConI? xi)))
+         ;; XXX Better name?
+         (define storage-x (cify 'mem))
+         (values (list* (compile-storage ty storage-x val))
+                 (cond [(ArrT? ty) storage-x]
+                       [else (list* "(&" storage-x ")")]))]
+        [else (values #f val)]))
+
 (define (compile-init ρ ty i)
   (define (rec i) (compile-init ρ ty i))
   (match i
@@ -350,15 +369,7 @@
             cl ":")]
     [(Let x ty xi bs)
      (define-values (storage-ast x-init-ast)
-       (cond
-         [(and (or (ArrT? ty) (RecT? ty) (UniT? ty)) (not (ConI? xi)))
-          ;; XXX Better name?
-          (define st-x (cify 'mem))
-          (values (list* (compile-storage ty st-x (compile-init ρ ty xi)))
-                  (cond [(ArrT? ty) st-x]
-                        [else (list* "(&" st-x ")")]))]
-         ;; XXX Should ExtT be compiled with lifted storage?
-         [else (values #f (compile-init ρ ty xi))]))
+       (compile-storage/init ty xi (compile-init ρ ty xi)))
      (define x* (cify x))
      (list* (and storage-ast (list* storage-ast ind-nl))
             (compile-decl ty x* x-init-ast) ind-nl
@@ -456,7 +467,7 @@
                 ind-- ind-nl "}")))]))
 
 (define (compile-program prog)
-  (match-define (Program gs private->public n->ty n->f) prog)
+  (match-define (Program _ private->public n->ty n->f) prog)
   ;; Need to construct immutable ρ from given value
   (define ρ (make-immutable-hash
              (for/list ([(priv pub) (in-hash private->public)])
@@ -480,11 +491,8 @@
                    [current-Σ Σ]
                    [current-type-queue type-queue]
                    [current-type-graph (unweighted-graph/directed empty)]
-                   [current-type-table type-table])
-      ;; Globals
-      (define globals-ast (for/list ([(x g) (in-hash gs)])
-                            (match-define (Global ty xi) g)
-                            (compile-decl ty (hash-ref ρ x) xi)))
+                   [current-type-table type-table]
+                   [current-globals (make-hasheq)])
       ;; Functions
       (define f->ast
         (for/hash ([f (in-queue fun-queue)])
@@ -530,6 +538,15 @@
                  (define def-n (hash-ref type-table ty))
                  (and (not (string=? def-n n))
                       (list* "typedef " def-n " " n ";" ind-nl)))))
+      ;; Globals
+      ;; XXX Public globals?
+      (define globals-ast
+        (for/list ([(g x) (in-hash (current-globals))])
+          (match-define (Global ty xi) g)
+          (define-values (storage-ast x-init-ast)
+            (compile-storage/init ty xi (compile-init (hasheq) ty xi)))
+          (list* (and storage-ast (list* storage-ast ind-nl))
+                 (compile-decl ty x x-init-ast) ind-nl)))
       ;; Headers
       (define headers-ast (for/list ([h (in-set (current-headers))])
                             (list* "#include <" h ">" ind-nl)))

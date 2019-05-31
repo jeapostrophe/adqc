@@ -138,6 +138,7 @@
   (struct+ name Path MetaP unpack-MetaP ([field ctc] ...)))
 
 (define-Path Var ([x symbol?] [ty Type?]))
+(define-Path Global ([ty Type?] [xi Init?]))
 (define-Path Select ([p Path?] [ie Expr?]))
 (define-Path Field ([p Path?] [f symbol?]))
 (define-Path Mode ([p Path?] [m symbol?]))
@@ -217,7 +218,8 @@
 ;; this is a mutually recursive definition. Alternatively, we could
 ;; treat functions like variables and have a name plus an environment
 ;; binding later in `Program`.
-(define-Stmt Call ([x symbol?] [ty Type?] [f Fun?] [as (listof (or/c Expr? Path?))] [bs Stmt?]))
+(define-Stmt Call
+  ([x symbol?] [ty Type?] [f Fun?] [as (listof (or/c Expr? Path?))] [bs Stmt?]))
 
 ;; Functions
 (struct Arg (x ty mode) #:transparent)
@@ -288,13 +290,11 @@
                   (or/c Path? Expr? Stmt? Fun?))]))
 
 ;; Program
-(struct Global (ty xi) #:transparent)
 (struct Program (globals private->public name->ty name->fun) #:transparent)
 
 (provide
  (contract-out
-  [struct Global ([ty Type?] [xi Init?])]
   [struct Program ([globals (hash/c symbol? Global?)]
-                   [private->public (hash/c symbol? (or/c #f c-identifier-string?))]
+                   [private->public (hash/c Global? c-identifier-string?)]
                    [name->ty (hash/c c-identifier-string? Type?)]
                    [name->fun (hash/c c-identifier-string? IntFun*?)])]))

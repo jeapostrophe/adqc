@@ -135,6 +135,7 @@
     [(MetaP (? type-info? ti) _) ti]
     [(MetaP _ p) (path-type-info p)]
     [(Var x ty) (type-info (hash x ty) ty)]
+    [(Global ty _) (type-info (hash) ty)]
     [(ExtVar _ name ty)
      (define x (string->symbol name))
      (type-info (hash x ty) ty)]
