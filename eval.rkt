@@ -291,7 +291,7 @@
      (unbox ret-x-b)]))
 
 (define (eval-program p n is)
-  (match-define (Program _ _ _ n->f) p)
+  (define n->f (Program-name->fun p))
   (parameterize ([current-globals (make-hasheq)])
     (define f (hash-ref n->f n))
     (define σ

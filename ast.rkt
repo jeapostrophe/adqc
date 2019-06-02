@@ -290,11 +290,10 @@
                   (or/c Path? Expr? Stmt? Fun?))]))
 
 ;; Program
-(struct Program (globals private->public name->ty name->fun) #:transparent)
+(struct Program (name->global name->ty name->fun) #:transparent)
 
 (provide
  (contract-out
-  [struct Program ([globals (hash/c symbol? Global?)]
-                   [private->public (hash/c Global? c-identifier-string?)]
+  [struct Program ([name->global (hash/c c-identifier-string? Global?)]
                    [name->ty (hash/c c-identifier-string? Type?)]
                    [name->fun (hash/c c-identifier-string? IntFun*?)])]))

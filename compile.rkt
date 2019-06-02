@@ -20,18 +20,19 @@
 
 (struct ret-info (x lab) #:transparent)
 
-(define current-ref-vars (make-parameter (set)))
+(define current-ref-vars (make-parameter #f))
 (define current-ret-info (make-parameter #f))
-(define current-headers (make-parameter (mutable-set)))
-(define current-libs (make-parameter (mutable-set)))
+(define current-headers (make-parameter #f))
+(define current-libs (make-parameter #f))
 (define current-fun (make-parameter #f))
-(define current-fun-queue (make-parameter (make-queue)))
-(define current-fun-graph (make-parameter (unweighted-graph/directed empty)))
-(define current-Σ (make-parameter (make-hash)))
-(define current-type-queue (make-parameter (make-queue)))
-(define current-type-graph (make-parameter (unweighted-graph/directed empty)))
-(define current-type-table (make-parameter (make-hash)))
-(define current-globals (make-parameter (make-hasheq)))
+(define current-fun-queue (make-parameter #f))
+(define current-fun-graph (make-parameter #f))
+;; Σ is a renaming environment for public functions
+(define current-Σ (make-parameter #f))
+(define current-type-queue (make-parameter #f))
+(define current-type-graph (make-parameter #f))
+(define current-type-table (make-parameter #f))
+(define current-globals (make-parameter #f))
 
 (define (include-src! src)
   (match-define (ExternSrc ls hs) src)
@@ -162,8 +163,11 @@
 (define (compile-type/ref ty x)
   (match ty
     [(or (? IntT?) (? FloT?))
+     (define ref-vars (current-ref-vars))
+     ;; current-ref-vars will be #f if we are compiling a global
+     ;; variable (this function will be called from outside compile-fun).
      (list* (compile-type ty)
-            (and (set-member? (current-ref-vars) x) "*"))]
+            (and ref-vars (set-member? ref-vars x) "*"))]
     [(ArrT dim ety)
      (compile-type ty)]
     [(or (? RecT?) (? UniT?) (? ArrT?))
@@ -252,8 +256,6 @@
   (match ty
     [(or (? IntT?) (? FloT?) (? ArrT?) (? RecT?) (? UniT?))
      (list* (compile-type/ref ty name) " " name assign ";")]
-    ;; Should ExtT's be lifted and users declare pointers to
-    ;; them, or should their names always be compiled literally?
     [(ExtT src ext)
      (include-src! src)
      (list* ext " " name assign ";")]))
@@ -432,20 +434,18 @@
      (list* call-ast ind-nl
             body-ast)]))
 
-;; Σ is a renaming environment for public functions
-;; ρ is a renaming environment for global variables
-(define (compile-fun ρ f)
+(define (compile-fun f)
   (match f
-    [(MetaFun _ f) (compile-fun ρ f)]
+    [(MetaFun _ f) (compile-fun f)]
     [(IntFun as ret-x ret-ty ret-lab body)
      (parameterize ([current-fun f])
        (define fun-name (hash-ref (current-Σ) f))
-       (define-values (ρ* ref-args)
-         (for/fold ([ρ* ρ] [ref-args (set)])
+       (define-values (ρ ref-args)
+         (for/fold ([ρ (hasheq)] [ref-args (set)])
                    ([a (in-list as)])
            (match-define (Arg x ty mode) a)
            (define x* (cify x))
-           (values (hash-set ρ* x x*)
+           (values (hash-set ρ x x*)
                    (cond [(and (or (IntT? ty) (FloT? ty)) (eq? mode 'ref))
                           (set-add ref-args x*)]
                          [else ref-args]))))
@@ -458,20 +458,16 @@
            (add-between
             (for/list ([a (in-list as)])
               (match-define (Arg x ty _) a)
-              (define x* (hash-ref ρ* x))
-              (list* (compile-type/ref ty x*) " " (hash-ref ρ* x)))
+              (define x* (hash-ref ρ x))
+              (list* (compile-type/ref ty x*) " " (hash-ref ρ x)))
             ", "))
          (list* (compile-type/ref ret-ty ret-x*) " " fun-name "(" args-ast "){" ind++ ind-nl
                 (compile-decl ret-ty ret-x*) ind-nl
-                (compile-stmt γ (hash-set ρ* ret-x ret-x*) body) ind-nl
+                (compile-stmt γ (hash-set ρ ret-x ret-x*) body) ind-nl
                 ind-- ind-nl "}")))]))
 
 (define (compile-program prog)
-  (match-define (Program _ private->public n->ty n->f) prog)
-  ;; Need to construct immutable ρ from given value
-  (define ρ (make-immutable-hash
-             (for/list ([(priv pub) (in-hash private->public)])
-               (cons priv pub))))
+  (match-define (Program n->g n->ty n->f) prog)
   ;; Setup Σ and fun-queue
   (define Σ (make-hash (for/list ([(x f) (in-hash n->f)])
                          (cons (unpack-MetaFun f) x))))
@@ -485,6 +481,10 @@
   (define type-queue (make-queue))
   (for ([ty (in-hash-keys type-table)])
     (enqueue! type-queue ty))
+  ;; Setup globals
+  (define globals (make-hasheq))
+  (for ([(n g) (in-hash n->g)])
+    (hash-set! globals g n))
   (with-cify-counter
     (parameterize ([current-fun-queue fun-queue]
                    [current-fun-graph (unweighted-graph/directed empty)]
@@ -492,12 +492,12 @@
                    [current-type-queue type-queue]
                    [current-type-graph (unweighted-graph/directed empty)]
                    [current-type-table type-table]
-                   [current-globals (make-hasheq)])
+                   [current-globals globals])
       ;; Functions
       (define f->ast
         (for/hash ([f (in-queue fun-queue)])
           (define static? (not (set-member? pub-funs f)))
-          (define ast (list* (and static? "static ") (compile-fun ρ f) ind-nl))
+          (define ast (list* (and static? "static ") (compile-fun f) ind-nl))
           (values f ast)))
       (define fun-graph (current-fun-graph))
       (define funs-ast (list*
@@ -539,9 +539,8 @@
                  (and (not (string=? def-n n))
                       (list* "typedef " def-n " " n ";" ind-nl)))))
       ;; Globals
-      ;; XXX Public globals?
       (define globals-ast
-        (for/list ([(g x) (in-hash (current-globals))])
+        (for/list ([(g x) (in-hash globals)])
           (match-define (Global ty xi) g)
           (define-values (storage-ast x-init-ast)
             (compile-storage/init ty xi (compile-init (hasheq) ty xi)))
