@@ -236,70 +236,69 @@
     [(RecI f->i) (box (hash-map-ht f->i (λ (i) (eval-init σ i))))]
     [(UniI m i) (box (make-hasheq (list (cons m (eval-init σ i)))))]))
 
-(define (eval-stmt Σ γ σ s)
+(define (eval-stmt γ σ s)
   (match s
     [(Skip _) σ]
     [(Fail m) (error 'Fail m)]
     [(Begin f s)
-     (eval-stmt Σ γ σ f)
-     (eval-stmt Σ γ σ s)]
+     (eval-stmt γ σ f)
+     (eval-stmt γ σ s)]
     [(Assign p e)
      (path-write! σ p (eval-expr σ e))]
     [(If p t f)
-     (eval-stmt Σ γ σ (if (eval-expr-pred σ p) t f))]
+     (eval-stmt γ σ (if (eval-expr-pred σ p) t f))]
     [(While p b)
      (when (eval-expr-pred σ p)
-       (eval-stmt Σ γ σ b)
-       (eval-stmt Σ γ σ s))]
+       (eval-stmt γ σ b)
+       (eval-stmt γ σ s))]
     [(Jump l)
      ((hash-ref γ l))]
     [(Let/ec l b)
      (let/ec this-return
-       (eval-stmt Σ (hash-set γ l this-return) σ b))]
+       (eval-stmt (hash-set γ l this-return) σ b))]
     [(Let x ty xi bs)
      (define xv (eval-init σ xi))
-     (eval-stmt Σ γ (hash-set σ x xv) bs)]
+     (eval-stmt γ (hash-set σ x xv) bs)]
     [(MetaS _ bs)
-     (eval-stmt Σ γ σ bs)]
+     (eval-stmt γ σ bs)]
     [(Call x ty f as bs)
-     (define σ* (for/fold ([σ* Σ]) ([a (in-list as)] [fa (in-list (Fun-args f))])
-                  (match-define (Arg x ty m) fa)
-                  (match (unpack-any a)
-                    [(or (Read p) (? Path? p))
-                     (match m
-                       ['copy
-                        (hash-set σ* x (box (unbox (path-read σ p))))]
-                       [(or 'ref 'read-only)
-                        (hash-set σ* x (path-read σ p))])]
-                    [(? Expr? e)
-                     (hash-set σ* x (box (eval-expr σ e)))])))
-     (define xv (eval-fun Σ σ* f))
-     (eval-stmt Σ γ (hash-set σ x (box xv)) bs)]
+     (define σ*
+       (for/fold ([σ* (hasheq)])
+                 ([a (in-list as)] [fa (in-list (Fun-args f))])
+         (match-define (Arg x ty m) fa)
+         (match (unpack-any a)
+           [(or (Read p) (? Path? p))
+            (match m
+              ['copy
+               (hash-set σ* x (box (unbox (path-read σ p))))]
+              [(or 'ref 'read-only)
+               (hash-set σ* x (path-read σ p))])]
+           [(? Expr? e)
+            (hash-set σ* x (box (eval-expr σ e)))])))
+     (define xv (eval-fun σ* f))
+     (eval-stmt γ (hash-set σ x (box xv)) bs)]
     [(Fail msg)
      (error 'eval-stmt msg)]))
 
-(define (eval-fun Σ σ f)
+(define (eval-fun σ f)
   (match f
     [(? ExtFun?) (error 'eval-fun "XXX Cannot interp external functions yet: ~e" f)]
-    [(MetaFun _ f) (eval-fun Σ σ f)]
+    [(MetaFun _ f) (eval-fun σ f)]
     [(IntFun as ret-x ret-ty ret-lab body)
      (define ret-x-b (eval-init (hasheq) (UndI ret-ty)))
      (let/ec this-return
-       (eval-stmt Σ (hasheq ret-lab this-return) (hash-set σ ret-x ret-x-b) body))
+       (eval-stmt (hasheq ret-lab this-return) (hash-set σ ret-x ret-x-b) body))
      (unbox ret-x-b)]))
 
 (define (eval-program p n is)
-  (match-define (Program gs _ _ n->f) p)
+  (match-define (Program _ _ _ n->f) p)
   (parameterize ([current-globals (make-hasheq)])
-    ;; XXX Don't need Sigma with new globals
-    (define Σ
-      (for/hasheq ([(x g) (in-hash gs)])
-        (match-define (Global ty xi) g)
-        (values x (eval-init (hasheq) xi))))
     (define f (hash-ref n->f n))
-    (define σ (for/fold ([σ Σ]) ([i (in-list is)] [a (in-list (Fun-args f))])
-                (hash-set σ (Arg-x a) (eval-init (hasheq) i))))
-    (eval-fun Σ σ f)))
+    (define σ
+      (for/fold ([σ (hasheq)])
+                ([i (in-list is)] [a (in-list (Fun-args f))])
+        (hash-set σ (Arg-x a) (eval-init (hasheq) i))))
+    (eval-fun σ f)))
 
 (define Value/c
   (or/c Int? Flo? vector? hash?))
