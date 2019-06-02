@@ -945,6 +945,12 @@
 (define-syntax (define-global stx)
   (with-disappeared-uses
     (syntax-parse stx
+      [(_ #:public name:id . more)
+       #:fail-unless (syntax-parameter-value #'current-Prog)
+       "Cannot define public global outside of Prog"
+       (syntax/loc stx
+         (begin (define-global name . more)
+                (include-global name)))]
       [(_ x:id (~datum :) ty (~datum :=) xi)
        #:with the-ty (generate-temporary #'x)
        #:with the-glob (generate-temporary #'x)
