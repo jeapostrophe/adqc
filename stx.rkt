@@ -958,49 +958,14 @@
            (define-syntax x
              (P-expander (syntax-parser [_ #'the-glob])))))])))
 
-#;
-(define-syntax (define-global stx)
-  (with-disappeared-uses
-    (syntax-parse stx
-      [(_ (~optional (~and #:public (~bind [public? #t]))
-                     #:defaults ([public? #f]))
-          x:id (~datum :) ty (~datum :=) xi)
-       #:do [(define inside-Prog? (syntax-parameter-value #'current-Prog))]
-       #:fail-when (and (attribute public?) (not inside-Prog?))
-       "Cannot define public global outside of Prog"
-       #:with make-public
-       (and inside-Prog?
-            (syntax/loc stx
-              (hash-set! (Program-private->public current-Prog)
-                         'x (symbol->string 'x))))
-       #:with install-in-Prog
-       (if inside-Prog?
-         (syntax/loc stx
-           (begin (hash-set! (Program-globals current-Prog) 'x x)
-                  make-public))
-         #'(void))
-       #:with the-ty (generate-temporary #'x)
-       (syntax/loc stx
-         (begin
-           (define the-ty (T ty))
-           (define x
-             (Global the-ty (syntax-parameterize ([expect-ty #'the-ty])
-                              (I xi))))
-           install-in-Prog))])))
-
-#;
 (define-syntax (include-global stx)
   (with-disappeared-uses
     (syntax-parse stx
       [(_ #:maybe n:expr g:expr)
        (if (syntax-parameter-value #'current-Prog)
            (syntax/loc stx
-             ;; XXX Do this better when new globals work.
-             (let ([globals (Program-globals current-Prog)]
-                   [priv->pub (Program-private->public current-Prog)]
-                   [n-id (string->symbol n)])
-               (hash-set! globals n-id g)
-               (hash-set! priv->pub n-id n)))
+             ;; XXX Ensure that globals can't have more than 1 name?
+             (hash-set! (Program-name->global current-Prog) n g))
            #'(void))]
       [(_ n:expr g:expr)
        #:fail-unless (syntax-parameter-value #'current-Prog)
@@ -1017,7 +982,7 @@
     (syntax-parse stx
       [(_ pf ...)
        (syntax/loc stx
-         (let ([the-prog (Program (make-hasheq) (make-hash) (make-hash))])
+         (let ([the-prog (Program (make-hash) (make-hash) (make-hash))])
            (syntax-parameterize ([current-Prog (make-rename-transformer #'the-prog)])
              pf ...)
            the-prog))])))
@@ -1061,7 +1026,7 @@
          define-S-free-syntax define-S-expander
          define-type define-fun define-global
          define-extern-fun define-extern-type
-         include-fun include-type #;include-global
+         include-fun include-type include-global
          Prog Prog* define-prog define-prog*)
 
 (define-runtime-path util-path "util.h")
