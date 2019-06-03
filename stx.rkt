@@ -945,12 +945,31 @@
 (define-syntax (define-global stx)
   (with-disappeared-uses
     (syntax-parse stx
+      #:literals (unsyntax)
       [(_ #:public name:id . more)
        #:fail-unless (syntax-parameter-value #'current-Prog)
        "Cannot define public global outside of Prog"
        (syntax/loc stx
          (begin (define-global name . more)
                 (include-global name)))]
+      ;; T/I expander
+      [(_ x:id (~datum :=) (~and ctor-use (ctor-id . _)))
+       #:declare ctor-id (static (and/c T-expander? I-expander?) "T/I expander")
+       (syntax/loc stx
+         (define-global x : ctor-id := ctor-use))]
+      ;; implicit type from expr initialization
+      [(_ x:id (~datum :=) e)
+       #:with the-e (generate-temporary #'x)
+       #:with e-ty (generate-temporary #'x)
+       #:with the-glob (generate-temporary #'x)
+       (syntax/loc stx
+         (begin
+           (define the-e (E e))
+           (define e-ty (expr-type the-e))
+           (define the-glob (Global e-ty (ConI the-e)))
+           (define-syntax x
+             (P-expander (syntax-parser [_ #'the-glob])))))]
+      ;; fully annonated
       [(_ x:id (~datum :) ty (~datum :=) xi)
        #:with the-ty (generate-temporary #'x)
        #:with the-glob (generate-temporary #'x)
@@ -962,7 +981,14 @@
                      (syntax-parameterize ([expect-ty #'the-ty])
                        (I xi))))
            (define-syntax x
-             (P-expander (syntax-parser [_ #'the-glob])))))])))
+             (P-expander (syntax-parser [_ #'the-glob])))))]
+      ;; uninitialied variable
+      [(_ x:id (~datum :) ty)
+       #:with the-ty (generate-temporary #'x)
+       (syntax/loc stx
+         (begin
+           (define the-ty (T ty))
+           (define-global x : #,the-ty := (undef #,the-ty))))])))
 
 (define-syntax (include-global stx)
   (with-disappeared-uses
