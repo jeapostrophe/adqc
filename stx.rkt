@@ -1016,7 +1016,7 @@
        (syntax/loc stx
          (let ([the-prog (Program (make-hash) (make-hash) (make-hash))])
            (syntax-parameterize ([current-Prog (make-rename-transformer #'the-prog)])
-             pf ...)
+             pf ... (void))
            the-prog))])))
 
 (begin-for-syntax

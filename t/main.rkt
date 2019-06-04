@@ -491,7 +491,6 @@
               (+ (arr @ 0) (+ (arr @ 1) (arr @ 2))))
             #:tests ["foo" => (S32 6)])
      ;; XXX Errors with "let-values: no expression after a sequence of internal defs"
-     #;
      (TProg (define-type Coord (record x S32 y S32))
             (define-global crd : Coord := (Coord (S32 0) (S32 0)))
             (define-fun (set_crd) : S32
