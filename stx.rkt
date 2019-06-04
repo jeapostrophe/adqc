@@ -848,7 +848,6 @@
        (begin (define-type name ty-stx)
               (include-type name)))]
     [(_ name:id ty-stx)
-     #:with ty (generate-temporary #'name)
      (syntax/loc stx
        (begin
          (define ty (T ty-stx))
@@ -960,9 +959,6 @@
          (define-global x : ctor-id := ctor-use))]
       ;; implicit type from expr initialization
       [(_ x:id (~datum :=) e)
-       #:with the-e (generate-temporary #'x)
-       #:with e-ty (generate-temporary #'x)
-       #:with the-glob (generate-temporary #'x)
        (syntax/loc stx
          (begin
            (define the-e (E e))
@@ -972,8 +968,6 @@
              (P-expander (syntax-parser [_ #'the-glob])))))]
       ;; fully annonated
       [(_ x:id (~datum :) ty (~datum :=) xi)
-       #:with the-ty (generate-temporary #'x)
-       #:with the-glob (generate-temporary #'x)
        (syntax/loc stx
          (begin
            (define the-ty (T ty))
@@ -985,7 +979,6 @@
              (P-expander (syntax-parser [_ #'the-glob])))))]
       ;; uninitialied variable
       [(_ x:id (~datum :) ty)
-       #:with the-ty (generate-temporary #'x)
        (syntax/loc stx
          (begin
            (define the-ty (T ty))
