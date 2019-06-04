@@ -806,6 +806,7 @@
                                        ([current-return
                                          (make-rename-transformer #'the-ret)]
                                         [S-in-tail? #t])
+                                     ;; XXX Use ANF here
                                      (S (begin . bs))))))))])
                (MetaFun
                 ;; XXX use struct
