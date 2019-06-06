@@ -434,37 +434,41 @@
      (list* call-ast ind-nl
             body-ast)]))
 
-(define (compile-fun f)
-  (match f
-    [(MetaFun _ f) (compile-fun f)]
-    [(IntFun as ret-x ret-ty ret-lab body)
-     (parameterize ([current-fun f])
-       (define fun-name (hash-ref (current-Σ) f))
-       (define-values (ρ ref-args)
-         (for/fold ([ρ (hasheq)] [ref-args (set)])
-                   ([a (in-list as)])
-           (match-define (Arg x ty mode) a)
-           (define x* (cify x))
-           (values (hash-set ρ x x*)
-                   (cond [(and (or (IntT? ty) (FloT? ty)) (eq? mode 'ref))
-                          (set-add ref-args x*)]
-                         [else ref-args]))))
-       (define ret-x* (cify ret-x))
-       (define ret-lab* (cify ret-lab))
-       (define γ (hasheq ret-lab ret-lab*))
-       (parameterize ([current-ret-info (ret-info ret-x* ret-lab*)]
-                      [current-ref-vars ref-args])
-         (define args-ast
-           (add-between
-            (for/list ([a (in-list as)])
-              (match-define (Arg x ty _) a)
-              (define x* (hash-ref ρ x))
-              (list* (compile-type/ref ty x*) " " (hash-ref ρ x)))
-            ", "))
-         (list* (compile-type/ref ret-ty ret-x*) " " fun-name "(" args-ast "){" ind++ ind-nl
-                (compile-decl ret-ty ret-x*) ind-nl
-                (compile-stmt γ (hash-set ρ ret-x ret-x*) body) ind-nl
-                ind-- ind-nl "}")))]))
+(define (compile-fun mf)
+  (define f (unpack-MetaFun mf))
+  (match-define (IntFun as ret-x ret-ty ret-lab body) f)
+  (parameterize ([current-fun f])
+    (define fun-name (hash-ref (current-Σ) f))
+    (define-values (ρ ref-args)
+      (for/fold ([ρ (hasheq)] [ref-args (set)])
+                ([a (in-list as)])
+        (match-define (Arg x ty mode) a)
+        (define x* (cify x))
+        (values (hash-set ρ x x*)
+                (cond [(and (or (IntT? ty) (FloT? ty)) (eq? mode 'ref))
+                       (set-add ref-args x*)]
+                      [else ref-args]))))
+    (define ret-x* (cify ret-x))
+    (define ret-lab* (cify ret-lab))
+    (define γ (hasheq ret-lab ret-lab*))
+    (parameterize ([current-ret-info (ret-info ret-x* ret-lab*)]
+                   [current-ref-vars ref-args])
+      (define args-ast
+        (add-between
+         (for/list ([a (in-list as)])
+           (match-define (Arg x ty _) a)
+           (define x* (hash-ref ρ x))
+           (list* (compile-type/ref ty x*) " " (hash-ref ρ x)))
+         ", "))
+      (define decl-part
+        (list* (compile-type/ref ret-ty ret-x*) " " fun-name "(" args-ast ")"))
+      (define defn-part
+        (list* decl-part "{" ind++ ind-nl
+               (compile-decl ret-ty ret-x*) ind-nl
+               (compile-stmt γ (hash-set ρ ret-x ret-x*) body) ind-nl
+               ind-- ind-nl "}"))
+      (values decl-part defn-part))))
+  
 
 (define (compile-program prog)
   (match-define (Program n->g n->ty n->f) prog)
@@ -494,18 +498,23 @@
                    [current-type-table type-table]
                    [current-globals globals])
       ;; Functions
+      (define pub-fun-decls (make-queue))
       (define f->ast
         (for/hash ([f (in-queue fun-queue)])
           (define static? (not (set-member? pub-funs f)))
-          (define ast (list* (and static? "static ") (compile-fun f) ind-nl))
-          (values f ast)))
+          (define-values (decl-ast defn-ast) (compile-fun f))
+          (unless static?
+            (enqueue! pub-fun-decls (list* decl-ast ";")))
+          (values f (list* (and static? "static ") defn-ast ind-nl))))
       (define fun-graph (current-fun-graph))
-      (define funs-ast (list*
-                        (for/list ([f (in-list (tsort fun-graph))])
-                          (hash-ref f->ast f))
-                        (for/list ([f (in-set pub-funs)]
-                                   #:when (not (has-vertex? fun-graph f)))
-                          (hash-ref f->ast f))))
+      (define funs-ast
+        (list*
+         (for/list ([f (in-list (tsort fun-graph))])
+           (hash-ref f->ast f))
+         (for/list ([f (in-set pub-funs)]
+                    #:when (not (has-vertex? fun-graph f)))
+           (hash-ref f->ast f))))
+      (define pub-funs-ast (add-between (queue->list pub-fun-decls) ind-nl))
       ;; Types
       (define root-types (queue->list (current-type-queue)))
       (define ty->ast
@@ -549,10 +558,13 @@
       ;; Headers
       (define headers-ast (for/list ([h (in-set (current-headers))])
                             (list* "#include <" h ">" ind-nl)))
-      (list* headers-ast
-             types-ast ind-nl
-             globals-ast ind-nl
-             funs-ast ind-nl))))
+      (define c-part
+        (list* headers-ast
+               types-ast ind-nl
+               globals-ast ind-nl
+               funs-ast ind-nl))
+      (define h-part (list* pub-funs-ast ind-nl))
+      (values h-part c-part))))
     
 ;; Display code
 
@@ -580,12 +592,16 @@
     [(cons a d) (tree-for f a) (tree-for f d)]
     [x (f x)]))
 
-(define (compile-binary prog c-path out-path #:shared? [shared? #f])
+(define (compile-binary shared? prog c-path out-path [h-path #f])
   (parameterize ([current-libs (mutable-set)]
                  [current-headers (mutable-set)])
     (include-src! stdint-h)
+    (define-values (h-part c-part) (compile-program prog))
     (with-output-to-file c-path #:mode 'text #:exists 'replace
-      (λ () (tree-for idisplay (compile-program prog))))
+      (λ () (tree-for idisplay c-part)))
+    (when h-path
+      (with-output-to-file h-path #:mode 'text #:exists 'replace
+        (λ () (tree-for idisplay h-part))))
     (define libs (for/list ([l (in-set (current-libs))])
                    (format "-l~a" l)))
     (define args
@@ -601,13 +617,13 @@
     (define args* (if shared? (list* "-shared" "-fPIC" args) args))
     (apply system* (find-executable-path "cc") args*)))
 
-(define (compile-library prog c-path out-path)
-  (compile-binary prog c-path out-path #:shared? #t))
+(define (compile-library prog c-path out-path [h-path #f])
+  (compile-binary #t prog c-path out-path h-path))
 
-(define (compile-exe prog c-path out-path)
-  (compile-binary prog c-path out-path))
+(define (compile-exe prog c-path out-path [h-path #f])
+  (compile-binary #f prog c-path out-path h-path))
 
 (provide
  (contract-out
-  [compile-library (-> Program? path? path? boolean?)]
-  [compile-exe (-> Program? path? path? boolean?)]))
+  [compile-library (->* (Program? path? path?) (path?) boolean?)]
+  [compile-exe (->* (Program? path? path?) (path?) boolean?)]))
