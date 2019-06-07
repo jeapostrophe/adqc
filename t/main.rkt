@@ -490,7 +490,6 @@
             (define-fun (foo) : S32
               (+ (arr @ 0) (+ (arr @ 1) (arr @ 2))))
             #:tests ["foo" => (S32 6)])
-     ;; XXX Errors with "let-values: no expression after a sequence of internal defs"
      (TProg (define-type Coord (record x S32 y S32))
             (define-global crd : Coord := (Coord (S32 0) (S32 0)))
             (define-fun (set_crd) : S32
@@ -499,11 +498,29 @@
               (return 0))
             (define-fun (crd_sum) : S32
               (+ (crd -> x) (crd -> y)))
-            (define (go) : S32
+            (define-fun (go) : S32
               (define x := set_crd <-)
               (define y := crd_sum <-)
               (return y))
             #:tests ["go" => (S32 5)])
+     ;; XXX Issue with evaling unions makes 2nd test fail.
+     ;; How to handle unions being ref'd as different types
+     ;; in evaluator?
+     (TProg (define-type Num (union i S32 f F32))
+            (define-global n := (Num #:i (S32 0)))
+            (define-fun (set_i) : S32
+              (set! (n as i) (S32 5))
+              (return 0))
+            (define-fun (go_i) : S32
+              (define z := set_i <-)
+              (n as i))
+            (define-fun (set_f) : S32
+              (set! (n as f) (F32 2.5f0))
+              (return 0))
+            (define-fun (go_f) : F32
+              (define z := set_f <-)
+              (n as f))
+            #:tests ["go_i" => (S32 5)] #;["go_f" => (F32 2.5f0)])
      ;; Structs
      (let ([Coord (T (record x S64 y S64))])
        (TS (begin (define c : #,Coord := (record x (S64 5) y (S64 4)))

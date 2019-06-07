@@ -515,6 +515,14 @@
                     #:when (not (has-vertex? fun-graph f)))
            (hash-ref f->ast f))))
       (define pub-funs-ast (add-between (queue->list pub-fun-decls) ind-nl))
+      ;; Globals
+      (define globals-ast
+        (for/list ([(g x) (in-hash globals)])
+          (match-define (Global ty xi) g)
+          (define-values (storage-ast x-init-ast)
+            (compile-storage/init ty xi (compile-init (hasheq) ty xi)))
+          (list* (and storage-ast (list* storage-ast ind-nl))
+                 (compile-decl ty x x-init-ast) ind-nl)))
       ;; Types
       (define root-types (queue->list (current-type-queue)))
       (define ty->ast
@@ -547,14 +555,6 @@
                  (define def-n (hash-ref type-table ty))
                  (and (not (string=? def-n n))
                       (list* "typedef " def-n " " n ";" ind-nl)))))
-      ;; Globals
-      (define globals-ast
-        (for/list ([(g x) (in-hash globals)])
-          (match-define (Global ty xi) g)
-          (define-values (storage-ast x-init-ast)
-            (compile-storage/init ty xi (compile-init (hasheq) ty xi)))
-          (list* (and storage-ast (list* storage-ast ind-nl))
-                 (compile-decl ty x x-init-ast) ind-nl)))
       ;; Headers
       (define headers-ast (for/list ([h (in-set (current-headers))])
                             (list* "#include <" h ">" ind-nl)))
