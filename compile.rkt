@@ -530,6 +530,8 @@
           (define x (hash-ref (current-type-table) ty))
           (define ast
             (match ty
+              [(? ArrT?)
+               (list* "typedef " (compile-type ty) " " x ";")]
               [(RecT f->ty f->c c-order)
                (list* "typedef struct {" ind++ ind-nl
                       (add-between

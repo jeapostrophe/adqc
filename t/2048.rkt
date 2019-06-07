@@ -1,8 +1,10 @@
 #lang racket/base
 (require adqc
+         racket/file
          racket/list
          racket/runtime-path)
 
+(define-runtime-path 2048-h-path "2048.h")
 (define-runtime-path 2048-c-path "2048.c")
 (define 2048-c (ExternSrc '() (list (path->string 2048-c-path))))
 
@@ -52,8 +54,7 @@
                ;; merge (increase power of two)
                (+=1 (r @ t))
                ;; increase score
-               ;; XXX Globals not working
-               ;; (+= score (<< 1 ((r @ t) : U32)))
+                (+= score (<< 1 ((r @ t) : U32)))
                ;; set stop to avoid double merge
                (set! stop (add1 t))]
               [else (void)])
@@ -69,13 +70,24 @@
 (define-fun (step [b : Board] [c : S8]) : S32
   (return 0))
 
-
 (define-prog 2048-prog
-  ;; XXX Include when new globals work.
-  #;(include-global score)
+  (include-type Row)
+  (include-type Board)
   (include-fun step))
 
 (module+ test
   (require chk)
-  (void)
+  (define c-path (make-temporary-file "adqc~a.c"))
+  (define bin-path (make-temporary-file "adqc~a"))
+  (unless (compile-library 2048-prog c-path bin-path 2048-h-path)
+    (newline (current-error-port))
+    (define in (open-input-file c-path))
+    (for ([ch (in-port read-char in)])
+      (display ch (current-error-port)))
+    (close-input-port in)
+    (delete-file c-path)
+    (delete-file bin-path)
+    (error "call to compile-library failed (see stderr)"))
+  (delete-file c-path)
+  (delete-file bin-path)
   )
