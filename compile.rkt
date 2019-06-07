@@ -468,7 +468,6 @@
                (compile-stmt γ (hash-set ρ ret-x ret-x*) body) ind-nl
                ind-- ind-nl "}"))
       (values decl-part defn-part))))
-  
 
 (define (compile-program prog)
   (match-define (Program n->g n->ty n->f) prog)
@@ -516,13 +515,18 @@
            (hash-ref f->ast f))))
       (define pub-funs-ast (add-between (queue->list pub-fun-decls) ind-nl))
       ;; Globals
+      (define pub-globals (hash-values n->g))
+      (define pub-global-decls (make-queue))
       (define globals-ast
         (for/list ([(g x) (in-hash globals)])
           (match-define (Global ty xi) g)
           (define-values (storage-ast x-init-ast)
             (compile-storage/init ty xi (compile-init (hasheq) ty xi)))
+          (when (set-member? pub-globals g)
+            (enqueue! pub-global-decls (list* "extern " (compile-decl ty x))))
           (list* (and storage-ast (list* storage-ast ind-nl))
                  (compile-decl ty x x-init-ast) ind-nl)))
+      (define pub-globals-ast (add-between (queue->list pub-global-decls) ind-nl))
       ;; Types
       (define root-types (queue->list (current-type-queue)))
       (define ty->ast
@@ -565,7 +569,9 @@
                types-ast ind-nl
                globals-ast ind-nl
                funs-ast ind-nl))
-      (define h-part (list* pub-funs-ast ind-nl))
+      (define h-part
+        (list* pub-globals-ast ind-nl ind-nl
+               pub-funs-ast ind-nl))
       (values h-part c-part))))
     
 ;; Display code

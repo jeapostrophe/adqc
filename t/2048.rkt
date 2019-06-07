@@ -73,6 +73,7 @@
 (define-prog 2048-prog
   (include-type Row)
   (include-type Board)
+  (include-global score)
   (include-fun step))
 
 (module+ test
