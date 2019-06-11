@@ -551,6 +551,12 @@
                        ind-nl)
                       ind-- ind-nl "} " x ";" ind-nl)]))
           (values ty ast)))
+      ;; XXX Maybe have c-part include h-part instead of duplicating type decls?
+      (define pub-types-ast
+        (add-between
+         (for/list ([ty (in-hash-values n->ty)])
+           (hash-ref ty->ast ty))
+         ind-nl))
       (define types-ast
         (list* (for/list ([ty (in-list (tsort (current-type-graph)))])
                  (hash-ref ty->ast ty))
@@ -570,7 +576,8 @@
                globals-ast ind-nl
                funs-ast ind-nl))
       (define h-part
-        (list* pub-globals-ast ind-nl ind-nl
+        (list* pub-types-ast ind-nl ind-nl
+               pub-globals-ast ind-nl ind-nl
                pub-funs-ast ind-nl))
       (values h-part c-part))))
     
