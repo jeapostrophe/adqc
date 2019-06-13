@@ -471,6 +471,9 @@
 
 (define (compile-program prog)
   (match-define (Program n->g n->ty n->f) prog)
+  (when (check-duplicates (hash-values n->g) eq?)
+    (error 'compile-program
+           "multiple public names reference the same global variable"))
   ;; Setup Σ and fun-queue
   (define Σ (make-hash (for/list ([(x f) (in-hash n->f)])
                          (cons (unpack-MetaFun f) x))))
