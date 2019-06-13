@@ -1,7 +1,11 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <termios.h>
+#include <unistd.h>
+
+#include "2048.h"
 
 void set_buffered_input(int32_t enable) {
   static int32_t enabled = 0;
@@ -13,8 +17,8 @@ void set_buffered_input(int32_t enable) {
   } else if (!enable && enabled) {
     tcgetattr(STDIN_FILENO, &term);
     old = term;
-    term.c_iflag &= (~ICANON & ~IECHO);
-    tcsetattr(STDIN_FILENO, TCASNOW, &term);
+    term.c_iflag &= (~ICANON & ~ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &term);
     enabled = 1; }}
 
 void sigint_handler(int32_t sig) {
@@ -35,10 +39,6 @@ void register_sigint() {
 // XXX Generate buffer space from racket code
 uint8_t rows[4][4];
 uint8_t* board[4];
-
-// XXX Generate declarations from racket code
-extern int32_t make_board(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*);
-extern int32_t step(uint8_t**, int8_t);
 
 int32_t main(int32_t argc, char* argv[]) {
   printf("\033[?251\033[2J");

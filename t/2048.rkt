@@ -2,7 +2,8 @@
 (require adqc
          racket/file
          racket/list
-         racket/runtime-path)
+         racket/runtime-path
+         racket/system)
 
 (define-runtime-path 2048-h-path "2048.h")
 (define-runtime-path 2048-c-path "2048.c")
@@ -74,21 +75,31 @@
   (include-type Row)
   (include-type Board)
   (include-global score)
+  (include-fun "make_board" make-board)
   (include-fun step))
+
+
+(define-runtime-path 2048-exe-path "2048")
 
 (module+ test
   (require chk)
   (define c-path (make-temporary-file "adqc~a.c"))
-  (define bin-path (make-temporary-file "adqc~a"))
-  (unless (compile-library 2048-prog c-path bin-path 2048-h-path)
+  (define o-path (make-temporary-file "adqc~a.o"))
+  (unless (compile-obj 2048-prog c-path o-path 2048-h-path)
     (newline (current-error-port))
     (define in (open-input-file c-path))
     (for ([ch (in-port read-char in)])
       (display ch (current-error-port)))
     (close-input-port in)
     (delete-file c-path)
-    (delete-file bin-path)
-    (error "call to compile-library failed (see stderr)"))
+    (delete-file o-path)
+    (error "compile-obj failed (see stderr)"))
+  (define cc (find-executable-path "cc"))
+  ;; XXX There should be an interface for including obj files
+  ;; when calling compile-exe so we don't have to call cc directly.
+  (unless (system* cc "-Wall" "-Werror" "-o" 2048-exe-path 2048-c-path o-path)
+    (delete-file c-path)
+    (delete-file o-path)
+    (error "call to cc failed (see stderr)"))
   (delete-file c-path)
-  (delete-file bin-path)
-  )
+  (delete-file o-path))

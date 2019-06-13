@@ -607,7 +607,7 @@
     [(cons a d) (tree-for f a) (tree-for f d)]
     [x (f x)]))
 
-(define (compile-binary shared? prog c-path out-path [h-path #f])
+(define (compile-binary extra-args prog c-path out-path [h-path #f])
   (parameterize ([current-libs (mutable-set)]
                  [current-headers (mutable-set)])
     (include-src! stdint-h)
@@ -629,16 +629,19 @@
        ;; complain about unused functions in util.h.
        "-Wno-unused-function"
        "-o" out-path "-xc" c-path libs))
-    (define args* (if shared? (list* "-shared" "-fPIC" args) args))
-    (apply system* (find-executable-path "cc") args*)))
+    (apply system* (find-executable-path "cc") (append extra-args args))))
 
 (define (compile-library prog c-path out-path [h-path #f])
-  (compile-binary #t prog c-path out-path h-path))
+  (compile-binary '("-shared" "-fPIC") prog c-path out-path h-path))
 
 (define (compile-exe prog c-path out-path [h-path #f])
-  (compile-binary #f prog c-path out-path h-path))
+  (compile-binary '() prog c-path out-path h-path))
+
+(define (compile-obj prog c-path out-path [h-path #f])
+  (compile-binary '("-c") prog c-path out-path h-path))
 
 (provide
  (contract-out
   [compile-library (->* (Program? path? path?) (path?) boolean?)]
-  [compile-exe (->* (Program? path? path?) (path?) boolean?)]))
+  [compile-exe (->* (Program? path? path?) (path?) boolean?)]
+  [compile-obj (->* (Program? path? path?) (path?) boolean?)]))
