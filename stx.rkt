@@ -514,6 +514,10 @@
        #'e]
       [(_ x) (syntax/loc stx (ConI (E x)))])))
 
+(begin-for-syntax
+  (struct F-expander (impl)
+    #:property prop:procedure (struct-field-index impl)))  
+
 (define-syntax-parameter current-return #f)
 (define-syntax-parameter current-return-var #f)
 (define-syntax-parameter S-in-tail? #f)
@@ -575,6 +579,15 @@
        #:declare ctor-id (static (and/c T-expander? I-expander?) "T/I expander")
        (record-disappeared-uses #'let)
        (syntax/loc stx (S (let ([x : ctor-id := ctor-use]) . b)))]
+      ;; let with function call from F-expander
+      [(_ (let ([x:id (~optional (~seq (~datum :) ty) #:defaults ([ty #'#f]))
+                      (~datum :=) (fun-id . fun-args)]) . b))
+       #:declare fun-id (static F-expander? "F expander")
+       #:with ty* (if (syntax->datum #'ty) #'(T ty) #'(Fun-ret-ty fun-id))
+       ;; XXX record disappeared uses for fun-id?
+       (record-disappeared-uses #'let)
+       (syntax/loc stx
+         (S (let ([x : #,ty* := fun-id <- . fun-args]) . b)))]
       ;; let with implicit type from expr initializaiton
       [(_ (let ([x:id (~datum :=) e]) . b))
        #:with x-id (generate-temporary #'x)
@@ -919,8 +932,11 @@
     (syntax-parse stx
       [(_ x:id #:as n:expr . more)
        (quasisyntax/loc stx
-         (begin (define x #,(syntax/loc #'more (F . more)))
-                (include-fun #:maybe n x)))]
+         (begin
+           (define the-fun #,(syntax/loc #'more (F . more)))
+           (define-syntax x
+             (F-expander (syntax-parser [_ #'the-fun])))
+           (include-fun #:maybe n x)))]
       [(_ x:id . more)
        (quasisyntax/loc stx
          (define-fun x #:as (symbol->string 'x) . more))]

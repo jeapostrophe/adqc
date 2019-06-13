@@ -561,6 +561,19 @@
                 (c -> x))
               #:tests ["foo" (record x (S64 1) y (S64 2)) => (S64 1)])
        )
+     ;; Test for F-expander syntax
+     (TProg (define-fun (plus1 [n : S32]) : S32
+              (+ n 1))
+            (define-fun (go) : S32
+              (define x := (plus1 (S32 5)))
+              x)
+            #:tests ["go" => (S32 6)])
+     (TProg (define-fun (square [n : S32]) : S32
+              (* n n))
+            (define-fun (go) : S32
+              (define x : S32 := (square (S32 5)))
+              x)
+            #:tests ["go" => (S32 25)])
      ;; Check for false positives on the type checker
      (TTN S8 128 -129)
      (TTN U8 256 -1)
