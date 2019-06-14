@@ -584,8 +584,7 @@
                       (~datum :=) (fun-id . fun-args)]) . b))
        #:declare fun-id (static F-expander? "F expander")
        #:with ty* (if (syntax->datum #'ty) #'(T ty) #'(Fun-ret-ty fun-id))
-       ;; XXX record disappeared uses for fun-id?
-       (record-disappeared-uses #'let)
+       (record-disappeared-uses (list #'let #'fun-id))
        (syntax/loc stx
          (S (let ([x : #,ty* := fun-id <- . fun-args]) . b)))]
       ;; let with implicit type from expr initializaiton
