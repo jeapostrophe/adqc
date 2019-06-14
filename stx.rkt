@@ -1008,7 +1008,6 @@
       [(_ #:maybe n:expr g:expr)
        (if (syntax-parameter-value #'current-Prog)
            (syntax/loc stx
-             ;; XXX Ensure that globals can't have more than 1 name?
              (hash-set! (Program-name->global current-Prog) n g))
            #'(void))]
       [(_ n:expr g:expr)
