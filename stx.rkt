@@ -953,9 +953,12 @@
           (~datum :) ret-ty
           #:src es:expr)
        (syntax/loc stx
-         (define x
-           (ExtFun es (let ([a.ref a.var] ...) (list a.arg ...))
-                   (T ret-ty) name)))])))
+         (begin
+           (define the-fun
+             (ExtFun es (let ([a.ref a.var] ...) (list a.arg ...))
+                     (T ret-ty) name))
+           (define-syntax x
+             (F-expander (syntax-parser [_ #'the-fun])))))])))
 
 (define-syntax (define-global stx)
   (with-disappeared-uses
@@ -1082,7 +1085,7 @@
                             (I (U8 b))))))
   (define len (bytes-length bs))
   (S (let* ([str-x : (array len U8) := #,init]
-            [ret-x := c-print-string <- (str-x : #,char*) (S32 len)])
+            [ret-x := (c-print-string (str-x : #,char*) (S32 len))])
        (void))))
 
 (define printers (make-weak-hash))
