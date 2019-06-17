@@ -64,6 +64,68 @@
         (set! success 1))))
   (return success))
 
+(define-fun (rotate-board [board : Board]) : S32
+  ;; XXX This var really only exists because it's awkward to embed
+  ;; SIZE in the individual expressions - SIZE is interpreted as an S8,
+  ;; which is incompatible with U8, so it would require typing (U8 SIZE)
+  ;; everwhere we use 'n' now.
+  (define n := (U8 SIZE))
+  (for ([i := (U8 0)] (< i (/ n (U8 2))) (+=1 i))
+    ;; XXX Allow path for var init?
+    (for ([j : U8 := i] (< j (sub1 (- n i))) (+=1 j))
+      (define tmp := (board @ i @ j))
+      ;; XXX Implement var args for ops so we can just do (- n i 1)
+      (set! (board @ i @ j)
+            (board @ j @ (sub1 (- n i))))
+      (set! (board @ j @ (sub1 (- n i)))
+            (board @ (sub1 (- n i)) @ (sub1 (- n j))))
+      (set! (board @ (sub1 (- n i)) @ (sub1 (- n j)))
+            (board @ (sub1 (- n j)) @ i))
+      (set! (board @ (sub1 (- n j)) @ i) tmp)))
+  (return 0))
+
+(define-fun (move-up [board : Board]) : U8
+  (define success := (U8 0))
+  (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
+    (define sa-result := (slide-array (board @ x)))
+    (set! success (bitwise-ior success sa-result)))
+  (return success))
+
+(define-fun (move-left [board : Board]) : U8
+  (define void1 := (rotate-board board))
+  (define success := (move-up board))
+  (define void2 := (rotate-board board))
+  (define void3 := (rotate-board board))
+  (define void4 := (rotate-board board))
+  (return success))
+
+(define-fun (move-down [board : Board]) : U8
+  (define void1 := (rotate-board board))
+  (define void2 := (rotate-board board))
+  (define success := (move-up board))
+  (define void3 := (rotate-board board))
+  (define void4 := (rotate-board board))
+  (return success))
+
+(define-fun (move-right [board : Board]) : U8
+  (define void1 := (rotate-board board))
+  (define void2 := (rotate-board board))
+  (define void3 := (rotate-board board))
+  (define success := (move-up board))
+  (define void4 := (rotate-board board))
+  (return success))
+
+(define-fun (find-pair-down [board : Board]) : U8
+  (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
+    (for ([y := (U8 0)] (< y (U8 SIZE)) (+=1 y))
+      (when (= (board @ x @ y) (board @ x @ (add1 y)))
+        (return 1))))
+  (return 0))
+
+;; XXX count-empty
+
+;; XXX game-ended
+
 (define-extern-fun rand () : S32 #:src (ExternSrc '() '("stdlib.h")))
 
 (define-fun (add-random [board : Board]) : S32
