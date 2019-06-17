@@ -10,6 +10,7 @@
          racket/match
          racket/require
          racket/runtime-path
+         racket/string
          racket/stxparam
          syntax/parse/define
          (subtract-in "ast.rkt" "type.rkt")
@@ -890,16 +891,16 @@
        "Cannot include type outside of Prog"
        (syntax/loc stx (include-type #:maybe n ty))]
       [(_ x:id)
-       (syntax/loc stx (include-type (symbol->string 'x) x))]
+       (syntax/loc stx (include-type (symbol->c-name 'x) x))]
       [(_ #:maybe x:id)
-       (syntax/loc stx (include-type #:maybe (symbol->string 'x) x))])))
+       (syntax/loc stx (include-type #:maybe (symbol->c-name 'x) x))])))
 
 (define-syntax (define-extern-type stx)
   (with-disappeared-uses
     (syntax-parse stx
       [(_ x:id
           (~optional (~seq #:name name:expr)
-                     #:defaults ([name #'(symbol->string 'x)]))
+                     #:defaults ([name #'(symbol->c-name 'x)]))
           (~optional (~seq #:src es:expr)
                      #:defaults ([es #'(ExternSrc '() '())])))
        #:with the-ext (generate-temporary #'x)
@@ -922,9 +923,9 @@
        "Cannot include function outside of Prog"
        (syntax/loc stx (include-fun #:maybe n f))]
       [(_ x:id)
-       (syntax/loc stx (include-fun (symbol->string 'x) x))]
+       (syntax/loc stx (include-fun (symbol->c-name 'x) x))]
       [(_ #:maybe x:id)
-       (syntax/loc stx (include-fun #:maybe (symbol->string 'x) x))])))
+       (syntax/loc stx (include-fun #:maybe (symbol->c-name 'x) x))])))
 
 (define-syntax (define-fun stx)
   (with-disappeared-uses
@@ -938,7 +939,7 @@
            (include-fun #:maybe n x)))]
       [(_ x:id . more)
        (quasisyntax/loc stx
-         (define-fun x #:as (symbol->string 'x) . more))]
+         (define-fun x #:as (symbol->c-name 'x) . more))]
       [(_ (x:id . args) . more)
        (quasisyntax/loc stx
          (define-fun x . #,(syntax/loc #'args (args . more))))])))
@@ -948,7 +949,7 @@
     (syntax-parse stx
       [(_ x:id
           (~optional (~seq #:name name:expr)
-                     #:defaults ([name #'(symbol->string 'x)]))
+                     #:defaults ([name #'(symbol->c-name 'x)]))
           (a:Farg ...)
           (~datum :) ret-ty
           #:src es:expr)
@@ -1015,9 +1016,12 @@
        "Cannot include global outside of Prog"
        (syntax/loc stx (include-global #:maybe n g))]
       [(_ x:id)
-       (syntax/loc stx (include-global (symbol->string 'x) x))]
+       (syntax/loc stx (include-global (symbol->c-name 'x) x))]
       [(_ #:maybe x:id)
-       (syntax/loc stx (include-global #:maybe (symbol->string 'x) x))])))
+       (syntax/loc stx (include-global #:maybe (symbol->c-name 'x) x))])))
+
+(define (symbol->c-name x)
+  (string-replace (symbol->string x) "-" "_"))
 
 (define-syntax-parameter current-Prog #f)
 (define-syntax (Prog stx)

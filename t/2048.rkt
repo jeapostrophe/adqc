@@ -117,8 +117,8 @@
   (include-type Row)
   (include-type Board)
   (include-global score)
-  (include-fun "make_board" make-board)
-  (include-fun "init_board" init-board)
+  (include-fun make-board)
+  (include-fun init-board)
   (include-fun step))
 
 (module+ test

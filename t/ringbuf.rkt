@@ -46,12 +46,13 @@
   [struct ringbuf-spec ([ty Type?] [make Fun?] [push Fun?] [pop Fun?])]))
 
 (module+ test
-  (require chk)
-  (define spec (specify-ringbuf 10 (T S32)))
-  (define ringbuf_t (ringbuf-spec-ty spec))
-  (define p (Prog (include-fun "make_ringbuf" (ringbuf-spec-make spec))
-                  (include-fun "ringbuf_push" (ringbuf-spec-push spec))
-                  (include-fun "ringbuf_pop" (ringbuf-spec-pop spec))))
+  (require chk racket/match)
+  (match-define (ringbuf-spec ringbuf_t make-ringbuf ringbuf-push ringbuf-pop)
+    (specify-ringbuf 10 (T S32)))
+  (define-prog p
+    (include-fun make-ringbuf)
+    (include-fun ringbuf-push)
+    (include-fun ringbuf-pop))
   (define lp (link-program p))
   (define (lp-alloc ty) (linked-program-alloc lp ty))
   (define buf (lp-alloc (T (array 10 S32))))
