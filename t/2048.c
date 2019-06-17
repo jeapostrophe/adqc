@@ -108,12 +108,37 @@ int32_t main(int32_t argc, char* argv[]) {
   // XXX Do this better
   make_board(board, rows[0], rows[1], rows[2], rows[3]);
 
-  // XXX init_board(board);
+  init_board(board);
 
   while (1) {
     char c = getchar();
     // XXX Check for getchar error
-    step(board, c); }
+    
+    if (c == 'q') {
+      printf("        QUIT? (y/n)         \n");
+      c = getchar();
+      if (c == 'y') {
+	break; }
+      draw_board(board); }
+    
+    else if (c == 'r') {
+      printf("       RESTART? (y/n)       \n");
+      c = getchar();
+      if (c == 'y') {
+	init_board(board); }
+      draw_board(board); }
+
+    else {
+      uint8_t success = step(board, c);
+      if (success) {
+	draw_board(board);
+	usleep(150000);
+	add_random(board);
+	draw_board(board);
+	if (game_ended(board)) {
+	  printf("         GAME OVER          \n");
+	  // XXX Need break?
+	  break; }}}}
 
   set_buffered_input(1);
   printf("\033[?25h\033[m");

@@ -195,8 +195,31 @@
   (set! score 0)
   (return 0))
 
-(define-fun (step [b : Board] [c : S8]) : S32
-  (return 0))
+(define-fun (step [board : Board] [c : S8]) : U8
+  (define success : U8)
+  ;; This is another example of the difference between S-cond and E-cond
+  ;; being annoying. We can't just say '(define success := (cond ...))'
+  ;; because we call a function from within the cond stmt. ANF should fix this.
+  (cond
+    ;; left arrow
+    [(= c 68)
+     (define result := (move-left board))
+     (set! success result)]
+    ;; right arrow
+    [(= c 67)
+     (define result := (move-right board))
+     (set! success result)]
+    ;; up arrow
+    [(= c 65)
+     (define result := (move-up board))
+     (set! success result)]
+    ;; down arrow
+    [(= c 66)
+     (define result := (move-down board))
+     (set! success result)]
+    [else (set! success 0)])
+  (return success))
+  
 
 (define-prog 2048-prog
   (include-type Row)
@@ -204,6 +227,8 @@
   (include-global score)
   (include-fun make-board)
   (include-fun init-board)
+  (include-fun add-random)
+  (include-fun game-ended)
   (include-fun step))
 
 (module+ test
