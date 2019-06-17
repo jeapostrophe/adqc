@@ -122,9 +122,32 @@
         (return 1))))
   (return 0))
 
-;; XXX count-empty
+;; The U8 here is a number, not a bool
+;; XXX Maybe support boolean type so this is less confusing? stdbool?
+(define-fun (count-empty [board : Board]) : U8
+  (define count := (U8 0))
+  (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
+    (for ([y := (U8 0)] (< y (U8 SIZE)) (+=1 y))
+      (when (zero? (board @ x @ y))
+        (+=1 count))))
+  (return count))
 
-;; XXX game-ended
+(define-fun (game-ended [board : Board]) : U8
+  ;; XXX Awkward because no ANF. Need can't put function call inside
+  ;; predicate, so we need 2 conditional statements instead of an 'or'
+  (define num-empty := (count-empty board))
+  (when (> num-empty (U8 0))
+    (return 0))
+  (define is-pair-down := (find-pair-down board))
+  (when is-pair-down
+    (return 0))
+  (define void1 := (rotate-board board))
+  (define is-pair-down2 := (find-pair-down board))
+  (define ended := (not is-pair-down2))
+  (define void2 := (rotate-board board))
+  (define void3 := (rotate-board board))
+  (define void4 := (rotate-board board))
+  (return ended))
 
 (define-extern-fun rand () : S32 #:src (ExternSrc '() '("stdlib.h")))
 
