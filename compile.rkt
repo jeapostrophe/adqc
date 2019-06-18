@@ -347,14 +347,20 @@
      (cond [(and (Skip? f) (not (Skip-comment f))) (rec s)]
            [(and (Skip? s) (not (Skip-comment s))) (rec f)]
            [else (list* (rec f) ind-nl (rec s))])]
-    [(If p t f)
+    [(If pred t f)
+     (define pred-ast
+       (cond [(and (Read? pred)
+                   (let ([path (Read-p pred)])
+                     (or (Var? path) (Global? path))))
+              (list* "(" (compile-expr ρ pred) ")")]
+             [else (compile-expr ρ pred)]))
      (define tail
        (cond [(If? f) (list* " else " (rec f))]
              [(and (Skip? f) (not (Skip-comment f))) #f]
              [else (list* " else {" ind++ ind-nl
                           (rec f)
                           ind-- ind-nl "}")]))
-     (list* "if " (compile-expr ρ p) " {" ind++ ind-nl
+     (list* "if " pred-ast " {" ind++ ind-nl
             (rec t)
             ind-- ind-nl "}" tail)]
     [(While p b)
