@@ -46,7 +46,7 @@
          (struct name base (field ...) #:transparent)
          (define-syntax ctor (constructor-instance #'ctor-ctc #'name))
          (define (name?^ v)
-           (name? (unpack v)))
+           (and meta-base? (name? (unpack v))))
          (define (field-accessor^ v)
            (field-accessor (unpack v)))
          ...
