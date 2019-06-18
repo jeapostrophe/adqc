@@ -37,6 +37,7 @@
      #:with (field-accessor ...) (for/list ([f (in-list (syntax->list #'(field ...)))])
                                    (format-id f "~a-~a" #'name f))
      #:with (field-accessor^ ...) (generate-temporaries #'(field-accessor ...))
+     #:with base? (format-id #'base "~a?" #'base)
      #:with meta-base? (format-id #'meta-base "~a?" #'meta-base)
      #:with meta-ctc #'(or/c name? meta-base?)
      #:with ctor-ctc #'(-> ctc ... meta-ctc)
@@ -46,7 +47,7 @@
          (struct name base (field ...) #:transparent)
          (define-syntax ctor (constructor-instance #'ctor-ctc #'name))
          (define (name?^ v)
-           (and meta-base? (name? (unpack v))))
+           (and base? (name? (unpack v))))
          (define (field-accessor^ v)
            (field-accessor (unpack v)))
          ...
