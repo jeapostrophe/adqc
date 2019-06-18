@@ -344,17 +344,19 @@
      (match-define-values (path-ast _) (compile-path/deref ρ path))
      (list* path-ast " = " (compile-expr ρ e) ";")]
     [(Begin f s)
-     (list* (rec f) ind-nl (rec s))]
+     (cond [(and (Skip? f) (not (Skip-comment f))) (rec s)]
+           [(and (Skip? s) (not (Skip-comment s))) (rec f)]
+           [else (list* (rec f) ind-nl (rec s))])]
     [(If p t f)
      (define tail
-       (if (If? (unpack-MetaS f))
-           (rec f)
-           (list* "{" ind++ ind-nl
-                  (rec f)
-                  ind-- ind-nl "}")))
+       (cond [(If? f) (list* " else " (rec f))]
+             [(and (Skip? f) (not (Skip-comment f))) #f]
+             [else (list* " else {" ind++ ind-nl
+                          (rec f)
+                          ind-- ind-nl "}")]))
      (list* "if " (compile-expr ρ p) " {" ind++ ind-nl
             (rec t)
-            ind-- ind-nl "} else " tail)]
+            ind-- ind-nl "}" tail)]
     [(While p b)
      (list* "while " (compile-expr ρ p) " {" ind++ ind-nl
             (rec b)
@@ -465,8 +467,8 @@
       (define defn-part
         (list* decl-part "{" ind++ ind-nl
                (compile-decl ret-ty ret-x*) ind-nl
-               (compile-stmt γ (hash-set ρ ret-x ret-x*) body) ind-nl
-               ind-- ind-nl "}"))
+               (compile-stmt γ (hash-set ρ ret-x ret-x*) body)
+               ind-- ind-nl "}" ind-nl))
       (values decl-part defn-part))))
 
 (define (compile-program prog)
@@ -538,7 +540,7 @@
           (define ast
             (match ty
               [(? ArrT?)
-               (list* "typedef " (compile-type ty) " " x ";")]
+               (list* "typedef " (compile-type ty) " " x ";" ind-nl)]
               [(RecT f->ty f->c c-order)
                (list* "typedef struct {" ind++ ind-nl
                       (add-between
@@ -574,10 +576,10 @@
       (define headers-ast (for/list ([h (in-set (current-headers))])
                             (list* "#include <" h ">" ind-nl)))
       (define c-part
-        (list* headers-ast
+        (list* headers-ast ind-nl
                types-ast ind-nl
                globals-ast ind-nl
-               funs-ast ind-nl))
+               funs-ast))
       (define h-part
         (list* pub-types-ast ind-nl ind-nl
                pub-globals-ast ind-nl ind-nl
