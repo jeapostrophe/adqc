@@ -363,8 +363,8 @@
      (list* "if " pred-ast " {" ind++ ind-nl
             (rec t)
             ind-- ind-nl "}" tail)]
-    [(While p b)
-     (list* "while " (compile-expr ρ p) " {" ind++ ind-nl
+    [(While pred b)
+     (list* "while " (compile-expr ρ pred) " {" ind++ ind-nl
             (rec b)
             ind-- ind-nl "}")]
     [(Jump l)
