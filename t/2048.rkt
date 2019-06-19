@@ -154,6 +154,8 @@
 
 (define-extern-fun rand () : S32 #:src (ExternSrc '() '("stdlib.h")))
 
+;; XXX There seems to be a bug with this where, under certain circumstances,
+;; new blocks will not be generated when the user moves up/down.
 (define-fun (add-random [board : Board]) : S32
   (define x : U8 := 0)
   (define y : U8 := 0)
