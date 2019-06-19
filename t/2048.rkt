@@ -132,6 +132,9 @@
         (+=1 count))))
   (return count))
 
+;; XXX This is currently not working? Game currently won't detect game over
+;; correctly (just gets locked up with none of the arrow keys doing anything).
+;; Might be because of this, or because of bug in 2048.c.
 (define-fun (game-ended [board : Board]) : U8
   ;; XXX Awkward because no ANF. Need can't put function call inside
   ;; predicate, so we need 2 conditional statements instead of an 'or'

@@ -44,9 +44,9 @@ void set_buffered_input(int32_t enable) {
   else if (!enable && enabled) {
     tcgetattr(STDIN_FILENO, &term);
     old = term;
-    term.c_iflag &= (~ICANON & ~ECHO);
+    term.c_lflag &= (~ICANON & ~ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &term);
-    enabled = 1; }}
+    enabled = 0; }}
 
 void sigint_handler(int32_t sig) {
   printf("         TERMINATED         \n");
@@ -86,6 +86,7 @@ void draw_board(Board board) {
       else {
 	printf("   ·   "); }
       printf("%s", reset); }
+    printf("\n");
     for (x = 0; x < SIZE; ++x) {
       get_color(board[x][y], color, 40);
       printf("%s", color);
@@ -102,19 +103,21 @@ uint8_t* board[4];
 
 int32_t main(int32_t argc, char* argv[]) {
   srand(time(NULL));
-  printf("\033[?251\033[2J");
+  printf("\033[?25l\033[2J");
   register_sigint();
   set_buffered_input(0);
   // XXX Do this better
   make_board(board, rows[0], rows[1], rows[2], rows[3]);
 
   init_board(board);
+  draw_board(board);
 
   while (1) {
     char c = getchar();
-    // XXX Check for getchar error
+    if (c == -1) {
+      puts("\nError! Cannot read keyboard input!"); }
     
-    if (c == 'q') {
+    else if (c == 'q') {
       printf("        QUIT? (y/n)         \n");
       c = getchar();
       if (c == 'y') {
