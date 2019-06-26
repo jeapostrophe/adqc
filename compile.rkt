@@ -134,6 +134,7 @@
 (define (compile-type ty)
   (define (rec ty) (compile-type ty))
   (match ty
+    [(? VoiT?) "void"]
     [(IntT signed? bits)
      (list* (if signed? "" "u") "int" (~a bits) "_t")]
     [(FloT bits)
@@ -168,7 +169,7 @@
      ;; variable (this function will be called from outside compile-fun).
      (list* (compile-type ty)
             (and ref-vars (set-member? ref-vars x) "*"))]
-    [(ArrT dim ety)
+    [(or (? ArrT?) (? VoiT?))
      (compile-type ty)]
     [(or (? RecT?) (? UniT?) (? ArrT?))
      (list* (compile-type ty) "*")]))
@@ -437,7 +438,10 @@
             [(? Expr?) (compile-expr ρ var)]))
         ", "))
      (define x* (cify x))
-     (define call-ast (compile-decl ty x* (list* fun-name "(" args-ast ")")))
+     (define invoke-ast (list* fun-name "(" args-ast ")"))
+     (define call-ast
+       (cond [(VoiT? ty) (list* invoke-ast ";")]
+             [else (compile-decl ty x* invoke-ast)]))
      (define body-ast (compile-stmt γ (hash-set ρ x x*) bs))
      (list* call-ast ind-nl
             body-ast)]))

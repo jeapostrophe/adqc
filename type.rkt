@@ -134,8 +134,14 @@
   (match p
     [(MetaP (? type-info? ti) _) ti]
     [(MetaP _ p) (path-type-info p)]
-    [(Var x ty) (type-info (hash x ty) ty)]
-    [(Global ty _) (type-info (hash) ty)]
+    [(Var x ty)
+     (when (VoiT? ty)
+       (report "Var: cannot reference variable '~a' of type Void" x))
+     (type-info (hash x ty) ty)]
+    [(Global ty _)
+     (when (VoiT? ty)
+       (report "Global: cannot reference global of type Void"))
+     (type-info (hash) ty)]
     [(ExtVar _ name ty)
      (define x (string->symbol name))
      (type-info (hash x ty) ty)]
@@ -203,6 +209,8 @@
      (env-info (env-union p-env body-env))]
     [(Let/ec _ body) (rec body)]
     [(Let x ty xi bs)
+     (when (VoiT? ty)
+       (report "Let: declaration '~a' has type of Void, which is disallowed" x))
      (check-init-type s ty xi)
      (match-define (env-info bs-env) (rec bs))
      (define bs-x-ty (hash-ref bs-env x ty))

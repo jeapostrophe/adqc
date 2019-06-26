@@ -111,6 +111,15 @@
 (struct RecT Type (field->ty field->c c-order) #:transparent)
 (struct UniT Type (mode->ty mode->c) #:transparent)
 (struct ExtT Type (src name) #:transparent)
+;; Void return type still WIP
+;; XXX How to handle return variable for void function getting declared
+;; as void? (Currently crashes because using Let to create a void variable
+;; is disallowed.)
+;; XXX How to handle '(return)' syntax for void functions? Maybe have
+;; current-return-type so that return can know when it's being called from
+;; a void function (and thus (return) syntax is valid, but (return e)
+;; is invalid).
+(struct VoiT Type () #:transparent)
 
 (provide
  (contract-out
@@ -124,7 +133,8 @@
                 [c-order (listof symbol?)])]
   [struct UniT ([mode->ty (hash/c symbol? Type?)]
                 [mode->c (hash/c symbol? c-identifier-string?)])]
-  [struct ExtT ([src ExternSrc?] [name string?])]))
+  [struct ExtT ([src ExternSrc?] [name string?])]
+  [struct VoiT ()]))
 
 ;; Path
 (struct Path () #:transparent)
