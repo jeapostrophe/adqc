@@ -17,14 +17,14 @@
 
 (define-global score : U32 := (U32 0))
 
-(define-fun (make-board [b : Board] [r1 : Row] [r2 : Row] [r3 : Row] [r4 : Row]) : S32
+(define-fun S32 make-board ([Board b] [Row r1] [Row r2] [Row r3] [Row r4])
   (set! (b @ 0) r1)
   (set! (b @ 1) r2)
   (set! (b @ 2) r3)
   (set! (b @ 3) r4)
   (return 0))
 
-(define-fun (find-target [r : Row] [x : U8] [stop : U8]) : U8
+(define-fun U8 find-target ([Row r] [U8 x] [U8 stop])
   ;; If the position is already on the first, don't evaluate
   (when (zero? x)
     (return x))
@@ -41,7 +41,7 @@
   ;; we did not find a
   (return x))
 
-(define-fun (slide-array [r : Row]) : U8
+(define-fun U8 slide-array ([Row r])
   (define success := (U8 0))
   (define stop := (U8 0))
   (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
@@ -64,7 +64,7 @@
         (set! success 1))))
   (return success))
 
-(define-fun (rotate-board [board : Board]) : S32
+(define-fun S32 rotate-board ([Board board])
   ;; XXX This var really only exists because it's awkward to embed
   ;; SIZE in the individual expressions - SIZE is interpreted as an S8,
   ;; which is incompatible with U8, so it would require typing (U8 SIZE)
@@ -84,14 +84,14 @@
       (set! (board @ (sub1 (- n j)) @ i) tmp)))
   (return 0))
 
-(define-fun (move-up [board : Board]) : U8
+(define-fun U8 move-up ([Board board])
   (define success := (U8 0))
   (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
     (define sa-result := (slide-array (board @ x)))
     (set! success (bitwise-ior success sa-result)))
   (return success))
 
-(define-fun (move-left [board : Board]) : U8
+(define-fun U8 move-left ([Board board])
   (define void1 := (rotate-board board))
   (define success := (move-up board))
   (define void2 := (rotate-board board))
@@ -99,7 +99,7 @@
   (define void4 := (rotate-board board))
   (return success))
 
-(define-fun (move-down [board : Board]) : U8
+(define-fun U8 move-down ([Board board])
   (define void1 := (rotate-board board))
   (define void2 := (rotate-board board))
   (define success := (move-up board))
@@ -107,7 +107,7 @@
   (define void4 := (rotate-board board))
   (return success))
 
-(define-fun (move-right [board : Board]) : U8
+(define-fun U8 move-right ([Board board])
   (define void1 := (rotate-board board))
   (define void2 := (rotate-board board))
   (define void3 := (rotate-board board))
@@ -115,7 +115,7 @@
   (define void4 := (rotate-board board))
   (return success))
 
-(define-fun (find-pair-down [board : Board]) : U8
+(define-fun U8 find-pair-down ([Board board])
   (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
     (for ([y := (U8 0)] (< y (U8 SIZE)) (+=1 y))
       (when (= (board @ x @ y) (board @ x @ (add1 y)))
@@ -124,7 +124,7 @@
 
 ;; The U8 here is a number, not a bool
 ;; XXX Maybe support boolean type so this is less confusing? stdbool?
-(define-fun (count-empty [board : Board]) : U8
+(define-fun U8 count-empty ([Board board])
   (define count := (U8 0))
   (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
     (for ([y := (U8 0)] (< y (U8 SIZE)) (+=1 y))
@@ -135,7 +135,7 @@
 ;; XXX This is currently not working? Game currently won't detect game over
 ;; correctly (just gets locked up with none of the arrow keys doing anything).
 ;; Might be because of this, or because of bug in 2048.c.
-(define-fun (game-ended [board : Board]) : U8
+(define-fun U8 game-ended ([Board board])
   ;; XXX Awkward because no ANF. Need can't put function call inside
   ;; predicate, so we need 2 conditional statements instead of an 'or'
   (define num-empty := (count-empty board))
@@ -156,7 +156,7 @@
 
 ;; XXX There seems to be a bug with this where, under certain circumstances,
 ;; new blocks will not be generated when the user moves up/down.
-(define-fun (add-random [board : Board]) : S32
+(define-fun S32 add-random ([Board board])
   (define x : U8 := 0)
   (define y : U8 := 0)
   (define r : U8)
@@ -190,7 +190,7 @@
     (set! (board @ x @ y) n))
   (return 0))
 
-(define-fun (init-board [board : Board]) : S32
+(define-fun S32 init-board ([Board board])
   (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
     (for ([y := (U8 0)] (< y (U8 SIZE)) (+=1 y))
       (set! (board @ x @ y) 0)))
@@ -200,7 +200,7 @@
   (set! score 0)
   (return 0))
 
-(define-fun (step [board : Board] [c : S8]) : U8
+(define-fun U8 step ([Board board] [S8 c])
   (define success : U8)
   ;; This is another example of the difference between S-cond and E-cond
   ;; being annoying. We can't just say '(define success := (cond ...))'
@@ -255,6 +255,6 @@
   (unless (system* cc "-Wall" "-Werror" "-o" 2048-exe-path 2048-c-path o-path)
     (delete-file c-path)
     (delete-file o-path)
-    (error "call to cc failed (see stderr)"))
+    (error "call to cc failed (see stderr)"))    
   (delete-file c-path)
   (delete-file o-path))

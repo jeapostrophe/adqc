@@ -937,6 +937,12 @@
            (define-syntax x
              (F-expander (syntax-parser [_ #'the-fun])))
            (include-fun #:maybe n x)))]
+      ;; XXX Remove old-style syntax, support '#:as' in new style.
+      ;; XXX Change 'F' to use new style syntax. Thinking something like:
+      ;; (F ret-ty ([arg-ty arg-x] ...) body ...)
+      [(_ ret-ty x:id ([arg-ty arg-x:id] ...) body ...+)
+       (syntax/loc stx
+         (define-fun (x [arg-x : arg-ty] ...) : ret-ty body ...))]
       [(_ x:id . more)
        (quasisyntax/loc stx
          (define-fun x #:as (symbol->c-name 'x) . more))]
@@ -944,6 +950,7 @@
        (quasisyntax/loc stx
          (define-fun x . #,(syntax/loc #'args (args . more))))])))
 
+;; XXX Change this to use new-style syntax
 (define-syntax (define-extern-fun stx)
   (with-disappeared-uses
     (syntax-parse stx
