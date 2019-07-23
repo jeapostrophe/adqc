@@ -154,39 +154,23 @@
 
 (define-extern-fun rand () : S32 #:src (ExternSrc '() '("stdlib.h")))
 
-;; XXX There seems to be a bug with this where, under certain circumstances,
-;; new blocks will not be generated when the user moves up/down.
 (define-fun S32 add-random ([Board board])
-  (define x : U8 := 0)
-  (define y : U8 := 0)
-  (define r : U8)
-  (define len : U8 := 0)
-  (define n : U8)
-  ;; XXX In the original code, this lst1 and lst2 are just lst[SIZE*SIZE][2]
-  ;; Right now multi-dimensional arrays are painful to make - fix this.
-  (define lst1 : (array (* SIZE SIZE) U8))
-  (define lst2 : (array (* SIZE SIZE) U8))
-  ;; XXX In the original code there's a static variable checking for initialized...
-  ;; Is this necessary? It just calls srand, ideally you should only need to do
-  ;; that once in main for a program like this, right?
-  ;; XXX 'for' syntax for when you don't want the iteration variable
-  ;; to be scoped to the loop?
-  (while (< x (U8 SIZE))
-    (while (< y (U8 SIZE))
+  (define x-lst : (array (* SIZE SIZE) U8))
+  (define y-lst : (array (* SIZE SIZE) U8))
+  (define len := (U8 0))
+  (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
+    (for ([y := (U8 0)] (< y (U8 SIZE)) (+=1 y))
       (when (zero? (board @ x @ y))
-        (set! (lst1 @ len) x)
-        (set! (lst2 @ len) y)
-        (+=1 len))
-      (+=1 y))
-    (+=1 x))
-  (when (> len (U8 0))
-    ;; XXX This is super ugly, and will continue to be until we have ANF
+        (set! (x-lst @ len) x)
+        (set! (y-lst @ len) y)
+        (+=1 len))))
+  (unless (zero? len)
     (define rand-ret-1 := (rand))
-    (set! r (% (rand-ret-1 : U8) len))
-    (set! x (lst1 @ r))
-    (set! y (lst2 @ r))
+    (define r := (% (rand-ret-1 : U8) len))
+    (define x := (x-lst @ r))
+    (define y := (y-lst @ r))
     (define rand-ret-2 := (rand))
-    (set! n (add1 (/ (% (rand-ret-2 : U8) 10) 9)))
+    (define n : U8 := (add1 (/ (% (rand-ret-2 : U8) 10) 9)))
     (set! (board @ x @ y) n))
   (return 0))
 
