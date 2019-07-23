@@ -117,7 +117,7 @@
 
 (define-fun U8 find-pair-down ([Board board])
   (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
-    (for ([y := (U8 0)] (< y (U8 SIZE)) (+=1 y))
+    (for ([y := (U8 0)] (< y (sub1 (U8 SIZE))) (+=1 y))
       (when (= (board @ x @ y) (board @ x @ (add1 y)))
         (return 1))))
   (return 0))
@@ -132,9 +132,6 @@
         (+=1 count))))
   (return count))
 
-;; XXX This is currently not working? Game currently won't detect game over
-;; correctly (just gets locked up with none of the arrow keys doing anything).
-;; Might be because of this, or because of bug in 2048.c.
 (define-fun U8 game-ended ([Board board])
   ;; XXX Awkward because no ANF. Need can't put function call inside
   ;; predicate, so we need 2 conditional statements instead of an 'or'
