@@ -753,6 +753,93 @@
      (syntax/loc this-syntax
        (S (begin (set! current-return-var e) (return))))]))
 
+(define (snoc l x) (append l (list x)))
+
+(define-syntax (ANF stx)
+  (with-disappeared-uses
+    (syntax-parse stx
+      ;; XXX void error define set! if let/ec while return unsyntax-splicing(?)
+      #:literals (begin let unsyntax)
+      [(_ (begin e))
+       (syntax/loc stx (ANF e))]
+      ;; XXX How to handle begin? Maybe we should have an 'anf-in-tail'
+      ;; parameter so we can treat ANF expressions not in the tail position
+      ;; as stmts, and ANF expressions in the tail position as exprs (which
+      ;; we wrap in a return stmt).
+      #;
+      [(_ (begin e . more))
+       (syntax/loc stx
+         (void) #;???)]
+      [(_ (let ([x:id (~datum :) xty (~datum :=) xe]) body))
+       #:with x-id (generate-temporary #'x)
+       (record-disappeared-uses #'let)
+       (syntax/loc stx
+         (let* ([x-id 'x-id]
+                [the-ty (T ty)]
+                [the-x-ref (Var x-id the-ty)])
+           (define-values (xe-nv xe-arg) (ANF xe))
+           (define-values (body-nv body-arg)
+             (let-syntax ([x (P-expander (syntax-parser [_ #'the-x-ref]))])
+               (ANF body)))
+           (values (append xe-nv (cons (list the-x-ref 'let xe-arg) body-nv))
+                   body-arg)))]
+      ;; XXX Different behavior for unsyntax when not in tail?
+      [(_ (unsyntax e))
+       (record-disappeared-uses #'unsyntax)
+       (syntax/loc stx
+         (values '() e))]
+      [(_ (op arg ...))
+       #:with new-x (generate-temporary)
+       #:with arg-nvs (generate-temporaries #'(arg ...))
+       #:with arg-args (generate-temporaries #'(arg ...))
+       (syntax/loc stx
+         (let-values ([(arg-nvs arg-args) (ANF arg)] ...)
+           (define new-expr (E (op #,arg-args ...)))
+           (define new-x-id 'new-x)
+           (define new-x-ty (expr-type new-expr))
+           (define the-new-x-ref (Var new-x-id new-x-ty))
+           (values (snoc (append arg-nvs ...)
+                         (list the-new-x-ref 'let new-expr))
+                   (Read the-new-x-ref))))]
+      ;; XXX Similar to above, but for F expanders
+
+      ;; XXX How to deal with primitives? (S32 5), (F64 2.3), etc.
+      ;; Right now the primitve constructors are implemented as
+      ;; E-free-syntax, so we can't tell the difference between a
+      ;; primitve and a macro evocation. Simplest thing would be
+      ;; to let macro-evocation case pull apart the syntax for the
+      ;; primitive constructor and  return the racket number itself
+      ;; as the 'arg' to the constructor.
+      ;; This might cause an issue because normally we return a
+      ;; 'Read' Expr as an arg, which we unsyntax when reconstructing
+      ;; the outer expression. We would need to detect the case where
+      ;; the argument is a racket number and not unsyntax it.
+      ;; Alternatively, enumerate the identifiers used for primitve
+      ;; constructors and let them pass through unchanged?
+      [(_ n:number)
+       (syntax/loc stx
+         (values '() n))]
+      [(_ x:id)
+       (syntax/loc stx
+         (values '() x))]
+      ;; XXX Do we need a base case for this?
+      )))
+
+(define (ANF-let nvs arg)
+  (match nvs
+    ;; XXX We need to make it so this 'arg' is a return stmt
+    ;; (I think this should be done at syntax time ?)
+    ['() arg]
+    [(cons (list nv 'let e) more)
+     (match-define (Var nv-x nv-ty) nv)
+     (Let nv-x nv-ty (ConI e) (ANF-let more arg))]
+    ;; XXX Case for 'call
+    ))
+
+(define-simple-macro (S+ e)
+  (let-values ([(nvs arg) (ANF e)])
+    (ANF-let nvs arg)))
+  
 (begin-for-syntax
   (define-syntax-class Farg
     #:attributes (x ref var arg)
