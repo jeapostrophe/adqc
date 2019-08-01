@@ -164,6 +164,7 @@
            (freenum (Int (not unsigned?) bits n))])]))
 
 (define-syntax-parameter expect-ty #f)
+(define-syntax-parameter ANF-form? #f)
 
 (define-syntax (N stx)
   (syntax-parse stx
@@ -217,6 +218,11 @@
         [else (BinOp op the-lhs the-rhs)]))
 
 (define-syntax (E stx)
+  ;; XXX Probably not the best way to do this, since the case where
+  ;; E calls ANF instead of itself will produce multiple values.
+  ;; Instead have a case that detects when ANF-form? is #t, and pulls
+  ;; apart the aguments and forwards them to ANF?
+  (define E* (if (syntax-parameter-value #'ANF-form?) #'ANF #'E))
   (with-disappeared-uses
     (syntax-parse stx
       #:literals (if let unsyntax)
@@ -755,86 +761,81 @@
 
 (define (snoc l x) (append l (list x)))
 
+(begin-for-syntax
+  (define-literal-set primitive-Es
+    #:datum-literals (U8 U16 U32 U64 S8 S16 S32 S64 F32 F64) ())
+  (define primitive-E? (literal-set->predicate primitive-Es)))
+
+(struct let-info (x ty arg) #:transparent)
+(struct call-info (x ty f args) #:transparent)
+
 (define-syntax (ANF stx)
   (with-disappeared-uses
     (syntax-parse stx
-      ;; XXX void error define set! if let/ec while return unsyntax-splicing(?)
-      #:literals (begin let unsyntax)
-      [(_ (begin e))
-       (syntax/loc stx (ANF e))]
-      ;; XXX How to handle begin? Maybe we should have an 'anf-in-tail'
-      ;; parameter so we can treat ANF expressions not in the tail position
-      ;; as stmts, and ANF expressions in the tail position as exprs (which
-      ;; we wrap in a return stmt).
-      #;
-      [(_ (begin e . more))
+      #:literals (void error begin define set! if let/ec while let unsyntax)
+      [(_ (begin a))
+       (record-disappeared-uses #'begin)
+       (syntax/loc stx (ANF a))]
+      [(_ (begin a . as))
+       (record-disappeared-uses #'begin)
        (syntax/loc stx
-         (void) #;???)]
-      [(_ (let ([x:id (~datum :) xty (~datum :=) xe]) body))
+         (let-values ([(a-nv a-arg) (ANF a)]
+                      [(as-nv as-arg) (ANF (begin . as))])
+           (values (append a-nv as-nv) as-arg)))]
+      ;; XXX support multiple arg decls, body stmts
+      [(_ (let ([x:id xe]) body))
        #:with x-id (generate-temporary #'x)
        (record-disappeared-uses #'let)
        (syntax/loc stx
-         (let* ([x-id 'x-id]
-                [the-ty (T ty)]
-                [the-x-ref (Var x-id the-ty)])
+         (let ([x-id 'x-id])
            (define-values (xe-nv xe-arg) (ANF xe))
+           (define the-ty (expr-type xe-arg))
+           (define the-x-ref (Var x-id the-ty))
            (define-values (body-nv body-arg)
              (let-syntax ([x (P-expander (syntax-parser [_ #'the-x-ref]))])
                (ANF body)))
-           (values (append xe-nv (cons (list the-x-ref 'let xe-arg) body-nv))
+           (values (append xe-nv (cons (let-info x-id the-ty xe-arg) body-nv))
                    body-arg)))]
-      ;; XXX Different behavior for unsyntax when not in tail?
-      [(_ (unsyntax e))
-       (record-disappeared-uses #'unsyntax)
-       (syntax/loc stx
-         (values '() e))]
-      [(_ (op arg ...))
+      #;
+      [(_ (fn as ...))
+       #:declare fn (static F-expander? "F expander")
        #:with new-x (generate-temporary)
-       #:with arg-nvs (generate-temporaries #'(arg ...))
-       #:with arg-args (generate-temporaries #'(arg ...))
+       #:with as-nv (generate-temporaries #'(as ...))
+       #:with as-arg (generate-temporaries #'(as ...))
        (syntax/loc stx
-         (let-values ([(arg-nvs arg-args) (ANF arg)] ...)
-           (define new-expr (E (op #,arg-args ...)))
+         ;; XXX This fails, saying too many ellipses?
+         (let-values ([(as-nv as-arg) (ANF as)] ...)
            (define new-x-id 'new-x)
-           (define new-x-ty (expr-type new-expr))
+           (define new-x-ty (fun-type fn))
            (define the-new-x-ref (Var new-x-id new-x-ty))
-           (values (snoc (append arg-nvs ...)
-                         (list the-new-x-ref 'let new-expr))
+           (values (snoc (append as-nv ...)
+                         (call-info new-x-id new-x-ty fn (list as-arg ...)))
                    (Read the-new-x-ref))))]
-      ;; XXX Similar to above, but for F expanders
-
-      ;; XXX How to deal with primitives? (S32 5), (F64 2.3), etc.
-      ;; Right now the primitve constructors are implemented as
-      ;; E-free-syntax, so we can't tell the difference between a
-      ;; primitve and a macro evocation. Simplest thing would be
-      ;; to let macro-evocation case pull apart the syntax for the
-      ;; primitive constructor and  return the racket number itself
-      ;; as the 'arg' to the constructor.
-      ;; This might cause an issue because normally we return a
-      ;; 'Read' Expr as an arg, which we unsyntax when reconstructing
-      ;; the outer expression. We would need to detect the case where
-      ;; the argument is a racket number and not unsyntax it.
-      ;; Alternatively, enumerate the identifiers used for primitve
-      ;; constructors and let them pass through unchanged?
-      [(_ n:number)
+      [(_ (~and e-use (e-id:id . _)))
+       #:when (primitive-E? #'e-id)
        (syntax/loc stx
-         (values '() n))]
-      [(_ x:id)
+         (syntax-parameterize ([ANF-form? #f])
+           (E e-use)))]
+      [(_ e ~!)
+       ;; XXX Syntax parameterize so E will return control back to ANF
        (syntax/loc stx
-         (values '() x))]
-      ;; XXX Do we need a base case for this?
-      )))
+         (syntax-parameterize ([ANF-form? #t])
+           (E e)))])))
 
 (define (ANF-let nvs arg)
   (match nvs
-    ;; XXX We need to make it so this 'arg' is a return stmt
-    ;; (I think this should be done at syntax time ?)
-    ['() arg]
-    [(cons (list nv 'let e) more)
-     (match-define (Var nv-x nv-ty) nv)
-     (Let nv-x nv-ty (ConI e) (ANF-let more arg))]
-    ;; XXX Case for 'call
-    ))
+    ;; XXX Right now assuming arg is Expr, might change to Var later
+    ;; and have to insert Reads where approriate
+    ;; XXX Can't use 'return' here, as it's illegal outside of 'F'
+    ;; I'm don't think we can just pass '#,arg' directly to 'S', though,
+    ;; as it will be caught by the 'unsyntax' case of 'S' and not the
+    ;; default case that forwards the syntax to 'return'.
+    #;
+    ['() (S (return #,arg))]
+    [(cons (let-info x ty e) more)
+     (Let x ty (ConI e) (ANF-let more arg))]
+    [(cons (call-info x ty f es) more)
+     (Call x ty f es (ANF-let more arg))]))
 
 (define-simple-macro (S+ e)
   (let-values ([(nvs arg) (ANF e)])
