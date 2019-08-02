@@ -149,7 +149,7 @@
   (define void4 := (rotate-board board))
   (return ended))
 
-(define-extern-fun rand () : S32 #:src (ExternSrc '() '("stdlib.h")))
+(define-extern-fun S32 rand () #:src (ExternSrc '() '("stdlib.h")))
 
 (define-fun S32 add-random ([Board board])
   (define x-lst : (array (* SIZE SIZE) U8))

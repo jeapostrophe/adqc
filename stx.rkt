@@ -852,7 +852,17 @@
       x:id (~datum :) ty)
      #:attr ref (generate-temporary #'x)
      #:attr var (syntax/loc this-syntax (Var 'ref (T ty)))
-     #:attr arg (syntax/loc this-syntax (Arg (Var-x ref) (Var-ty ref) mode))])
+     #:attr arg (syntax/loc this-syntax (Arg (Var-x ref) (Var-ty ref) mode))]
+    ;; XXX Delete old syntax when everything is migrated over
+    [pattern
+     ((~optional (~or (~and #:copy (~bind [mode #''copy]))
+                      (~and #:ref (~bind [mode #''ref])))
+                 #:defaults ([mode #''read-only]))
+      ty x:id)
+     #:attr ref (generate-temporary #'x)
+     #:attr var (syntax/loc this-syntax (Var 'ref (T ty)))
+     #:attr arg (syntax/loc this-syntax (Arg (Var-x ref) (Var-ty ref) mode))]
+    )
   (define-syntax-class Fret
     #:attributes (x ref var)
     #:description "function return"
@@ -1038,23 +1048,19 @@
        (quasisyntax/loc stx
          (define-fun x . #,(syntax/loc #'args (args . more))))])))
 
-;; XXX Change this to use new-style syntax
 (define-syntax (define-extern-fun stx)
   (with-disappeared-uses
     (syntax-parse stx
-      [(_ x:id
+      [(_ ret-ty x:id
           (~optional (~seq #:name name:expr)
                      #:defaults ([name #'(symbol->c-name 'x)]))
-          (a:Farg ...)
-          (~datum :) ret-ty
-          #:src es:expr)
+          (a:Farg ...) #:src es:expr)
        (syntax/loc stx
          (begin
            (define the-fun
              (ExtFun es (let ([a.ref a.var] ...) (list a.arg ...))
                      (T ret-ty) name))
-           (define-syntax x
-             (F-expander (syntax-parser [_ #'the-fun])))))])))
+           (define-syntax x (F-expander (syntax-parser [_ #'the-fun])))))])))
 
 (define-syntax (define-global stx)
   (with-disappeared-uses
@@ -1174,8 +1180,8 @@
 (define-runtime-path util-path "util.h")
 (define util-h (ExternSrc '() (list (path->string util-path))))
 (define-extern-type char*)
-(define-extern-fun c-print-string #:name "print_string"
-  ([str : char*] [n : S32]) : S32 #:src util-h)
+(define-extern-fun S32 c-print-string #:name "print_string"
+  ([char* str] [S32 n]) #:src util-h)
 
 (define (print-string s)
   (define bs (string->bytes/utf-8 s))

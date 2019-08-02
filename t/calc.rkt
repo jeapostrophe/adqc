@@ -6,7 +6,7 @@
 (define-simple-macro (C c)
   (E (U8 (char->integer c))))
 
-(define-fun (main [n1 : S32] [op : U8] [n2 : S32]) : S32
+(define-fun S32 main ([S32 n1] [U8 op] [S32 n2])
   (define result : S32 :=
        (cond [(= op #,(C #\+)) (+ n1 n2)]
              [(= op #,(C #\-)) (- n1 n2)]
