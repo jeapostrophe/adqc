@@ -164,7 +164,6 @@
            (freenum (Int (not unsigned?) bits n))])]))
 
 (define-syntax-parameter expect-ty #f)
-(define-syntax-parameter ANF-form? #f)
 
 (define-syntax (N stx)
   (syntax-parse stx
@@ -218,11 +217,6 @@
         [else (BinOp op the-lhs the-rhs)]))
 
 (define-syntax (E stx)
-  ;; XXX Probably not the best way to do this, since the case where
-  ;; E calls ANF instead of itself will produce multiple values.
-  ;; Instead have a case that detects when ANF-form? is #t, and pulls
-  ;; apart the aguments and forwards them to ANF?
-  (define E* (if (syntax-parameter-value #'ANF-form?) #'ANF #'E))
   (with-disappeared-uses
     (syntax-parse stx
       #:literals (if let unsyntax)
@@ -796,14 +790,12 @@
                (ANF body)))
            (values (append xe-nv (cons (let-info x-id the-ty xe-arg) body-nv))
                    body-arg)))]
-      #;
       [(_ (fn as ...))
        #:declare fn (static F-expander? "F expander")
        #:with new-x (generate-temporary)
-       #:with as-nv (generate-temporaries #'(as ...))
-       #:with as-arg (generate-temporaries #'(as ...))
+       #:with (as-nv ...) (generate-temporaries #'(as ...))
+       #:with (as-arg ...) (generate-temporaries #'(as ...))
        (syntax/loc stx
-         ;; XXX This fails, saying too many ellipses?
          (let-values ([(as-nv as-arg) (ANF as)] ...)
            (define new-x-id 'new-x)
            (define new-x-ty (fun-type fn))
@@ -813,14 +805,11 @@
                    (Read the-new-x-ref))))]
       [(_ (~and e-use (e-id:id . _)))
        #:when (primitive-E? #'e-id)
-       (syntax/loc stx
-         (syntax-parameterize ([ANF-form? #f])
-           (E e-use)))]
+       (syntax/loc stx (E e-use))]
+      ;; XXX Case for non-primitive E
+      ;; XXX Need ~! for this case?
       [(_ e ~!)
-       ;; XXX Syntax parameterize so E will return control back to ANF
-       (syntax/loc stx
-         (syntax-parameterize ([ANF-form? #t])
-           (E e)))])))
+       (syntax/loc stx (E e))])))
 
 (define (ANF-let nvs arg)
   (match nvs
