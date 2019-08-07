@@ -864,6 +864,9 @@
      #:attr x (generate-temporary #'ty)
      #:attr ref (generate-temporary #'x)
      #:attr var (syntax/loc this-syntax (Var 'ref (T ty)))]))
+
+(define-syntax-parameter F-body-default (make-rename-transformer #'S))
+
 (define-syntax (F stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -906,14 +909,18 @@
                                        ([current-return
                                          (make-rename-transformer #'the-ret)]
                                         [S-in-tail? #t])
-                                     ;; XXX Use ANF here
-                                     (S (begin . bs))))))))])
+                                     ;; XXX Make ANF the default here
+                                     (F-body-default (begin . bs))))))))])
                (MetaFun
                 ;; XXX use struct
                 (vector 'fun-invariants (E pre) the-post)
                 (IntFun (list a.arg ...)
                         (Var-x r.ref) (Var-ty r.ref)
                         ret-lab-id the-body))))))])))
+
+(define-simple-macro (F+ . more)
+  (syntax-parameterize ([F-body-default (make-rename-transformer #'S+)])
+    (F . more)))
 
 (begin-for-syntax
   (struct T/I-expander (T-impl I-impl)
