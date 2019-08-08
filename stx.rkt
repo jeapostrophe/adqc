@@ -795,6 +795,7 @@
        #:with new-x (generate-temporary)
        #:with (as-nv ...) (generate-temporaries #'(as ...))
        #:with (as-arg ...) (generate-temporaries #'(as ...))
+       (record-disappeared-uses #'fn)
        (syntax/loc stx
          (let-values ([(as-nv as-arg) (ANF as)] ...)
            (define new-x-id 'new-x)
@@ -805,11 +806,26 @@
                    (Read the-new-x-ref))))]
       [(_ (~and e-use (e-id:id . _)))
        #:when (primitive-E? #'e-id)
-       (syntax/loc stx (E e-use))]
-      ;; XXX Case for non-primitive E
-      ;; XXX Need ~! for this case?
-      [(_ e ~!)
-       (syntax/loc stx (E e))])))
+       (record-disappeared-uses #'e-id)
+       (syntax/loc stx (values '() (E e-use)))]
+      ;; XXX Are we sure we want to pull apart E macros and pass their
+      ;; arguments to ANF? There's no rule that says that the arguments
+      ;; to a macro needs to be a valid construction in that form (for example
+      ;; 'print' can take a Racket string as an argument, which isn't an S-like
+      ;; thing even though 'print' is an S expander). Maybe for this we want
+      ;; an A-expander form so that A macros can be smart about what arguments
+      ;; they forward to ANF?
+      [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
+       #:when (dict-has-key? E-free-macros #'macro-id)
+       (record-disappeared-uses #'macro-id)
+       (quasisyntax/loc stx
+         (values '() #,((dict-ref E-free-macros #'macro-id) #'macro-use)))]
+      [(_ (~and macro-use (~or macro-id (macro-id . _))))
+       #:declare macro-id (static E-expander "E expander")
+       (record-disappeared-uses #'macro-id)
+       (quasisyntax/loc stx
+         (values '() #,(E-expand (attribute macro-id.value) #'macro-use)))])))
+         
 
 (define (ANF-let nvs arg)
   (match nvs
@@ -822,6 +838,7 @@
     #;
     ['() (S (return #,arg))]
     [(cons (let-info x ty e) more)
+     ;; XXX Probably wrong to use ConI here
      (Let x ty (ConI e) (ANF-let more arg))]
     [(cons (call-info x ty f es) more)
      (Call x ty f es (ANF-let more arg))]))
