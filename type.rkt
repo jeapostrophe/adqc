@@ -301,7 +301,7 @@
          (report
           "IntFun: argument ~a declared as type ~v but referenced as type ~v in body"
           i ty body-x-ty)))
-     (type-info ret-ty env)]
+     (type-info env ret-ty)]
     ;; XXX Should we somehow be tracking ExtFun declarations and making sure
     ;; that all ExtFuns which share 'name' are really equal?
     [(ExtFun _ _ ret-ty _) (type-info (hasheq) ret-ty)]))
