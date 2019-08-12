@@ -27,6 +27,8 @@
 
 ;; XXX Use remix for #%dot and #%braces
 
+(define (snoc l x) (append l (list x)))
+
 (define-syntax (define-expanders&macros stx)
   (syntax-parse stx
     [(_ S-free-macros define-S-free-syntax
@@ -753,14 +755,11 @@
      (syntax/loc this-syntax
        (S (begin (set! current-return-var e) (return))))]))
 
-(define (snoc l x) (append l (list x)))
+(define-expanders&macros
+  A-free-macros define-A-free-syntax
+  A-expander A-expand define-A-expander)
 
-(begin-for-syntax
-  (define-literal-set primitive-Es
-    #:datum-literals (U8 U16 U32 U64 S8 S16 S32 S64 F32 F64) ())
-  (define primitive-E? (literal-set->predicate primitive-Es)))
-
-(struct let-info (x ty arg) #:transparent)
+(struct let-info (x ty xi) #:transparent)
 (struct call-info (x ty f args) #:transparent)
 
 (define-syntax (ANF stx)
@@ -788,11 +787,12 @@
            (define-values (body-nv body-arg)
              (let-syntax ([x (P-expander (syntax-parser [_ #'the-x-ref]))])
                (ANF body)))
-           (values (append xe-nv (cons (let-info x-id the-ty xe-arg) body-nv))
+           ;; XXX Probably wrong to use ConI here.
+           (values (append xe-nv (cons (let-info x-id the-ty (ConI xe-arg)) body-nv))
                    body-arg)))]
       [(_ (fn as ...))
        #:declare fn (static F-expander? "F expander")
-       #:with new-x (generate-temporary)
+       #:with new-x (generate-temporary #'fn)
        #:with (as-nv ...) (generate-temporaries #'(as ...))
        #:with (as-arg ...) (generate-temporaries #'(as ...))
        (record-disappeared-uses #'fn)
@@ -804,48 +804,49 @@
            (values (snoc (append as-nv ...)
                          (call-info new-x-id new-x-ty fn (list as-arg ...)))
                    (Read the-new-x-ref))))]
-      [(_ (~and e-use (e-id:id . _)))
-       #:when (primitive-E? #'e-id)
-       (record-disappeared-uses #'e-id)
-       (syntax/loc stx (values '() (E e-use)))]
-      ;; XXX Are we sure we want to pull apart E macros and pass their
-      ;; arguments to ANF? There's no rule that says that the arguments
-      ;; to a macro needs to be a valid construction in that form (for example
-      ;; 'print' can take a Racket string as an argument, which isn't an S-like
-      ;; thing even though 'print' is an S expander). Maybe for this we want
-      ;; an A-expander form so that A macros can be smart about what arguments
-      ;; they forward to ANF?
+      [(_ (ty as ...))
+       #:declare ty (static (and/c T-expander? I-expander) "T/I expander")
+       #:with new-x (generate-temporary #'ty)
+       #:with (as-nv ...) (generate-temporaries #'(as ...))
+       #:with (as-arg ...) (generate-temporaries #'(as ...))
+       (record-disappeared-uses #'ty)
+       (syntax/loc stx
+         (let-values ([(as-nv as-arg) (ANF as)] ...)
+           (define new-x-id 'new-x)
+           (define new-x-ty (T ty))
+           (define the-new-x-ref (Var new-x-id new-x-ty))
+           (values (snoc (append as-nv ...)
+                         ;; XXX Same problem here... This needs to be
+                         ;; ConI to wrap the expression, but the expression
+                         ;; might not actually be constant. 
+                         (let-info new-x-id new-x-ty (I (ty #,(ConI as-arg) ...))))
+                   (Read the-new-x-ref))))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
-       #:when (dict-has-key? E-free-macros #'macro-id)
+       #:when (dict-has-key? A-free-macros #'macro-id)
        (record-disappeared-uses #'macro-id)
-       (quasisyntax/loc stx
-         (values '() #,((dict-ref E-free-macros #'macro-id) #'macro-use)))]
+       ((dict-ref A-free-macros #'macro-id) #'macro-use)]
       [(_ (~and macro-use (~or macro-id (macro-id . _))))
-       #:declare macro-id (static E-expander "E expander")
+       #:declare macro-id (static A-expander? "A expander")
        (record-disappeared-uses #'macro-id)
-       (quasisyntax/loc stx
-         (values '() #,(E-expand (attribute macro-id.value) #'macro-use)))])))
-         
+       (A-expand (attribute macro-id.value) #'macro-use)]
+      [(_ e ~!) (syntax/loc stx (values '() (E e)))])))
 
-(define (ANF-let nvs arg)
+(define (ANF-let ret-fn nvs arg)
+  (define (rec nvs arg) (ANF-let ret-fn nvs arg))
   (match nvs
     ;; XXX Right now assuming arg is Expr, might change to Var later
     ;; and have to insert Reads where approriate
-    ;; XXX Can't use 'return' here, as it's illegal outside of 'F'
-    ;; I'm don't think we can just pass '#,arg' directly to 'S', though,
-    ;; as it will be caught by the 'unsyntax' case of 'S' and not the
-    ;; default case that forwards the syntax to 'return'.
-    #;
-    ['() (S (return #,arg))]
-    [(cons (let-info x ty e) more)
-     ;; XXX Probably wrong to use ConI here
-     (Let x ty (ConI e) (ANF-let more arg))]
+    ['() (ret-fn arg)]
+    [(cons (let-info x ty xi) more)
+     (Let x ty xi (rec more arg))]
     [(cons (call-info x ty f es) more)
-     (Call x ty f es (ANF-let more arg))]))
+     (Call x ty f es (rec more arg))]))
 
 (define-simple-macro (S+ e)
   (let-values ([(nvs arg) (ANF e)])
-    (ANF-let nvs arg)))
+    (define (ret-fn arg)
+      (S (return #,arg)))
+    (ANF-let ret-fn nvs arg)))
   
 (begin-for-syntax
   (define-syntax-class Farg
@@ -867,8 +868,7 @@
       ty x:id)
      #:attr ref (generate-temporary #'x)
      #:attr var (syntax/loc this-syntax (Var 'ref (T ty)))
-     #:attr arg (syntax/loc this-syntax (Arg (Var-x ref) (Var-ty ref) mode))]
-    )
+     #:attr arg (syntax/loc this-syntax (Arg (Var-x ref) (Var-ty ref) mode))])
   (define-syntax-class Fret
     #:attributes (x ref var)
     #:description "function return"
@@ -1061,6 +1061,10 @@
        (quasisyntax/loc stx
          (define-fun x . #,(syntax/loc #'args (args . more))))])))
 
+(define-simple-macro (define-fun+ . more)
+  (syntax-parameterize ([F-body-default (make-rename-transformer #'S+)])
+    (define-fun . more)))
+
 (define-syntax (define-extern-fun stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -1151,7 +1155,7 @@
 (begin-for-syntax
   (define-literal-set def-forms
     #:datum-literals (
-                      define-type define-fun define-global
+                      define-type define-fun define-fun+ define-global
                       define-extern-fun define-extern-type
                       include-fun include-type include-global) ())
   (define def-form? (literal-set->predicate def-forms)))
@@ -1185,7 +1189,7 @@
 
 (provide while assert! return
          define-S-free-syntax define-S-expander
-         define-type define-fun define-global
+         define-type define-fun define-fun+ define-global
          define-extern-fun define-extern-type
          include-fun include-type include-global
          Prog Prog* define-prog define-prog*)
@@ -1306,7 +1310,7 @@
     [(_ es ...)
      (syntax/loc this-syntax (S (print es ... "\n")))]))
 
-(provide T P N E I F S)
+(provide T P N E I F F+ S)
 
 
 ;; XXX Array Slice
