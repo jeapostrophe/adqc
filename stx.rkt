@@ -847,6 +847,33 @@
     (define (ret-fn arg)
       (S (return #,arg)))
     (ANF-let ret-fn nvs arg)))
+
+;; XXX This is set up to be handle variable arguments b/c we eventually
+;; want to support variable arguments for the E versions of these ops.
+(define-syntax (define-A-free-binop stx)
+  (syntax-parse stx
+    [(_ op:id)
+     (syntax/loc stx
+       (define-A-free-syntax op
+         (syntax-parser
+           [(_ as (... ...))
+            #:with new-x (generate-temporary)
+            #:with (as-nv (... ...)) (generate-temporaries #'(as (... ...)))
+            #:with (as-arg (... ...)) (generate-temporaries #'(as (... ...)))
+            ;; XXX Maybe try to pull some of this out to a phase-0 function?
+            (syntax/loc this-syntax
+              (let-values ([(as-nv as-arg) (ANF as)] (... ...))
+                (define new-x-id 'new-x)
+                (define arg-e (E (op #,as-arg (... ...))))
+                (define new-x-ty (expr-type arg-e))
+                (define the-new-x-ref (Var new-x-id new-x-ty))
+                (define xi (ConI arg-e))
+                (values (snoc (append as-nv (... ...))
+                              (let-info new-x-id new-x-ty xi))
+                        (Read the-new-x-ref))))])))]))
+(define-simple-macro (define-A-free-binops op:id ...)
+  (begin (define-A-free-binop op) ...))
+(define-A-free-binops + - * / modulo bitwise-ior bitwise-and bitwise-xor = < <= > >=)
   
 (begin-for-syntax
   (define-syntax-class Farg
