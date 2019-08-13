@@ -759,8 +759,8 @@
   A-free-macros define-A-free-syntax
   A-expander A-expand define-A-expander)
 
-(struct let-info (x ty xi) #:transparent)
-(struct call-info (x ty f args) #:transparent)
+(struct let-info (var xe) #:transparent)
+(struct call-info (x ty f es) #:transparent)
 
 (define-syntax (ANF stx)
   (with-disappeared-uses
@@ -775,20 +775,22 @@
          (let-values ([(a-nv a-arg) (ANF a)]
                       [(as-nv as-arg) (ANF (begin . as))])
            (values (append a-nv as-nv) as-arg)))]
-      ;; XXX support multiple arg decls, body stmts
-      [(_ (let ([x:id xe]) body))
-       #:with x-id (generate-temporary #'x)
+      [(_ (let ([x:id xe] ...) body ...+))
+       #:with (x-id ...) (generate-temporaries #'(x ...))
+       #:with (xe-ty ...) (generate-temporaries #'(x ...))
+       #:with (the-x-ref ...) (generate-temporaries #'(x ...))
+       #:with (xe-nv ...) (generate-temporaries #'(x ...))
+       #:with (xe-arg ...) (generate-temporaries #'(x ...))
        (record-disappeared-uses #'let)
        (syntax/loc stx
-         (let ([x-id 'x-id])
-           (define-values (xe-nv xe-arg) (ANF xe))
-           (define the-ty (expr-type xe-arg))
-           (define the-x-ref (Var x-id the-ty))
+         (let-values ([(xe-nv xe-arg) (ANF xe)] ...)
+           (define x-id 'x-id) ...
+           (define xe-ty (expr-type xe-arg)) ...
+           (define the-x-ref (Var x-id xe-ty)) ...
            (define-values (body-nv body-arg)
-             (let-syntax ([x (P-expander (syntax-parser [_ #'the-x-ref]))])
-               (ANF body)))
-           ;; XXX Probably wrong to use ConI here.
-           (values (append xe-nv (cons (let-info x-id the-ty (ConI xe-arg)) body-nv))
+             (let-syntax ([x (P-expander (syntax-parser [_ #'the-x-ref]))] ...)
+               (ANF (begin body ...))))
+           (values (append xe-nv ... (list* (let-info the-x-ref xe-arg) ... body-nv))
                    body-arg)))]
       [(_ (fn as ...))
        #:declare fn (static F-expander? "F expander")
@@ -804,8 +806,10 @@
            (values (snoc (append as-nv ...)
                          (call-info new-x-id new-x-ty fn (list as-arg ...)))
                    (Read the-new-x-ref))))]
+      ;; XXX Need version of this where the value is constructed from assigns.
+      #;
       [(_ (ty as ...))
-       #:declare ty (static (and/c T-expander? I-expander) "T/I expander")
+       #:declare ty (static (and/c T-expander? I-expander?) "T/I expander")
        #:with new-x (generate-temporary #'ty)
        #:with (as-nv ...) (generate-temporaries #'(as ...))
        #:with (as-arg ...) (generate-temporaries #'(as ...))
@@ -834,11 +838,12 @@
 (define (ANF-let ret-fn nvs arg)
   (define (rec nvs arg) (ANF-let ret-fn nvs arg))
   (match nvs
-    ;; XXX Right now assuming arg is Expr, might change to Var later
-    ;; and have to insert Reads where approriate
     ['() (ret-fn arg)]
-    [(cons (let-info x ty xi) more)
-     (Let x ty xi (rec more arg))]
+    [(cons (let-info var xe) more)
+     (match-define (Var x ty) (unpack-MetaP var))
+     (Let x ty (UndI ty)
+          (Begin (Assign var xe)
+                 (rec more arg)))]
     [(cons (call-info x ty f es) more)
      (Call x ty f es (rec more arg))]))
 
@@ -850,30 +855,74 @@
 
 ;; XXX This is set up to be handle variable arguments b/c we eventually
 ;; want to support variable arguments for the E versions of these ops.
-(define-syntax (define-A-free-binop stx)
-  (syntax-parse stx
-    [(_ op:id)
-     (syntax/loc stx
-       (define-A-free-syntax op
-         (syntax-parser
-           [(_ as (... ...))
-            #:with new-x (generate-temporary)
-            #:with (as-nv (... ...)) (generate-temporaries #'(as (... ...)))
-            #:with (as-arg (... ...)) (generate-temporaries #'(as (... ...)))
-            ;; XXX Maybe try to pull some of this out to a phase-0 function?
-            (syntax/loc this-syntax
-              (let-values ([(as-nv as-arg) (ANF as)] (... ...))
-                (define new-x-id 'new-x)
-                (define arg-e (E (op #,as-arg (... ...))))
-                (define new-x-ty (expr-type arg-e))
-                (define the-new-x-ref (Var new-x-id new-x-ty))
-                (define xi (ConI arg-e))
-                (values (snoc (append as-nv (... ...))
-                              (let-info new-x-id new-x-ty xi))
-                        (Read the-new-x-ref))))])))]))
 (define-simple-macro (define-A-free-binops op:id ...)
-  (begin (define-A-free-binop op) ...))
+  (begin
+    (define-A-free-syntax op
+      (syntax-parser
+        [(_ as (... ...))
+         #:with new-x (generate-temporary)
+         #:with (as-nv (... ...)) (generate-temporaries #'(as (... ...)))
+         #:with (as-arg (... ...)) (generate-temporaries #'(as (... ...)))
+         ;; XXX Maybe try to pull some of this out to a phase-0 function?
+         (syntax/loc this-syntax
+           (let-values ([(as-nv as-arg) (ANF as)] (... ...))
+             (define new-x-id 'new-x)
+             (define arg-e (E (op #,as-arg (... ...))))
+             (define new-x-ty (expr-type arg-e))
+             (define the-new-x-ref (Var new-x-id new-x-ty))
+             (values (snoc (append as-nv (... ...))
+                           (let-info the-new-x-ref arg-e))
+                     (Read the-new-x-ref))))])) ...))
 (define-A-free-binops + - * / modulo bitwise-ior bitwise-and bitwise-xor = < <= > >=)
+
+(begin-for-syntax
+  (struct E/A-expander (E-impl A-impl)
+    #:methods gen:E-expander
+    [(define (E-expand this stx)
+       ((E/A-expander-E-impl this) stx))]
+    #:methods gen:A-expander
+    [(define (A-expand this stx)
+       ((E/A-expander-A-impl this) stx))]))
+(define-simple-macro (define-E/A-expander x:id E-impl A-impl)
+  (define-syntax x (E/A-expander E-impl A-impl)))
+
+(define-syntax (define-E/A-binop stx)
+  (syntax-parse stx
+    [(_ name:id [match-clause op:id] ...+)
+     #:with name^ (generate-temporary #'name)
+     (syntax/loc stx
+       (begin
+         (define (name^ the-lhs the-rhs)
+           (match (expr-type the-lhs)
+             [match-clause (E (op #,the-lhs the-rhs))] ...))
+         (define-E/A-expander name
+           (syntax-parser
+             [(_ l r)
+              (syntax/loc this-syntax
+                (name^ (E l) (E r)))])
+           (syntax-parser
+             [(_ as (... ...))
+              #:with new-x (generate-temporary)
+              #:with (as-nv (... ...)) (generate-temporaries #'(as (... ...)))
+              #:with (as-arg (... ...)) (generate-temporaries #'(as (... ...)))
+              (syntax/loc this-syntax
+                (let-values ([(as-nv as-arg) (ANF as)] (... ...))
+                  (define new-x-id 'new-x)
+                  (define arg-e (E (name #,as-arg (... ...))))
+                  (define new-x-ty (expr-type arg-e))
+                  (define the-new-x-ref (Var new-x-id new-x-ty))
+                  (values (snoc (append as-nv (... ...))
+                                (let-info the-new-x-ref arg-e))
+                          (Read the-new-x-ref))))]))
+         (provide name)))]))
+
+;; XXX These are causing crashes in some tests.
+#|
+(define-E/A-binop << [(? IntT?) ishl])
+(define-E/A-binop >> [(IntT #t _) iashr] [(IntT #f _) ilshr])
+;; Note: behavior of C's != operator is unordered for floats
+(define-E/A-binop != [(? IntT?) ine] [(? FloT?) fune])
+|#
   
 (begin-for-syntax
   (define-syntax-class Farg
