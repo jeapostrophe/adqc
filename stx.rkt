@@ -759,8 +759,9 @@
   A-free-macros define-A-free-syntax
   A-expander A-expand define-A-expander)
 
-(struct let-info (var xe) #:transparent)
-(struct call-info (x ty f es) #:transparent)
+(struct anf-let (var xe) #:transparent)
+(struct anf-call (x ty f es) #:transparent)
+(struct anf-if (var p-arg t-nv t-arg f-nv f-arg) #:transparent)
 
 (define-syntax (ANF stx)
   (with-disappeared-uses
@@ -775,6 +776,18 @@
          (let-values ([(a-nv a-arg) (ANF a)]
                       [(as-nv as-arg) (ANF (begin . as))])
            (values (append a-nv as-nv) as-arg)))]
+      [(_ (if p t f))
+       #:with new-x (generate-temporary)
+       (record-disappeared-uses #'if)
+       (syntax/loc stx
+         (let-values ([(p-nv p-arg) (ANF p)]
+                      [(t-nv t-arg) (ANF t)]
+                      [(f-nv f-arg) (ANF f)])
+           (define new-x-id 'new-x)
+           (define new-x-ty (expr-type t-arg))
+           (define the-x-ref (Var new-x-id new-x-ty))
+           (values (snoc p-nv (anf-if the-x-ref p-arg t-nv t-arg f-nv f-arg))
+                   (Read the-x-ref))))]
       [(_ (let ([x:id xe] ...) body ...+))
        #:with (x-id ...) (generate-temporaries #'(x ...))
        #:with (xe-ty ...) (generate-temporaries #'(x ...))
@@ -790,7 +803,7 @@
            (define-values (body-nv body-arg)
              (let-syntax ([x (P-expander (syntax-parser [_ #'the-x-ref]))] ...)
                (ANF (begin body ...))))
-           (values (append xe-nv ... (list* (let-info the-x-ref xe-arg) ... body-nv))
+           (values (append xe-nv ... (list* (anf-let the-x-ref xe-arg) ... body-nv))
                    body-arg)))]
       [(_ (fn as ...))
        #:declare fn (static F-expander? "F expander")
@@ -804,7 +817,7 @@
            (define new-x-ty (fun-type fn))
            (define the-new-x-ref (Var new-x-id new-x-ty))
            (values (snoc (append as-nv ...)
-                         (call-info new-x-id new-x-ty fn (list as-arg ...)))
+                         (anf-call new-x-id new-x-ty fn (list as-arg ...)))
                    (Read the-new-x-ref))))]
       ;; XXX Need version of this where the value is constructed from assigns.
       #;
@@ -823,7 +836,7 @@
                          ;; XXX Same problem here... This needs to be
                          ;; ConI to wrap the expression, but the expression
                          ;; might not actually be constant. 
-                         (let-info new-x-id new-x-ty (I (ty #,(ConI as-arg) ...))))
+                         (anf-let new-x-id new-x-ty (I (ty #,(ConI as-arg) ...))))
                    (Read the-new-x-ref))))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
        #:when (dict-has-key? A-free-macros #'macro-id)
@@ -833,25 +846,35 @@
        #:declare macro-id (static A-expander? "A expander")
        (record-disappeared-uses #'macro-id)
        (A-expand (attribute macro-id.value) #'macro-use)]
-      [(_ e ~!) (syntax/loc stx (values '() (E e)))])))
+      [(_ e) (syntax/loc stx (values '() (E e)))])))
 
-(define (ANF-let ret-fn nvs arg)
-  (define (rec nvs arg) (ANF-let ret-fn nvs arg))
+(define (ANF-compose ret-fn nvs arg)
+  (define (rec nvs arg) (ANF-compose ret-fn nvs arg))
   (match nvs
     ['() (ret-fn arg)]
-    [(cons (let-info var xe) more)
+    [(cons (anf-let var xe) more)
      (match-define (Var x ty) (unpack-MetaP var))
      (Let x ty (UndI ty)
           (Begin (Assign var xe)
                  (rec more arg)))]
-    [(cons (call-info x ty f es) more)
-     (Call x ty f es (rec more arg))]))
+    [(cons (anf-call x ty f es) more)
+     (Call x ty f es (rec more arg))]
+    [(cons (anf-if var p-arg t-nv t-arg f-nv f-arg) more)
+     (match-define (Var x ty) (unpack-MetaP var))
+     (define (branch-ret arg)
+       (Assign var arg))
+     (Let x ty (UndI ty)
+          (Begin
+            (If p-arg
+                (ANF-compose branch-ret t-nv t-arg)
+                (ANF-compose branch-ret f-nv f-arg))
+            (rec more arg)))]))
 
 (define-simple-macro (S+ e)
   (let-values ([(nvs arg) (ANF e)])
     (define (ret-fn arg)
       (S (return #,arg)))
-    (ANF-let ret-fn nvs arg)))
+    (ANF-compose ret-fn nvs arg)))
 
 ;; XXX This is set up to be handle variable arguments b/c we eventually
 ;; want to support variable arguments for the E versions of these ops.
@@ -871,7 +894,7 @@
              (define new-x-ty (expr-type arg-e))
              (define the-new-x-ref (Var new-x-id new-x-ty))
              (values (snoc (append as-nv (... ...))
-                           (let-info the-new-x-ref arg-e))
+                           (anf-let the-new-x-ref arg-e))
                      (Read the-new-x-ref))))])) ...))
 (define-A-free-binops + - * / modulo bitwise-ior bitwise-and bitwise-xor = < <= > >=)
 
@@ -912,7 +935,7 @@
                   (define new-x-ty (expr-type arg-e))
                   (define the-new-x-ref (Var new-x-id new-x-ty))
                   (values (snoc (append as-nv (... ...))
-                                (let-info the-new-x-ref arg-e))
+                                (anf-let the-new-x-ref arg-e))
                           (Read the-new-x-ref))))]))
          (provide name)))]))
 
