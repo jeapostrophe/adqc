@@ -776,6 +776,10 @@
          (let-values ([(a-nv a-arg) (ANF a)]
                       [(as-nv as-arg) (ANF (begin . as))])
            (values (append a-nv as-nv) as-arg)))]
+      ;; XXX Not working? Should be the same as in S
+      [(_ (begin (define . d) . b))
+       (record-disappeared-uses (list #'begin #'define))
+       (syntax/loc stx (ANF (let (d) . b)))]
       [(_ (if p t f))
        #:with new-x (generate-temporary)
        (record-disappeared-uses #'if)
