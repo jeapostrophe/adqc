@@ -91,8 +91,9 @@
        (record-disappeared-uses #'unsyntax)
        #'e])))
 
+(define the-void-ref (VoiT))
 (define-T-free-syntax void
-  (syntax-parser [_ (syntax/loc this-syntax (VoiT))]))
+  (syntax-parser [_ (syntax/loc this-syntax the-void-ref)]))
 
 (define-expanders&macros
   P-free-macros define-P-free-syntax
@@ -777,7 +778,7 @@
        (syntax/loc stx
          (let ()
            (define new-x-id 'new-x)
-           (define the-x-ref (Var new-x-id (VoiT)))
+           (define the-x-ref (Var new-x-id (T void)))
            (values (list (anf-void the-x-ref)) (Read the-x-ref))))]
       [(_ (begin a))
        (record-disappeared-uses #'begin)
