@@ -112,14 +112,16 @@
 (struct UniT Type (mode->ty mode->c) #:transparent)
 (struct ExtT Type (src name) #:transparent)
 ;; Void return type still WIP
-;; XXX How to handle return variable for void function getting declared
-;; as void? (Currently crashes because using Let to create a void variable
-;; is disallowed.)
 ;; XXX How to handle '(return)' syntax for void functions? Maybe have
 ;; current-return-type so that return can know when it's being called from
 ;; a void function (and thus (return) syntax is valid, but (return e)
-;; is invalid).
+;; is invalid). -- (hoping this will fix itself if we allow void variables
+;; to be assigned to other void variables and just elide the compiled
+;; C statement - anything you could put in the 'e' portion of (return e)
+;; won't be of type void anyway)
 (struct VoiT Type () #:transparent)
+
+(define non-void-type? (and/c Type? (not/c VoiT?)))
 
 (provide
  (contract-out
@@ -127,11 +129,11 @@
   [struct IntT ([signed? boolean?]
                 [bits (apply or/c integer-bit-widths)])]
   [struct FloT ([bits (apply or/c float-bit-widths)])]
-  [struct ArrT ([dim exact-nonnegative-integer?] [ety Type?])]
-  [struct RecT ([field->ty (hash/c symbol? Type?)]
+  [struct ArrT ([dim exact-nonnegative-integer?] [ety non-void-type?])]
+  [struct RecT ([field->ty (hash/c symbol? non-void-type?)]
                 [field->c (hash/c symbol? c-identifier-string?)]
                 [c-order (listof symbol?)])]
-  [struct UniT ([mode->ty (hash/c symbol? Type?)]
+  [struct UniT ([mode->ty (hash/c symbol? non-void-type?)]
                 [mode->c (hash/c symbol? c-identifier-string?)])]
   [struct ExtT ([src ExternSrc?] [name string?])]
   [struct VoiT ()]))
@@ -149,11 +151,11 @@
   (struct+ name Path MetaP unpack-MetaP ([field ctc] ...)))
 
 (define-Path Var ([x symbol?] [ty Type?]))
-(define-Path Global ([ty Type?] [xi Init?]))
+(define-Path Global ([ty non-void-type?] [xi Init?]))
 (define-Path Select ([p Path?] [ie Expr?]))
 (define-Path Field ([p Path?] [f symbol?]))
 (define-Path Mode ([p Path?] [m symbol?]))
-(define-Path ExtVar ([src ExternSrc?] [name c-identifier-string?] [ty Type?]))
+(define-Path ExtVar ([src ExternSrc?] [name c-identifier-string?] [ty non-void-type?]))
 
 ;; Expressions
 (struct Expr () #:transparent)
@@ -279,7 +281,7 @@
 
 (provide
  (contract-out
-  [struct Arg ([x symbol?] [ty Type?] [mode mode/c])]
+  [struct Arg ([x symbol?] [ty non-void-type?] [mode mode/c])]
   [struct Fun ()]
   [struct MetaFun ([m any/c] [f Fun?])]
   [Fun-args (-> (or/c IntFun? ExtFun? MetaFun?) (listof Arg?))]

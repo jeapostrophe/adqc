@@ -255,6 +255,7 @@
 (define (compile-decl ty name [val #f])
   (define assign (and val (list* " = " val)))
   (match ty
+    [(? VoiT?) #f]
     [(or (? IntT?) (? FloT?) (? ArrT?) (? RecT?) (? UniT?))
      (list* (compile-type/ref ty name) " " name assign ";")]
     [(ExtT src ext)

@@ -76,7 +76,8 @@
        (unless (or (IntT? to-ty) (FloT? to-ty))
          (report "Cast: can't cast to non-numeric type ~v" to-ty)))
      (type-info from-env to-ty)]
-    [(Read p) (path-type-info p)]
+    [(Read p)
+     (path-type-info p)]
     [(BinOp op L R)
      (match-define (type-info L-env L-ty)
        (expr-type-info L))
@@ -134,14 +135,8 @@
   (match p
     [(MetaP (? type-info? ti) _) ti]
     [(MetaP _ p) (path-type-info p)]
-    [(Var x ty)
-     (when (VoiT? ty)
-       (report "Var: cannot reference variable '~a' of type Void" x))
-     (type-info (hash x ty) ty)]
-    [(Global ty _)
-     (when (VoiT? ty)
-       (report "Global: cannot reference global of type Void"))
-     (type-info (hash) ty)]
+    [(Var x ty) (type-info (hash x ty) ty)]
+    [(Global ty _) (type-info (hash) ty)]
     [(ExtVar _ name ty)
      (define x (string->symbol name))
      (type-info (hash x ty) ty)]
@@ -209,8 +204,6 @@
      (env-info (env-union p-env body-env))]
     [(Let/ec _ body) (rec body)]
     [(Let x ty xi bs)
-     (when (VoiT? ty)
-       (report "Let: declaration '~a' has type of Void, which is disallowed" x))
      (check-init-type s ty xi)
      (match-define (env-info bs-env) (rec bs))
      (define bs-x-ty (hash-ref bs-env x ty))
@@ -304,7 +297,7 @@
      (type-info env ret-ty)]
     ;; XXX Should we somehow be tracking ExtFun declarations and making sure
     ;; that all ExtFuns which share 'name' are really equal?
-    [(ExtFun _ _ ret-ty _) (type-info (hasheq) ret-ty)]))
+    [(ExtFun _ args ret-ty _) (type-info (hasheq) ret-ty)]))
 
 (define-simple-macro (define-ensurer name:id meta-type info-proc)
   (define (name v)

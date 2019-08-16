@@ -91,6 +91,9 @@
        (record-disappeared-uses #'unsyntax)
        #'e])))
 
+(define-T-free-syntax void
+  (syntax-parser [_ (syntax/loc this-syntax (VoiT))]))
+
 (define-expanders&macros
   P-free-macros define-P-free-syntax
   P-expander P-expand define-P-expander)
@@ -759,6 +762,7 @@
   A-free-macros define-A-free-syntax
   A-expander A-expand define-A-expander)
 
+(struct anf-void (var) #:transparent)
 (struct anf-let (var xe) #:transparent)
 (struct anf-call (x ty f es) #:transparent)
 (struct anf-if (var p-arg t-nv t-arg f-nv f-arg) #:transparent)
@@ -767,6 +771,14 @@
   (with-disappeared-uses
     (syntax-parse stx
       #:literals (void error begin define set! if let/ec while let unsyntax)
+      [(_ (void))
+       #:with new-x (generate-temporary 'void)
+       (record-disappeared-uses #'void)
+       (syntax/loc stx
+         (let ()
+           (define new-x-id 'new-x)
+           (define the-x-ref (Var new-x-id (VoiT)))
+           (values (list (anf-void the-x-ref)) (Read the-x-ref))))]
       [(_ (begin a))
        (record-disappeared-uses #'begin)
        (syntax/loc stx (ANF a))]
@@ -856,6 +868,9 @@
   (define (rec nvs arg) (ANF-compose ret-fn nvs arg))
   (match nvs
     ['() (ret-fn arg)]
+    [(cons (anf-void var) more)
+     (match-define (Var x ty) (unpack-MetaP var))
+     (Let x ty (UndI ty) (rec more arg))]
     [(cons (anf-let var xe) more)
      (match-define (Var x ty) (unpack-MetaP var))
      (Let x ty (UndI ty)
