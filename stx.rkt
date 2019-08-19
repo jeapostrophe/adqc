@@ -767,6 +767,7 @@
 (struct anf-let (var xe) #:transparent)
 (struct anf-call (x ty f es) #:transparent)
 (struct anf-if (var p-arg t-nv t-arg f-nv f-arg) #:transparent)
+(struct anf-type (var es) #:transparent)
 
 (define-syntax (ANF stx)
   (with-disappeared-uses
@@ -838,25 +839,20 @@
            (values (snoc (append as-nv ...)
                          (anf-call new-x-id new-x-ty fn (list as-arg ...)))
                    (Read the-new-x-ref))))]
-      ;; XXX Need version of this where the value is constructed from assigns.
-      #;
+      ;; XXX It doesn't seem to be picking up this case correctly
       [(_ (ty as ...))
        #:declare ty (static (and/c T-expander? I-expander?) "T/I expander")
-       #:with new-x (generate-temporary #'ty)
+       #:with x-id (generate-temporary)
        #:with (as-nv ...) (generate-temporaries #'(as ...))
-       #:with (as-arg ...) (generate-temporaries #'(as ...))
+       #:with (as-arg ...) (generate-temporary #'(as ...))
        (record-disappeared-uses #'ty)
        (syntax/loc stx
          (let-values ([(as-nv as-arg) (ANF as)] ...)
-           (define new-x-id 'new-x)
-           (define new-x-ty (T ty))
-           (define the-new-x-ref (Var new-x-id new-x-ty))
-           (values (snoc (append as-nv ...)
-                         ;; XXX Same problem here... This needs to be
-                         ;; ConI to wrap the expression, but the expression
-                         ;; might not actually be constant. 
-                         (anf-let new-x-id new-x-ty (I (ty #,(ConI as-arg) ...))))
-                   (Read the-new-x-ref))))]
+           (define x-id 'x-id)
+           (define x-ty (T ty))
+           (define the-x-ref (Var x-id x-ty))
+           (values (snoc (append as-nv ...) (anf-type the-x-ref (list as-arg ...)))
+                   (Read the-x-ref))))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
        #:when (dict-has-key? A-free-macros #'macro-id)
        (record-disappeared-uses #'macro-id)
@@ -890,7 +886,22 @@
             (If p-arg
                 (ANF-compose branch-ret t-nv t-arg)
                 (ANF-compose branch-ret f-nv f-arg))
-            (rec more arg)))]))
+            (rec more arg)))]
+    [(cons (anf-type var es) more)
+     (match-define (Var x ty) (unpack-MetaP var))
+     (define body
+       (match ty
+         [(ArrT dim _)
+          (for/fold ([b (rec more arg)])
+                    ([i (in-list (reverse (range dim)))]
+                     [e (in-list (reverse es))])
+            (Begin (Assign (Select var (N i)) e) b))]
+         [(RecT _ _ c-order)
+          (for/fold ([b (rec more arg)])
+                    ([f (in-list (reverse c-order))]
+                     [e (in-list (reverse es))])
+            (Begin (Assign (Field var f) e) b))]))
+     (Let x ty (UndI ty) body)]))
 
 (define-simple-macro (S+ e)
   (let-values ([(nvs arg) (ANF e)])
