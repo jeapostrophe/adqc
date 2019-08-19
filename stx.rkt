@@ -812,10 +812,12 @@
        #:with (xe-nv ...) (generate-temporaries #'(x ...))
        #:with (xe-arg ...) (generate-temporaries #'(x ...))
        (record-disappeared-uses #'let)
-       (syntax/loc stx
+       (quasisyntax/loc stx
          (let-values ([(xe-nv xe-arg) (ANF xe)] ...)
            (define x-id 'x-id) ...
            (define xe-ty (expr-type xe-arg)) ...
+           (when (ormap VoiT? (list xe-ty ...))
+             (raise-syntax-error 'let "new variable cannot be of type void" #'#,stx))
            (define the-x-ref (Var x-id xe-ty)) ...
            (define-values (body-nv body-arg)
              (let-syntax ([x (P-expander (syntax-parser [_ #'the-x-ref]))] ...)
