@@ -764,6 +764,7 @@
   A-expander A-expand define-A-expander)
 
 (struct anf-void (var) #:transparent)
+(struct anf-set! (var p e) #:transparent)
 (struct anf-let (var xe) #:transparent)
 (struct anf-call (x ty f es) #:transparent)
 (struct anf-if (var p-arg t-nv t-arg f-nv f-arg) #:transparent)
@@ -790,6 +791,15 @@
          (let-values ([(a-nv a-arg) (ANF a)]
                       [(as-nv as-arg) (ANF (begin . as))])
            (values (append a-nv as-nv) as-arg)))]
+      [(_ (set! p a))
+       #:with x-id (generate-temporary 'void)
+       (record-disappeared-uses #'set!)
+       (syntax/loc stx
+         (let-values ([(a-nv a-arg) (ANF a)])
+           (define x-id 'x-id)
+           (define the-x-ref (Var x-id (T void)))
+           (values (snoc a-nv (anf-set! the-x-ref (P p) a-arg))
+                   (Read the-x-ref))))]
       ;; XXX Not working? Should be the same as in S
       [(_ (begin (define . d) . b))
        (record-disappeared-uses (list #'begin #'define))
@@ -870,6 +880,11 @@
     [(cons (anf-void var) more)
      (match-define (Var x ty) (unpack-MetaP var))
      (Let x ty (UndI ty) (rec more arg))]
+    [(cons (anf-set! var p e) more)
+     (match-define (Var x ty) (unpack-MetaP var))
+     (Let x ty (UndI ty)
+          (Begin (Assign p e)
+                 (rec more arg)))]
     [(cons (anf-let var xe) more)
      (match-define (Var x ty) (unpack-MetaP var))
      (Let x ty (UndI ty)
