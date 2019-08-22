@@ -774,12 +774,12 @@
     (syntax-parse stx
       #:literals (void error begin define set! if let/ec while let unsyntax)
       [(_ (void))
-       #:with new-x (generate-temporary 'void)
+       #:with x-id (generate-temporary 'void)
        (record-disappeared-uses #'void)
        (syntax/loc stx
          (let ()
-           (define new-x-id 'new-x)
-           (define the-x-ref (Var new-x-id (T void)))
+           (define x-id 'x-id)
+           (define the-x-ref (Var x-id (T void)))
            (values (list (anf-void the-x-ref)) (Read the-x-ref))))]
       [(_ (begin a))
        (record-disappeared-uses #'begin)
@@ -795,15 +795,15 @@
        (record-disappeared-uses (list #'begin #'define))
        (syntax/loc stx (ANF (let (d) . b)))]
       [(_ (if p t f))
-       #:with new-x (generate-temporary)
+       #:with x-id (generate-temporary)
        (record-disappeared-uses #'if)
        (syntax/loc stx
          (let-values ([(p-nv p-arg) (ANF p)]
                       [(t-nv t-arg) (ANF t)]
                       [(f-nv f-arg) (ANF f)])
-           (define new-x-id 'new-x)
-           (define new-x-ty (expr-type t-arg))
-           (define the-x-ref (Var new-x-id new-x-ty))
+           (define x-id 'x-id)
+           (define x-ty (expr-type t-arg))
+           (define the-x-ref (Var x-id x-ty))
            (values (snoc p-nv (anf-if the-x-ref p-arg t-nv t-arg f-nv f-arg))
                    (Read the-x-ref))))]
       [(_ (let ([x:id xe] ...) body ...+))
@@ -827,18 +827,18 @@
                    body-arg)))]
       [(_ (fn as ...))
        #:declare fn (static F-expander? "F expander")
-       #:with new-x (generate-temporary #'fn)
+       #:with x-id (generate-temporary #'fn)
        #:with (as-nv ...) (generate-temporaries #'(as ...))
        #:with (as-arg ...) (generate-temporaries #'(as ...))
        (record-disappeared-uses #'fn)
        (syntax/loc stx
          (let-values ([(as-nv as-arg) (ANF as)] ...)
-           (define new-x-id 'new-x)
-           (define new-x-ty (fun-type fn))
-           (define the-new-x-ref (Var new-x-id new-x-ty))
+           (define x-id 'x-id)
+           (define x-ty (fun-type fn))
+           (define the-x-ref (Var x-id x-ty))
            (values (snoc (append as-nv ...)
-                         (anf-call new-x-id new-x-ty fn (list as-arg ...)))
-                   (Read the-new-x-ref))))]
+                         (anf-call x-id x-ty fn (list as-arg ...)))
+                   (Read the-x-ref))))]
       ;; XXX It doesn't seem to be picking up this case correctly
       [(_ (ty as ...))
        #:declare ty (static (and/c T-expander? I-expander?) "T/I expander")
@@ -916,19 +916,19 @@
     (define-A-free-syntax op
       (syntax-parser
         [(_ as (... ...))
-         #:with new-x (generate-temporary)
+         #:with x-id (generate-temporary)
          #:with (as-nv (... ...)) (generate-temporaries #'(as (... ...)))
          #:with (as-arg (... ...)) (generate-temporaries #'(as (... ...)))
          ;; XXX Maybe try to pull some of this out to a phase-0 function?
          (syntax/loc this-syntax
            (let-values ([(as-nv as-arg) (ANF as)] (... ...))
-             (define new-x-id 'new-x)
+             (define x-id 'x-id)
              (define arg-e (E (op #,as-arg (... ...))))
-             (define new-x-ty (expr-type arg-e))
-             (define the-new-x-ref (Var new-x-id new-x-ty))
+             (define x-ty (expr-type arg-e))
+             (define the-x-ref (Var x-id x-ty))
              (values (snoc (append as-nv (... ...))
-                           (anf-let the-new-x-ref arg-e))
-                     (Read the-new-x-ref))))])) ...))
+                           (anf-let the-x-ref arg-e))
+                     (Read the-x-ref))))])) ...))
 (define-A-free-binops + - * / modulo bitwise-ior bitwise-and bitwise-xor = < <= > >=)
 
 (begin-for-syntax
@@ -958,18 +958,18 @@
                 (name^ (E l) (E r)))])
            (syntax-parser
              [(_ as (... ...))
-              #:with new-x (generate-temporary)
+              #:with x-id (generate-temporary)
               #:with (as-nv (... ...)) (generate-temporaries #'(as (... ...)))
               #:with (as-arg (... ...)) (generate-temporaries #'(as (... ...)))
               (syntax/loc this-syntax
                 (let-values ([(as-nv as-arg) (ANF as)] (... ...))
-                  (define new-x-id 'new-x)
+                  (define x-id 'x-id)
                   (define arg-e (E (name #,as-arg (... ...))))
-                  (define new-x-ty (expr-type arg-e))
-                  (define the-new-x-ref (Var new-x-id new-x-ty))
+                  (define x-ty (expr-type arg-e))
+                  (define the-x-ref (Var x-id x-ty))
                   (values (snoc (append as-nv (... ...))
-                                (anf-let the-new-x-ref arg-e))
-                          (Read the-new-x-ref))))]))
+                                (anf-let the-x-ref arg-e))
+                          (Read the-x-ref))))]))
          (provide name)))]))
 
 ;; XXX These are causing crashes in some tests.
