@@ -763,8 +763,7 @@
   A-free-macros define-A-free-syntax
   A-expander A-expand define-A-expander)
 
-(struct anf-void (var) #:transparent)
-(struct anf-set! (var p e) #:transparent)
+(struct anf-void (var pre) #:transparent)
 (struct anf-let (var xe) #:transparent)
 (struct anf-call (x ty f es) #:transparent)
 (struct anf-if (var p-arg t-nv t-arg f-nv f-arg) #:transparent)
@@ -781,7 +780,7 @@
          (let ()
            (define x-id 'x-id)
            (define the-x-ref (Var x-id (T void)))
-           (values (list (anf-void the-x-ref)) (Read the-x-ref))))]
+           (values (list (anf-void the-x-ref #f)) (Read the-x-ref))))]
       [(_ (begin a))
        (record-disappeared-uses #'begin)
        (syntax/loc stx (ANF a))]
@@ -798,7 +797,7 @@
          (let-values ([(a-nv a-arg) (ANF a)])
            (define x-id 'x-id)
            (define the-x-ref (Var x-id (T void)))
-           (values (snoc a-nv (anf-set! the-x-ref (P p) a-arg))
+           (values (snoc a-nv (anf-void the-x-ref (Assign (P p) a-arg)))
                    (Read the-x-ref))))]
       ;; XXX Not working? Should be the same as in S
       [(_ (begin (define . d) . b))
@@ -877,14 +876,9 @@
   (define (rec nvs arg) (ANF-compose ret-fn nvs arg))
   (match nvs
     ['() (ret-fn arg)]
-    [(cons (anf-void var) more)
+    [(cons (anf-void var pre) more)
      (match-define (Var x ty) (unpack-MetaP var))
-     (Let x ty (UndI ty) (rec more arg))]
-    [(cons (anf-set! var p e) more)
-     (match-define (Var x ty) (unpack-MetaP var))
-     (Let x ty (UndI ty)
-          (Begin (Assign p e)
-                 (rec more arg)))]
+     (Let x ty (UndI ty) (Begin (or pre (Skip)) (rec more arg)))]
     [(cons (anf-let var xe) more)
      (match-define (Var x ty) (unpack-MetaP var))
      (Let x ty (UndI ty)
