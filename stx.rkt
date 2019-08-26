@@ -865,9 +865,7 @@
       (S (return #,arg)))
     (ANF-compose ret-fn nvs arg)))
 
-;; XXX This is set up to be handle variable arguments b/c we eventually
-;; want to support variable arguments for the E versions of these ops.
-(define-simple-macro (define-A-free-binops op:id ...)
+(define-simple-macro (define-A-free-ops op:id ...)
   (begin
     (define-A-free-syntax op
       (syntax-parser
@@ -885,7 +883,11 @@
              (values (snoc (append as-nv (... ...))
                            (anf-let the-x-ref arg-e))
                      (Read the-x-ref))))])) ...))
-(define-A-free-binops + - * / modulo bitwise-ior bitwise-and bitwise-xor = < <= > >=)
+(define-A-free-ops
+  + - * / modulo
+  bitwise-ior bitwise-and bitwise-xor
+  = < <= > >=
+  and or not zero?)
 
 (begin-for-syntax
   (struct E/A-expander (E-impl A-impl)
@@ -938,22 +940,9 @@
     (begin
       (define-E/A-expander name
         (syntax-parser
-          [(_ . vs)
-           (syntax/loc this-syntax (E (op . vs)))])
+          [(_ . vs) (syntax/loc this-syntax (E (op . vs)))])
         (syntax-parser
-          [(_ as (... ...))
-           #:with x-id (generate-temporary)
-           #:with (as-nv (... ...)) (generate-temporaries #'(as (... ...)))
-           #:with (as-arg (... ...)) (generate-temporaries #'(as (... ...)))
-           (syntax/loc this-syntax
-             (let-values ([(as-nv as-arg) (ANF as)] (... ...))
-               (define x-id 'x-id)
-               (define arg-e (E (name #,as-arg (... ...))))
-               (define x-ty (expr-type arg-e))
-               (define the-x-ref (Var x-id x-ty))
-               (values (snoc (append as-nv (... ...))
-                             (anf-let the-x-ref arg-e))
-                       (Read the-x-ref))))]))
+          [(_ . as) (syntax/loc this-syntax (ANF (op . as)))]))
       (provide name)) ...))
 (define-E/A-aliases [% modulo] [& bitwise-and] [^ bitwise-xor])
 
@@ -967,6 +956,18 @@
     [(_ p . f)
      (syntax/loc this-syntax
        (ANF (if p (void) (begin . f))))]))
+(define-A-free-syntax let*
+  (syntax-parser
+    [(_ () a) (syntax/loc this-syntax (ANF a))]
+    [(_ (f r ...) a)
+     (syntax/loc this-syntax
+       (ANF (let (f) (let* (r ...) a))))]))
+(define-A-free-syntax cond
+  (syntax-parser
+    #:literals (else)
+    [(_ [else a]) (syntax/loc this-syntax (ANF a))]
+    [(_ [q a] . more)
+     (syntax/loc this-syntax (ANF (if q a (cond . more))))]))
 
 (begin-for-syntax
   (struct S/A-expander (S-impl A-impl)
