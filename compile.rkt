@@ -10,7 +10,7 @@
          racket/string
          racket/system
          "ast.rkt"
-         (only-in "type.rkt" expr-type path-type))
+         (only-in "type.rkt" expr-type))
 
 ;; XXX Read through https://queue.acm.org/detail.cfm?id=3212479 and
 ;; see if there are any changes we should have to our language
@@ -343,10 +343,9 @@
      (list* "fprintf(stderr, " (~v m) ");" ind-nl
             "exit(1);")]
     [(Assign path e)
-     (cond [(and (VoiT? (path-type path)) (VoiT? (expr-type e))) #f]
-           [else
-            (match-define-values (path-ast _) (compile-path/deref ρ path))
-            (list* path-ast " = " (compile-expr ρ e) ";")])]
+     (define-values (path-ast path-ty) (compile-path/deref ρ path))
+     (cond [(and (VoiT? path-ty) (VoiT? (expr-type e))) #f]
+           [else (list* path-ast " = " (compile-expr ρ e) ";")])]
     [(Begin f s)
      (cond [(and (Skip? f) (not (Skip-comment f))) (rec s)]
            [(and (Skip? s) (not (Skip-comment s))) (rec f)]
