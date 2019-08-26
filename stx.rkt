@@ -407,16 +407,6 @@
   [(IntT #f _) iuge]
   [(? FloT?) foge])
 
-(define-simple-macro (define-E-aliases [name:id op:id] ...)
-  (begin
-    (begin
-      (define-E-expander name
-        (syntax-parser
-          [(_ . vs)
-           (syntax/loc this-syntax (E (op . vs)))]))
-      (provide name)) ...))
-(define-E-aliases [% modulo] [& bitwise-and] [^ bitwise-xor])
-
 (define-simple-macro (define-flo-stx [name:id bits] ...)
   (begin
     (begin
@@ -942,6 +932,30 @@
 (define-E/A-binop >> [(IntT #t _) iashr] [(IntT #f _) ilshr])
 ;; Note: behavior of C's != operator is unordered for floats
 (define-E/A-binop != [(? IntT?) ine] [(? FloT?) fune])
+
+(define-simple-macro (define-E/A-aliases [name:id op:id] ...+)
+  (begin
+    (begin
+      (define-E/A-expander name
+        (syntax-parser
+          [(_ . vs)
+           (syntax/loc this-syntax (E (op . vs)))])
+        (syntax-parser
+          [(_ as (... ...))
+           #:with x-id (generate-temporary)
+           #:with (as-nv (... ...)) (generate-temporaries #'(as (... ...)))
+           #:with (as-arg (... ...)) (generate-temporaries #'(as (... ...)))
+           (syntax/loc this-syntax
+             (let-values ([(as-nv as-arg) (ANF as)] (... ...))
+               (define x-id 'x-id)
+               (define arg-e (E (name #,as-arg (... ...))))
+               (define x-ty (expr-type arg-e))
+               (define the-x-ref (Var x-id x-ty))
+               (values (snoc (append as-nv (... ...))
+                             (anf-let the-x-ref arg-e))
+                       (Read the-x-ref))))]))
+      (provide name)) ...))
+(define-E/A-aliases [% modulo] [& bitwise-and] [^ bitwise-xor])
 
 (define-A-free-syntax when
   (syntax-parser
