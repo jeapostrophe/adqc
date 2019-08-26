@@ -637,27 +637,6 @@
        "Cannot end in expression when not in tail position"
        (syntax/loc stx (S (return e)))])))
 
-(define-simple-macro (define-assign-ops [name:id op:id] ...+)
-  (begin
-    (begin
-      (define-S-expander name
-        (syntax-parser
-          [(_ p e)
-           (syntax/loc this-syntax
-             (S (set! p (op p e))))]))
-      (provide name)) ...))
-(define-assign-ops [+= +] [-= -] [*= *] [/= /] [%= %] [<<= <<] [>>= >>])
-
-(define-S-expander +=1
-  (syntax-parser
-    [(_ p)
-     (syntax/loc this-syntax (S (set! p (add1 p))))]))
-(define-S-expander -=1
-  (syntax-parser
-    [(_ p)
-     (syntax/loc this-syntax (S (set! p (sub1 p))))]))
-(provide +=1 -=1)
-
 (define-S-free-syntax cond
   (syntax-parser
     #:literals (else)
@@ -974,7 +953,58 @@
     [(_ p . f)
      (syntax/loc this-syntax
        (ANF (if p (void) (begin . f))))]))
-  
+
+(begin-for-syntax
+  (struct S/A-expander (S-impl A-impl)
+    #:methods gen:S-expander
+    [(define (S-expand this stx)
+       ((S/A-expander-S-impl this) stx))]
+    #:methods gen:A-expander
+    [(define (A-expand this stx)
+       ((S/A-expander-A-impl this) stx))]))
+(define-simple-macro (define-S/A-expander x:id S-impl A-impl)
+  (define-syntax x (S/A-expander S-impl A-impl)))
+
+(define-simple-macro (define-S/A-assign-ops [name:id op:id] ...+)
+  (begin
+    (begin
+      (define-S/A-expander name
+        (syntax-parser
+          [(_ p e)
+           (syntax/loc this-syntax
+             (S (set! p (op p e))))])
+        (syntax-parser
+          [(_ p a)
+           #:with x-id (generate-temporary)
+           (syntax/loc this-syntax
+             (let-values ([(a-nv a-arg) (ANF a)])
+               (define x-id 'x-id)
+               (define the-x-ref (Var x-id (T void)))
+               (define the-stmt (S (name p #,a-arg)))
+               (values (snoc a-nv (anf-void the-x-ref the-stmt))
+                       (Read the-x-ref))))]))
+      (provide name)) ...))
+(define-S/A-assign-ops [+= +] [-= -] [*= *] [/= /] [%= %] [<<= <<] [>>= >>])
+
+(define-simple-macro (define-S/A-increment-ops [name:id op:id] ...+)
+  (begin
+    (begin
+      (define-S/A-expander name
+        (syntax-parser
+          [(_ p) (syntax/loc this-syntax (S (set! p (op p))))])
+        (syntax-parser
+          [(_ p)
+           #:with x-id (generate-temporary)
+           (syntax/loc this-syntax
+             (let ()
+               (define x-id 'x-id)
+               (define the-x-ref (Var x-id (T void)))
+               (define the-stmt (S (name p)))
+               (values (list (anf-void the-x-ref the-stmt))
+                       (Read the-x-ref))))]))
+      (provide name)) ...))
+(define-S/A-increment-ops [+=1 add1] [-=1 sub1])
+
 (begin-for-syntax
   (define-syntax-class Farg
     #:attributes (x ref var arg)
