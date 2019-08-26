@@ -407,26 +407,6 @@
   [(IntT #f _) iuge]
   [(? FloT?) foge])
 
-(define-syntax (define-binop stx)
-  (syntax-parse stx
-    [(_ name:id [match-clause op:id] ...+)
-     #:with name^ (generate-temporary #'name)
-     (syntax/loc stx
-       (begin
-         (define (name^ the-lhs the-rhs)
-           (match (expr-type the-lhs)
-             [match-clause (E (op #,the-lhs #,the-rhs))] ...))
-         (define-E-expander name
-           (syntax-parser
-             [(_ l r)
-              (syntax/loc this-syntax
-                (name^ (E l) (E r)))]))
-         (provide name)))]))
-(define-binop << [(? IntT?) ishl])
-(define-binop >> [(IntT #t _) iashr] [(IntT #f _) ilshr])
-;; Note: behavior of C's != operator is unordered for floats
-(define-binop != [(? IntT?) ine] [(? FloT?) fune])
-
 (define-simple-macro (define-E-aliases [name:id op:id] ...)
   (begin
     (begin
@@ -454,7 +434,6 @@
              (construct-number #'#,this-syntax (FloT bits) n))]))
       (provide name))
     ...))
-
 (define-flo-stx
   [F32 32]
   [F64 64])
@@ -476,7 +455,6 @@
              (construct-number #'#,this-syntax (IntT signed? bits) n))]))
       (provide name))
     ...))
-
 (define-int-stx
   [S8  #t  8]
   [S16 #t 16]
@@ -959,7 +937,7 @@
        (begin
          (define (name^ the-lhs the-rhs)
            (match (expr-type the-lhs)
-             [match-clause (E (op #,the-lhs the-rhs))] ...))
+             [match-clause (E (op #,the-lhs #,the-rhs))] ...))
          (define-E/A-expander name
            (syntax-parser
              [(_ l r)
@@ -981,13 +959,10 @@
                           (Read the-x-ref))))]))
          (provide name)))]))
 
-;; XXX These are causing crashes in some tests.
-#|
 (define-E/A-binop << [(? IntT?) ishl])
 (define-E/A-binop >> [(IntT #t _) iashr] [(IntT #f _) ilshr])
 ;; Note: behavior of C's != operator is unordered for floats
 (define-E/A-binop != [(? IntT?) ine] [(? FloT?) fune])
-|#
   
 (begin-for-syntax
   (define-syntax-class Farg
