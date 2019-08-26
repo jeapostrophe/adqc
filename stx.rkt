@@ -856,7 +856,7 @@
     ['() (ret-fn arg)]
     [(cons (anf-void var pre) more)
      (match-define (Var x ty) (unpack-MetaP var))
-     (Let x ty (UndI ty) (Begin (or pre (Skip)) (rec more arg)))]
+     (Let x ty (UndI ty) (Begin (or pre (Skip #f)) (rec more arg)))]
     [(cons (anf-let var xe) more)
      (match-define (Var x ty) (unpack-MetaP var))
      (Let x ty (UndI ty)
@@ -963,6 +963,17 @@
 (define-E/A-binop >> [(IntT #t _) iashr] [(IntT #f _) ilshr])
 ;; Note: behavior of C's != operator is unordered for floats
 (define-E/A-binop != [(? IntT?) ine] [(? FloT?) fune])
+
+(define-A-free-syntax when
+  (syntax-parser
+    [(_ p . t)
+     (syntax/loc this-syntax
+       (ANF (if p (begin . t) (void))))]))
+(define-A-free-syntax unless
+  (syntax-parser
+    [(_ p . f)
+     (syntax/loc this-syntax
+       (ANF (if p (void) (begin . f))))]))
   
 (begin-for-syntax
   (define-syntax-class Farg
