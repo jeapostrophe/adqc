@@ -716,10 +716,11 @@
 (struct anf-if (var p-arg t-nv t-arg f-nv f-arg) #:transparent)
 (struct anf-type (var es) #:transparent)
 
+;; XXX error, let/ec, unsyntax
 (define-syntax (ANF stx)
   (with-disappeared-uses
     (syntax-parse stx
-      #:literals (void error begin define set! if let/ec while let unsyntax)
+      #:literals (void error begin define set! if let/ec let unsyntax)
       [(_ (void))
        #:with x-id (generate-temporary 'void)
        (record-disappeared-uses #'void)
@@ -1018,6 +1019,8 @@
                        (Read the-x-ref))))]))
       (provide name)) ...))
 (define-S/A-increment-ops [+=1 add1] [-=1 sub1])
+
+;; XXX 'assert!', 'while', 'for' for ANF.
 
 (begin-for-syntax
   (define-syntax-class Farg
