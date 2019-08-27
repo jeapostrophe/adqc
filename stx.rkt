@@ -728,6 +728,9 @@
            (define x-id 'x-id)
            (define the-x-ref (Var x-id (T void)))
            (values (list (anf-void the-x-ref #f)) (Read the-x-ref))))]
+      [(_ (begin (define . d) . b))
+       (record-disappeared-uses (list #'begin #'define))
+       (syntax/loc stx (ANF (let (d) . b)))]
       [(_ (begin a))
        (record-disappeared-uses #'begin)
        (syntax/loc stx (ANF a))]
@@ -746,10 +749,6 @@
            (define the-x-ref (Var x-id (T void)))
            (values (snoc a-nv (anf-void the-x-ref (Assign (P p) a-arg)))
                    (Read the-x-ref))))]
-      ;; XXX Not working? Should be the same as in S
-      [(_ (begin (define . d) . b))
-       (record-disappeared-uses (list #'begin #'define))
-       (syntax/loc stx (ANF (let (d) . b)))]
       [(_ (if p t f))
        #:with x-id (generate-temporary)
        (record-disappeared-uses #'if)
