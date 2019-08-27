@@ -503,8 +503,7 @@
 (define-syntax (S stx)
   (with-disappeared-uses
     (syntax-parse stx
-      #:literals (void error begin define set! if let/ec while
-                       return let unsyntax unsyntax-splicing)
+      #:literals (void error begin define set! if let/ec let unsyntax unsyntax-splicing)
       [(_ (void))
        (record-disappeared-uses #'void)
        (syntax/loc stx (Skip #f))]
