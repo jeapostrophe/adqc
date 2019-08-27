@@ -989,7 +989,7 @@
              (S (set! p (op p e))))])
         (syntax-parser
           [(_ p a)
-           #:with x-id (generate-temporary)
+           #:with x-id (generate-temporary 'void)
            (syntax/loc this-syntax
              (let-values ([(a-nv a-arg) (ANF a)])
                (define x-id 'x-id)
@@ -1008,7 +1008,7 @@
           [(_ p) (syntax/loc this-syntax (S (set! p (op p))))])
         (syntax-parser
           [(_ p)
-           #:with x-id (generate-temporary)
+           #:with x-id (generate-temporary 'void)
            (syntax/loc this-syntax
              (let ()
                (define x-id 'x-id)
