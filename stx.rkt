@@ -714,6 +714,7 @@
 (struct anf-call (x ty f es) #:transparent)
 (struct anf-if (var p-arg t-nv t-arg f-nv f-arg) #:transparent)
 (struct anf-type (var es) #:transparent)
+(struct anf-union (var m e) #:transparent)
 
 ;; XXX error, let/ec, unsyntax
 (define-syntax (ANF stx)
@@ -794,7 +795,17 @@
            (values (snoc (append as-nv ...)
                          (anf-call x-id x-ty fn (list as-arg ...)))
                    (Read the-x-ref))))]
-      ;; XXX It doesn't seem to be picking up this case correctly
+      [(_ (ty m:keyword a:expr))
+       #:declare ty (static (and/c T-expander? I-expander?) "T/I expander")
+       #:with x-id (generate-temporary #'ty)
+       (record-disappeared-uses #'ty)
+       (syntax/loc stx
+         (let-values ([(a-nv a-arg) (ANF a)])
+           (define x-id 'x-id)
+           (define x-ty (T ty))
+           (define the-x-ref (Var x-id x-ty))
+           (values (snoc a-nv (anf-union the-x-ref (keyword->symbol 'm) a-arg))
+                   (Read the-x-ref))))]
       [(_ (ty as ...))
        #:declare ty (static (and/c T-expander? I-expander?) "T/I expander")
        #:with x-id (generate-temporary #'ty)
@@ -857,7 +868,12 @@
                     ([f (in-list (reverse c-order))]
                      [e (in-list (reverse es))])
             (Begin (Assign (Field var f) e) b))]))
-     (Let x ty (UndI ty) body)]))
+     (Let x ty (UndI ty) body)]
+    [(cons (anf-union var m e) more)
+     (match-define (Var x ty) (unpack-MetaP var))
+     (Let x ty (UndI ty)
+          (Begin (Assign (Mode var m) e)
+                 (rec more arg)))]))
 
 (define-simple-macro (S+ e)
   (let-values ([(nvs arg) (ANF e)])
