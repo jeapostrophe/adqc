@@ -797,16 +797,17 @@
       ;; XXX It doesn't seem to be picking up this case correctly
       [(_ (ty as ...))
        #:declare ty (static (and/c T-expander? I-expander?) "T/I expander")
-       #:with x-id (generate-temporary)
+       #:with x-id (generate-temporary #'ty)
        #:with (as-nv ...) (generate-temporaries #'(as ...))
-       #:with (as-arg ...) (generate-temporary #'(as ...))
+       #:with (as-arg ...) (generate-temporaries #'(as ...))
        (record-disappeared-uses #'ty)
        (syntax/loc stx
          (let-values ([(as-nv as-arg) (ANF as)] ...)
            (define x-id 'x-id)
            (define x-ty (T ty))
            (define the-x-ref (Var x-id x-ty))
-           (values (snoc (append as-nv ...) (anf-type the-x-ref (list as-arg ...)))
+           (values (snoc (append as-nv ...)
+                         (anf-type the-x-ref (list as-arg ...)))
                    (Read the-x-ref))))]
       [(_ (~and macro-use (~or macro-id:id (macro-id:id . _))))
        #:when (dict-has-key? A-free-macros #'macro-id)
