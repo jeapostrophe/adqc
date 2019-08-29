@@ -29,6 +29,9 @@
 
 (define (snoc l x) (append l (list x)))
 
+(define (keyword->symbol kw)
+  (string->symbol (keyword->string kw)))
+
 (define-syntax (define-expanders&macros stx)
   (syntax-parse stx
     [(_ S-free-macros define-S-free-syntax
@@ -1151,8 +1154,6 @@
        (raise-syntax-error #f "constructor arity mismatch" stx))
      (I (record #,@(map cons c-order is)))]
     [_ (raise-syntax-error #f "invalid constructor syntax" stx)]))
-(define (keyword->symbol kw)
-  (string->symbol (keyword->string kw)))
 (define-syntax (define-type stx)
   (syntax-parse stx
     [(_ #:public name:id ty-stx)
