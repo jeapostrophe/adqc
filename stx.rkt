@@ -728,9 +728,7 @@
        #:with x-id (generate-temporary 'void)
        (record-disappeared-uses #'void)
        (syntax/loc stx
-         (let ()
-           (define x-id 'x-id)
-           (define the-x-ref (Var x-id (T void)))
+         (let* ([x-id 'x-id] [the-x-ref (Var x-id (T void))])
            (values (list (anf-void the-x-ref #f)) (Read the-x-ref))))]
       [(_ (begin (define . d) . b))
        (record-disappeared-uses (list #'begin #'define))
@@ -1030,11 +1028,8 @@
           [(_ p)
            #:with x-id (generate-temporary 'void)
            (syntax/loc this-syntax
-             (let ()
-               (define x-id 'x-id)
-               (define the-x-ref (Var x-id (T void)))
-               (define the-stmt (S (name p)))
-               (values (list (anf-void the-x-ref the-stmt))
+             (let* ([x-id 'x-id] [the-x-ref (Var x-id (T void))])
+               (values (list (anf-void the-x-ref (S (name p))))
                        (Read the-x-ref))))]))
       (provide name)) ...))
 (define-S/A-increment-ops [+=1 add1] [-=1 sub1])
