@@ -327,6 +327,12 @@
 (define-E-free-syntax zero?
   (syntax-parser
     [(_ e) (syntax/loc this-syntax (zero?* (E e)))]))
+(define-E-free-syntax min
+  (syntax-parser
+    [(_ a b) (syntax/loc stx (E (if (< a b) a b)))]))
+(define-E-free-syntax max
+  (syntax-parser
+    [(_ a b) (syntax/loc stx (E (if (< a b) b a)))]))
 
 (define-syntax (define-E-increment-ops stx)
   (syntax-parse stx
@@ -904,7 +910,7 @@
   + - * / modulo
   bitwise-ior bitwise-and bitwise-xor
   = < <= > >=
-  and or not zero?)
+  and or not zero? min max)
 
 (begin-for-syntax
   (struct E/A-expander (E-impl A-impl)
