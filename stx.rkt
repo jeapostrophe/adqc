@@ -1380,6 +1380,9 @@
   (define name (Prog* pf ...)))
 
 (provide while assert! return
+         define-T-free-syntax define-T-expander
+         define-I-free-syntax define-I-expander
+         define-E-free-syntax define-E-expander
          define-S-free-syntax define-S-expander
          define-type define-fun define-fun+ define-global
          define-extern-fun define-extern-type
