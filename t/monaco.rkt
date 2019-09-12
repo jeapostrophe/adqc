@@ -47,16 +47,16 @@
   (define MIN-ITERS (/ POOL-SIZE SIMULATIONS-PER-ITERATION))
 
   (define-type Node
-    (record w F32
-            v U32
-            pr NodePtr
-            lc NodePtr
-            rs NodePtr
-            pq NodePtr
-            nq NodePtr
-            ia Action
-            na Action
-            wh Action))
+    (record w F32       ;; wins
+            v U32       ;; visits
+            pr NodePtr  ;; parent
+            lc NodePtr  ;; left child
+            rs NodePtr  ;; right sibling
+            pq NodePtr  ;; prev in queue
+            nq NodePtr  ;; next in queue
+            ia Action   ;; initiating action
+            na Action   ;; next action to expand
+            wh Action)) ;; who is acting
 
   (define-global NODE : Node := #,(ZedI (T Node)))
   (define-global free-ptr := NULL-NODE)
