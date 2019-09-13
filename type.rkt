@@ -279,14 +279,15 @@
     [(IntFun args ret-x ret-ty _ body)
      (match-define (env-info env)
        (stmt-env-info body))
-     (define (ret-x-not-referenced!)
-       (report "IntFun: return type declared as ~v, but no value is returned"
-               ret-ty))
-     (define body-ret-x-ty (hash-ref env ret-x ret-x-not-referenced!))
-     (unless (equal? ret-ty body-ret-x-ty)
-       (report
-        "IntFun: return type declared as ~v but returns value of type ~v"
-        ret-ty body-ret-x-ty))
+     (unless (VoiT? ret-ty)
+       (define (ret-x-not-referenced!)
+         (report "IntFun: return type declared as ~v, but no value is returned"
+                 ret-ty))
+       (define body-ret-x-ty (hash-ref env ret-x ret-x-not-referenced!))
+       (unless (equal? ret-ty body-ret-x-ty)
+         (report
+          "IntFun: return type declared as ~v but returns value of type ~v"
+          ret-ty body-ret-x-ty)))
      (for ([a (in-list args)] [i (in-naturals 1)])
        (match-define (Arg x ty _) a)
        (define body-x-ty (hash-ref env x ty))

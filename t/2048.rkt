@@ -17,12 +17,11 @@
 
 (define-global score : U32 := (U32 0))
 
-(define-fun S32 make-board ([Board b] [Row r1] [Row r2] [Row r3] [Row r4])
+(define-fun void make-board ([Board b] [Row r1] [Row r2] [Row r3] [Row r4])
   (set! (b @ 0) r1)
   (set! (b @ 1) r2)
   (set! (b @ 2) r3)
-  (set! (b @ 3) r4)
-  (return 0))
+  (set! (b @ 3) r4))
 
 (define-fun U8 find-target ([Row r] [U8 x] [U8 stop])
   ;; If the position is already on the first, don't evaluate
@@ -64,7 +63,7 @@
         (set! success 1))))
   (return success))
 
-(define-fun S32 rotate-board ([Board board])
+(define-fun void rotate-board ([Board board])
   ;; XXX This var really only exists because it's awkward to embed
   ;; SIZE in the individual expressions - SIZE is interpreted as an S8,
   ;; which is incompatible with U8, so it would require typing (U8 SIZE)
@@ -81,8 +80,7 @@
             (board @ (sub1 (- n i)) @ (sub1 (- n j))))
       (set! (board @ (sub1 (- n i)) @ (sub1 (- n j)))
             (board @ (sub1 (- n j)) @ i))
-      (set! (board @ (sub1 (- n j)) @ i) tmp)))
-  (return 0))
+      (set! (board @ (sub1 (- n j)) @ i) tmp))))
 
 (define-fun U8 move-up ([Board board])
   (define success := (U8 0))
@@ -151,7 +149,7 @@
 
 (define-extern-fun S32 rand () #:src (ExternSrc '() '("stdlib.h")))
 
-(define-fun S32 add-random ([Board board])
+(define-fun void add-random ([Board board])
   (define x-lst : (array (* SIZE SIZE) U8))
   (define y-lst : (array (* SIZE SIZE) U8))
   (define len := (U8 0))
@@ -168,18 +166,16 @@
     (define y := (y-lst @ r))
     (define rand-ret-2 := (rand))
     (define n : U8 := (add1 (/ (% (rand-ret-2 : U8) 10) 9)))
-    (set! (board @ x @ y) n))
-  (return 0))
+    (set! (board @ x @ y) n)))
 
-(define-fun S32 init-board ([Board board])
+(define-fun void init-board ([Board board])
   (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
     (for ([y := (U8 0)] (< y (U8 SIZE)) (+=1 y))
       (set! (board @ x @ y) 0)))
   (define void1 := (add-random board))
   (define void2 := (add-random board))
   (define void3 := (add-random board))
-  (set! score 0)
-  (return 0))
+  (set! score 0))
 
 (define-fun U8 step ([Board board] [S8 c])
   (define success : U8)
