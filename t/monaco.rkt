@@ -2,6 +2,7 @@
 (require (for-syntax racket/base
                      syntax/parse)
          adqc
+         racket/contract/base
          racket/match)
 
 #|
@@ -21,28 +22,27 @@
 (adqc-compile (monaco (ttt)))
 |#
 
-(define-T-expander Action
-  (syntax-parser [_ (syntax/loc this-syntax (T U8))]))
-(define-T-expander Actor
-  (syntax-parser [_ (syntax/loc this-syntax (T U8))]))
-
-(struct game (state-ty) #:transparent)
+(struct game (state-ty action-ty actor-ty) #:transparent)
 
 (define (monaco g)
-  (match-define (game state-ty) g)
+  (match-define (game state-ty action-ty actor-ty) g)
   (define-T-expander State (syntax-parser [_ #'state-ty]))
+  (define-T-expander Action (syntax-parser [_ #'action-ty]))
+  (define-T-expander Actor (syntax-parser [_ #'actor-ty]))
   
   (define-global STUNTING := (U8 0))
   (define-global debug? := (U8 0))
 
   ;; XXX decode-action-keys - how to pull max_key up to compile level?
 
-  (define POOL-SIZE (sub1 (expt 2 16)))
-  (define-T-expander NodePtr
-    (syntax-parser [_ (syntax/loc this-syntax (T U16))]))
-  (define-E-expander NULL-NODE
-    (syntax-parser [_ (syntax/loc this-syntax (E (U16 0)))]))
+  (define node-ptr-bits 16)
+  (define node-ptr-signed? #f)
+  (define the-node-ptr-ty (IntT node-ptr-signed? node-ptr-bits))
+  (define-T-expander NodePtr (syntax-parser [_ #'the-node-ptr-ty]))
+  (define the-null-node-expr (Int node-ptr-signed? node-ptr-bits 0))
+  (define-E-expander NULL-NODE (syntax-parser [_ #'the-null-node-expr]))
 
+  (define POOL-SIZE (sub1 (expt 2 node-ptr-bits)))
   (define SIMULATIONS-PER-ITERATION 4)
   (define MIN-ITERS (/ POOL-SIZE SIMULATIONS-PER-ITERATION))
 
@@ -64,7 +64,7 @@
   (define-global recycled := (U32 0))
   (define-global θ-head := NULL-NODE)
 
-  (define-fun S32 θ-insert ([NodePtr x])
+  (define-fun void θ-insert ([NodePtr x])
     (assert! #:dyn (!= (NODE @ x -> nq) NULL-NODE))
     (assert! #:dyn (!= (NODE @ x -> pq) NULL-NODE))
     (cond [(= θ-head NULL-NODE)
@@ -79,10 +79,9 @@
            (set! (NODE @ θ-head -> pq) x)])
     (assert! #:dyn (!= (NODE @ x -> nq) NULL-NODE))
     (assert! #:dyn (!= (NODE @ x -> pq) NULL-NODE))
-    (set! θ-head x)
-    (return 0))
+    (set! θ-head x))
   
-  (define-fun S32 θ-remove ([NodePtr x])
+  (define-fun void θ-remove ([NodePtr x])
     (define nq := (NODE @ x -> nq))
     (define pq := (NODE @ x -> pq))
     (set! (NODE @ x -> nq) NULL-NODE)
@@ -97,8 +96,12 @@
            (when (= θ-head x)
              (set! θ-head nq))])
     (assert! #:dyn (= (NODE @ x -> nq) NULL-NODE))
-    (assert! #:dyn (= (NODE @ x -> pq) NULL-NODE))
-    (return 0))
+    (assert! #:dyn (= (NODE @ x -> pq) NULL-NODE)))
   )
 
-(provide Action Actor)
+(provide
+ (contract-out
+  [monaco (-> game? Program?)]
+  [struct game ([state-ty non-void-type?]
+                [action-ty non-void-type?]
+                [actor-ty non-void-type?])]))

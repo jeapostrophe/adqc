@@ -2,15 +2,7 @@
 (require (for-syntax racket/base
                      syntax/parse)
          adqc
-         (rename-in "monaco.rkt"
-                    (Action the-action-ty)
-                    (Actor the-actor-ty)))
-
-;; XXX Some way to preserve expander type when providing/requiring?
-(define-T-expander Action
-  (syntax-parser [_ (syntax/loc this-syntax the-action-ty)]))
-(define-T-expander Actor
-  (syntax-parser [_ (syntax/loc this-syntax the-actor-ty)]))
+         "monaco.rkt")
 
 (define ROWS 3)
 (define COLS 3)

@@ -125,6 +125,7 @@
 
 (provide
  (contract-out
+  [non-void-type? predicate/c]
   [struct Type ()]
   [struct IntT ([signed? boolean?]
                 [bits (apply or/c integer-bit-widths)])]
