@@ -22,10 +22,10 @@
 (adqc-compile (monaco (ttt)))
 |#
 
-(struct game (state-ty action-ty actor-ty) #:transparent)
+(struct game (state-ty action-ty actor-ty legal?-fn) #:transparent)
 
 (define (monaco g)
-  (match-define (game state-ty action-ty actor-ty) g)
+  (match-define (game state-ty action-ty actor-ty legal?) g)
   (define-T-expander State (syntax-parser [_ #'state-ty]))
   (define-T-expander Action (syntax-parser [_ #'action-ty]))
   (define-T-expander Actor (syntax-parser [_ #'actor-ty]))
@@ -97,6 +97,65 @@
              (set! θ-head nq))])
     (assert! #:dyn (= (NODE @ x -> nq) NULL-NODE))
     (assert! #:dyn (= (NODE @ x -> pq) NULL-NODE)))
+
+  (define (make-do-children fn)
+    (F ([NodePtr pr]) : void
+       (define c := (NODE @ pr -> lc))
+       (while (!= c NULL-NODE)
+         (define void1 := fn <- c)
+         (set! c (NODE @ c -> rs)))))
+  (define do-children-insert (make-do-children θ-insert))
+  (define do-children-remove (make-do-children θ-remove))
+
+  ;; XXX dg_edge, dg_topoprint, dump_graph
+
+  (define-fun void initialize-pool ()
+    (define last := NULL-NODE)
+    (for ([n : NodePtr := (U32 1)] (< n (U32 POOL-SIZE)) (+=1 n))
+      (set! (NODE @ n -> rs) (add1 n))
+      (set! last n))
+    (set! (NODE @ last -> rs) NULL-NODE)
+    (set! free-ptr (U32 1)))
+
+  (define-fun Action next-legal ([State st] [Action prev])
+    (while (S32 1)
+      (cond [(zero? prev)
+             (return 0)]
+            [else
+             (-=1 prev)
+             (define is-legal? := legal? <- st prev)
+             (when is-legal?
+               (return (add1 prev)))])))
+
+  (define-fun void free-node ([NodePtr n])
+    (-=1 node-count)
+    (assert! #:dyn (= (NODE @ n -> pq) NULL-NODE))
+    (assert! #:dyn (= (NODE @ n -> nq) NULL-NODE))
+    (assert! #:dyn (= (NODE @ n -> pr) NULL-NODE))
+    (assert! #:dyn (= (NODE @ n -> lc) NULL-NODE))
+    (assert! #:dyn (= (NODE @ n -> rs) NULL-NODE))
+    (set! (NODE @ n -> rs) free-ptr)
+    (set! free-ptr n))
+
+  ;; XXX free-node-rec without recursion
+
+  (define-fun void recycle ([NodePtr curr])
+    (define last := (NODE @ θ-head -> pq))
+    (when (= last NULL-NODE)
+      ;; no last
+      (return))
+    (define pr := (NODE @ last -> pr))
+    (when (= pr NULL-NODE)
+      ;; last has no parent
+      (return))
+    (+=1 recycled)
+    (define c := (NODE @ pr -> lc))
+    (assert! #:dyn (!= c NULL-NODE))
+    (set! (NODE @ pr -> na) (add1 (NODE @ c -> ia)))
+    (set! (NODE @ pr -> lc) (NODE @ c -> rs))
+    (set! (NODE @ c -> rs) NULL-NODE)
+    ;; XXX free-node-rec(c)
+    )
   )
 
 (provide
@@ -104,4 +163,5 @@
   [monaco (-> game? Program?)]
   [struct game ([state-ty non-void-type?]
                 [action-ty non-void-type?]
-                [actor-ty non-void-type?])]))
+                [actor-ty non-void-type?]
+                [legal?-fn Fun?])]))
