@@ -1253,10 +1253,6 @@
        (quasisyntax/loc stx
          (define-fun x . #,(syntax/loc #'args (args . more))))])))
 
-(define-simple-macro (define-fun+ . more)
-  (syntax-parameterize ([F-body-default (make-rename-transformer #'S+)])
-    (define-fun . more)))
-
 (define-syntax (define-extern-fun stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -1384,7 +1380,8 @@
          define-I-free-syntax define-I-expander
          define-E-free-syntax define-E-expander
          define-S-free-syntax define-S-expander
-         define-type define-fun define-fun+ define-global
+         F-body-default
+         define-type define-fun define-global
          define-extern-fun define-extern-type
          include-fun include-type include-global
          Prog Prog* define-prog define-prog*)
@@ -1505,7 +1502,7 @@
     [(_ es ...)
      (syntax/loc this-syntax (S (print es ... "\n")))]))
 
-(provide T P N E I F F+ S)
+(provide T P N E I F F+ S S+)
 
 
 ;; XXX Array Slice

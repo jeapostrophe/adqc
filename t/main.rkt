@@ -5,6 +5,7 @@
          chk
          racket/file
          racket/match
+         racket/stxparam
          syntax/parse/define)
 
 ;; This assumes the same representation used by the evaluator for data types.
@@ -614,4 +615,35 @@
               (x <- (S64 10)))))
      (TT (F ([n : S32]) : S32
             ((imul n n) : S64)))
+     ;; ANF
+     (syntax-parameterize ([F-body-default (make-rename-transformer #'S+)])
+       (define-fun S32 square ([S32 n])
+         (* n n))
+       (define-type Coord (record x S32 y S32))
+       (define-type Int/Flo (union i S32 f F32))
+       (TS (+ (S32 2) (S32 3)) (S32 5))
+       (TS (- (S32 5)) (S32 -5))
+       (TS (- (S32 5) (S32 2)) (S32 3))
+       (TS (* (S32 5) (S32 4)) (S32 20))
+       (TS (/ (S32 9) (S32 3)) (S32 3))
+       (TS (% (S32 9) (S32 5)) (S32 4))
+       (TS (<< (S32 1) (S32 1)) (S32 2))
+       (TS (>> (S32 -2) (S32 1)) (S32 -1))
+       (TS (bitwise-ior (S32 1) (S32 2)) (S32 3))
+       (TS (bitwise-and (S32 1) (S32 3)) (S32 1))
+       (TS (bitwise-xor (S32 3) (S32 2)) (S32 1))
+       (TS (= (S32 5) (S32 5)) (S32 1))
+       (TS (!= (S32 5) (S32 5)) (S32 0))
+       (TS (< (S32 2) (S32 3)) (S32 1))
+       (TS (<= (S32 2) (S32 3)) (S32 1))
+       (TS (> (S32 2) (S32 3)) (S32 0))
+       (TS (>= (S32 2) (S32 3)) (S32 0))
+       (TS (add1 (S32 1)) (S32 2))
+       (TS (sub1 (S32 2)) (S32 1))
+       (TS (let ([x (S32 5)]) (square x)) (S32 25))
+       (TS (let ([c (Coord (S32 2) (S32 3))])
+             (* (c -> x) (c -> y)))
+           (S32 6))
+       (TS (let ([n (Int/Flo #:i (S32 5))]) (n as i)) (S32 5))
+       )
      )))
