@@ -156,6 +156,16 @@
     (set! (NODE @ c -> rs) NULL-NODE)
     ;; XXX free-node-rec(c)
     )
+
+  (define-fun NodePtr alloc-node ([NodePtr parent] [Actor lastp] [Action ia] [State st])
+    (+=1 node-count)
+    (define new := free-ptr)
+    (when (= new NULL-NODE)
+      (define void1 := recycle <- parent)
+      (set! new free-ptr)
+      (when (= new NULL-NODE)
+        ;; XXX dump_graph ?
+        (error "alloc-node: out of meemory"))))
   )
 
 (provide
