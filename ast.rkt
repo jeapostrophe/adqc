@@ -303,6 +303,23 @@
   [unpack-any (-> (or/c Path? Expr? Stmt? Fun?)
                   (or/c Path? Expr? Stmt? Fun?))]))
 
+(struct name-tag (n) #:transparent)
+(define (given-name v)
+  (match v
+    [(MetaFun (name-tag n) _) n]
+    [(MetaFun _ f) (given-name f)]
+    [(MetaP (name-tag n) _) n]
+    [(MetaP _ p) (given-name p)]
+    [(or (? Fun?) (? Path?)) #f]))
+(define (give-name v n)
+  (cond [(Fun? v) (MetaFun (name-tag n) v)]
+        [(Path? v) (MetaP (name-tag n) v)]))
+(provide
+ (contract-out
+  [given-name (-> (or/c Path? Fun?) (or/c symbol? #f))]
+  [give-name (-> (or/c Path? Fun?) symbol? (or/c MetaP? MetaFun?))]))
+
+
 ;; Program
 (struct Program (name->global name->ty name->fun) #:transparent)
 

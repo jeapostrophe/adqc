@@ -1239,7 +1239,7 @@
       [(_ x:id #:as n:expr . more)
        (quasisyntax/loc stx
          (begin
-           (define the-fun #,(syntax/loc #'more (F . more)))
+           (define the-fun #,(syntax/loc #'more (give-name (F . more) 'x)))
            (define-syntax x
              (F-expander (syntax-parser [_ #'the-fun])))
            (include-fun #:maybe n x)))]
