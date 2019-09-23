@@ -5,10 +5,6 @@
          racket/match
          "ast.rkt")
 
-;; XXX remove this when we have better printing for types and inits
-(require racket/format)
-
-;; XXX sym should print vertical bars around symbols with whitespace
 (define (sym s) (text (symbol->string s)))
 (define (num n) (text (number->string n)))
 
@@ -84,8 +80,15 @@
      (define is-doc
        (apply h-append (add-between (map init-doc is) (h-append comma space))))
      (hs-append lbrace is-doc rbrace)]
-    ;; XXX rec, union
-    [_ (text (~a i))]))
+    [(RecI f->i)
+     (define i-docs
+       (add-between
+        (for/list ([(f i) (in-hash f->i)])
+          (hs-append (sym f) (text ":=") (init-doc i)))
+        (h-append comma space)))
+     (hs-append lbrace (apply h-append i-docs) rbrace)]
+    [(UniI m i)
+     (hs-append lbrace (h-append (text "#:") (sym m)) (init-doc i) rbrace)]))
 
 (define (stmt-doc s)
   (match (unpack-MetaS s)
@@ -95,7 +98,9 @@
     [(Fail msg)
      (h-append (text "(error \"") (text msg) dquote rparen)]
     [(Begin f s)
-     (h-append (text "(begin ") (stmt-doc f) space (stmt-doc s) rparen)]
+     (nest 2 (v-append (text "(begin")
+                       (stmt-doc f)
+                       (h-append (stmt-doc s) rparen)))]
     [(Assign p e)
      (h-append (text "(set! ") (path-doc p) space (expr-doc e) rparen)]
     [(If p t f)
@@ -116,12 +121,27 @@
        (h-append (sym x) (text " : ") (type-doc ty) (text " := ") (init-doc xi)))
      (nest 2 (v-append (h-append (text "(Let ([") decl (text "])"))
                        (h-append (stmt-doc bs) rparen)))]
-    ;; XXX implement this fully with meta data for functions
     [(Call x ty f as bs)
-     (text "(some function call)")]))
+     (define f-name (given-name f))
+     (define f-doc (if f-name (sym f-name) (fun-doc f)))
+     (define decl (h-append (sym x) (text " := ") f-doc))
+     (nest 2 (v-append (h-append (text "(Call ([") decl (text "])"))
+                       (h-append (stmt-doc bs) rparen)))]))
 
 (define (fun-doc f)
-  (error 'fun-doc "XXX: pretty printing for functions"))
+  (match (unpack-MetaFun f)
+    [(IntFun args ret-x ret-ty ret-lab body)
+     (define arg-docs
+       (for/list ([a (in-list args)])
+         (match-define (Arg x ty mode) a)
+         (define mode-doc (h-append (text "#:") (sym mode)))
+         (h-append lbracket mode-doc space (sym x) space (type-doc ty) rbracket)))
+     (define head
+       (h-append (text "(F ") (type-doc ret-ty) space
+                 lparen (apply hs-append arg-docs) rparen))
+     ;; XXX Emit ret-x and ret-lab
+     (nest 2 (v-append head (h-append (stmt-doc body) rparen)))]
+    [(ExtFun _ _ _ name) (text name)]))
 
 (define (ast-doc ast)
   (match ast
