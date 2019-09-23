@@ -36,8 +36,9 @@
 
 (define (TProg1* stx the-p the-cp n args-i expect-ans-i)
   ;; Get type info for args and ans.
+  (define the-fun (unpack-MetaFun (hash-ref (Program-name->fun the-p) n)))
   (match-define (IntFun (list (Arg _ arg-tys _) ...) _ ans-ty _ _)
-    (unpack-MetaFun (hash-ref (Program-name->fun the-p) n)))
+    the-fun)
   (define args (for/list ([ai (in-list args-i)])
                  (unbox (eval-init (hash) ai))))
   (define eval-expect-ans (unpack-MetaE
@@ -47,8 +48,11 @@
   (chk #:t (#:src stx (set! eval-ans (unpack-MetaE
                                       (eval-program the-p n args-i)))))
   (when eval-ans
-    (chk (#:src stx eval-ans)
-         (#:src stx eval-expect-ans)))
+    (define (print-ast! _)
+      (print-ast the-fun (current-error-port)))
+    (with-chk ([chk-inform! print-ast!])
+      (chk (#:src stx eval-ans)
+           (#:src stx eval-expect-ans))))
   (define c-path (make-temporary-file "adqc~a.c"))
   (unless the-cp
     (chk #:t (set! the-cp (link-program the-p c-path))))
