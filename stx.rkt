@@ -782,7 +782,10 @@
            (define xe-ty (expr-type xe-arg)) ...
            (when (ormap VoiT? (list xe-ty ...))
              (raise-syntax-error 'let "new variable cannot be of type void" #'#,stx))
-           (define the-x-ref (Var x-id xe-ty)) ...
+           (define the-x-ref
+             (if (and (or (ArrT? xe-ty) (RecT? xe-ty) (UniT? xe-ty)) (Read? xe-arg))
+                 (Read-p xe-arg)
+                 (Var x-id xe-ty))) ...
            (define-values (body-nv body-arg)
              (let-syntax ([x (P-expander (syntax-parser [_ #'the-x-ref]))] ...)
                (ANF (begin body ...))))
