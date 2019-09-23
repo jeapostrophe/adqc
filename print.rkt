@@ -19,8 +19,20 @@
      (h-append (char ch) (num bits))]
     [(FloT bits)
      (h-append (char #\F) (num bits))]
-    ;; array, rec, union
-    [_ (text (~a ty))]))
+    [(ArrT dim ety)
+     (h-append (text "(array ") (num dim) space (type-doc ety) rparen)]
+    [(RecT f->ty _ c-order)
+     (define f-docs
+       (for/list ([f (in-list c-order)])
+         (hs-append (sym f) (type-doc (hash-ref f->ty f)))))
+     (h-append (text "(record ") (apply hs-append f-docs) rparen)]
+    [(UniT m->ty _)
+     (define m-docs
+       (for/list ([(m ty) (in-hash m->ty)])
+         (hs-append (sym m) (type-doc ty))))
+     (h-append (text "(union ") (apply hs-append m-docs) rparen)]
+    [(ExtT _ name) (text name)]
+    [(? VoiT?) (text "void")]))
 
 (define (path-doc p)
   (match (unpack-MetaP p)
