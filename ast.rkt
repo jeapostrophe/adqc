@@ -111,14 +111,6 @@
 (struct RecT Type (field->ty field->c c-order) #:transparent)
 (struct UniT Type (mode->ty mode->c) #:transparent)
 (struct ExtT Type (src name) #:transparent)
-;; Void return type still WIP
-;; XXX How to handle '(return)' syntax for void functions? Maybe have
-;; current-return-type so that return can know when it's being called from
-;; a void function (and thus (return) syntax is valid, but (return e)
-;; is invalid). -- (hoping this will fix itself if we allow void variables
-;; to be assigned to other void variables and just elide the compiled
-;; C statement - anything you could put in the 'e' portion of (return e)
-;; won't be of type void anyway)
 (struct VoiT Type () #:transparent)
 
 (define non-void-type? (and/c Type? (not/c VoiT?)))
