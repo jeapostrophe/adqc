@@ -772,6 +772,7 @@
       [(_ (let ([x:id xe] ...) body ...+))
        #:with (x-id ...) (generate-temporaries #'(x ...))
        #:with (xe-ty ...) (generate-temporaries #'(x ...))
+       #:with (ref-ty? ...) (generate-temporaries #'(x ...))
        #:with (the-x-ref ...) (generate-temporaries #'(x ...))
        #:with (xe-nv ...) (generate-temporaries #'(x ...))
        #:with (xe-arg ...) (generate-temporaries #'(x ...))
@@ -781,16 +782,20 @@
            (define x-id 'x-id) ...
            (define xe-ty (expr-type xe-arg)) ...
            (when (ormap VoiT? (list xe-ty ...))
-             (raise-syntax-error 'let "new variable cannot be of type void" #'#,stx))
-           (define the-x-ref
-             (if (and (or (ArrT? xe-ty) (RecT? xe-ty) (UniT? xe-ty)) (Read? xe-arg))
-                 (Read-p xe-arg)
-                 (Var x-id xe-ty))) ...
+             (raise-syntax-error
+              'let "new variable cannot be of type void" #'#,stx))
+           (define ref-ty? (or (ArrT? xe-ty) (RecT? xe-ty) (UniT? xe-ty))) ...
+           (define the-x-ref (if ref-ty? (Read-p xe-arg) (Var x-id xe-ty))) ...
            (define-values (body-nv body-arg)
              (let-syntax ([x (P-expander (syntax-parser [_ #'the-x-ref]))] ...)
                (ANF (begin body ...))))
-           (values (append xe-nv ... (list* (anf-let the-x-ref xe-arg) ... body-nv))
-                   body-arg)))]
+           (define the-nvs
+             (for/list ([arg (in-list (list xe-arg ...))]
+                        [x-ref (in-list (list the-x-ref ...))]
+                        [ref? (in-list (list ref-ty? ...))]
+                        #:unless ref?)
+               (anf-let x-ref arg)))
+           (values (append xe-nv ... the-nvs body-nv) body-arg)))]
       [(_ (fn as ...))
        #:declare fn (static F-expander? "F expander")
        #:with x-id (generate-temporary #'fn)
