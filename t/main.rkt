@@ -418,32 +418,33 @@
               (iadd a (iadd b c)))
             #:tests ["foo" (array (S64 2) (S64 3) (S64 4)) => (S64 9)])
      ;; Callee takes an array as an argument, assigns to it
-     (TProg (define-fun (bar [arr : (array 3 S64)]) : S64
+     (TProg (define-fun S64 bar ([(array 3 S64) arr])
               ((arr @ (U32 0)) <- (S64 3))
               (S64 0))
-            (define-fun (foo) : S64
+            (define-fun S64 foo ()
               (define arr : (array 3 S64) := (array (S64 0) (S64 1) (S64 2)))
               (define z : S64 := bar <- arr)
               (arr @ (U32 0)))
             #:tests ["foo" => (S64 3)])
-     (TProg (define-fun (bar [m : S64]) : S64
+     (TProg (define-fun S64 bar ([S64 m])
               (iadd m (S64 1)))
-            (define-fun (foo [n : S64]) : S64
+            (define-fun S64 foo ([S64 n])
               (define a : S64 := bar <- n)
               a)
             #:tests ["foo" (S64 5) => (S64 6)])
      ;; Callee takes an integer argument by reference, assigns to it
-     (let ([bar (F ([#:ref m : S64]) : S64
+     (let ([bar (F ([#:ref S64 m]) : S64
                    (set! m (iadd m (S64 1)))
                    (S64 1))])
-       (TProg (define-fun (foo [n : S64]) : S64
+       (TProg (define-fun S64 foo ([S64 n])
                 (define a : S64 := bar <- n)
                 n)
               #:tests ["foo" (S64 5) => (S64 6)]))
+     ;; XXX Can't use #:ref here with new arg syntax? Look into this
      (TProg (define-fun (bar [#:ref m : S64]) : S64
               (set! m (iadd m (S64 1)))
               (S64 1))
-            (define-fun (foo [n : S64]) : S64
+            (define-fun S64 foo ([S64 n])
               (define a : S64 := bar <- n)
               n)
             #:tests ["foo" (S64 5) => (S64 6)])
@@ -455,56 +456,56 @@
               #:tests ["foo" (S32 5) => (S32 6)]))
      ;; Globals
      (TProg (define-global x : S32)
-            (define-fun (foo) : S32
+            (define-fun S32 foo ()
               (set! x (S32 5))
               (return x))
             #:tests ["foo" => (S32 5)])
      (TProg (define-global x : S32)
-            (define-fun (set_x) : S32
+            (define-fun S32 set_x ()
               (set! x (S32 5))
               (return 0))
-            (define-fun (plus_x [n : S32]) : S32
+            (define-fun S32 plus_x ([S32 n])
               (+ n x))
-            (define-fun (go) : S32
+            (define-fun S32 go ()
               (define z := set_x <-)
               (define n := plus_x <- (S32 3))
               n)
             #:tests ["go" => (S32 8)])
      (TProg (define-global x := (S32 5))
-            (define-fun (plus_x [n : S32]) : S32
+            (define-fun S32 plus_x ([S32 n])
               (+ n x))
             #:tests ["plus_x" (S32 3) => (S32 8)])
      (TProg (define-global x : S32 := 5)
-            (define-fun (plus_x [n : S32]) : S32
+            (define-fun S32 plus_x ([S32 n])
               (+ n x))
             #:tests ["plus_x" (S32 2) => (S32 7)])
      (TProg (define-global arr : (array 3 S32) := (array (S32 0) (S32 0) (S32 0)))
-            (define-fun (set_arr) : S32
+            (define-fun S32 set_arr ()
               (set! (arr @ 0) (S32 2))
               (set! (arr @ 1) (S32 3))
               (set! (arr @ 2) (S32 4))
               (return 0))
-            (define-fun (arr_sum) : S32
+            (define-fun S32 arr_sum ()
               (+ (arr @ 0) (+ (arr @ 1) (arr @ 2))))
-            (define-fun (go) : S32
+            (define-fun S32 go ()
               (define x := set_arr <-)
               (define y := arr_sum <-)
               y)
             #:tests ["go" => (S32 9)])
      (TProg (define-type arr_t (array 3 S32))
             (define-global arr := (arr_t (S32 1) (S32 2) (S32 3)))
-            (define-fun (foo) : S32
+            (define-fun S32 foo ()
               (+ (arr @ 0) (+ (arr @ 1) (arr @ 2))))
             #:tests ["foo" => (S32 6)])
      (TProg (define-type Coord (record x S32 y S32))
             (define-global crd : Coord := (Coord (S32 0) (S32 0)))
-            (define-fun (set_crd) : S32
+            (define-fun S32 set_crd ()
               (set! (crd -> x) 2)
               (set! (crd -> y) 3)
               (return 0))
-            (define-fun (crd_sum) : S32
+            (define-fun S32 crd_sum ()
               (+ (crd -> x) (crd -> y)))
-            (define-fun (go) : S32
+            (define-fun S32 go ()
               (define x := set_crd <-)
               (define y := crd_sum <-)
               (return y))
@@ -514,16 +515,16 @@
      ;; in evaluator?
      (TProg (define-type Num (union i S32 f F32))
             (define-global n := (Num #:i (S32 0)))
-            (define-fun (set_i) : S32
+            (define-fun S32 set_i ()
               (set! (n as i) (S32 5))
               (return 0))
-            (define-fun (go_i) : S32
+            (define-fun S32 go_i ()
               (define z := set_i <-)
               (n as i))
-            (define-fun (set_f) : S32
+            (define-fun S32 set_f ()
               (set! (n as f) (F32 2.5f0))
               (return 0))
-            (define-fun (go_f) : F32
+            (define-fun F32 go_f ()
               (define z := set_f <-)
               (n as f))
             #:tests ["go_i" => (S32 5)] #;["go_f" => (F32 2.5f0)])
@@ -536,9 +537,9 @@
                   ((c -> x) <- (S64 3))
                   (c -> x))
            (S64 3))
-       (TProg (define-fun (bar [c : #,Coord]) : S64
+       (TProg (define-fun S64 bar ([#,Coord c])
                 (c -> y))
-              (define-fun (foo [n : S64]) : S64
+              (define-fun S64 foo ([S64 n])
                 (define p : #,Coord := (record x (S64 0) y n))
                 (define m : S64 := bar <- p)
                 m)
@@ -546,7 +547,7 @@
        ;; Duplicate public type
        (TProg (include-type "Coord1" Coord)
               (include-type "Coord2" Coord)
-              (define-fun (foo [n : S64] [m : S64]) : S64
+              (define-fun S64 foo ([S64 n] [S64 m])
                 (define c : #,Coord := (record x n y m))
                 (iadd (c -> x) (c -> y)))
               #:tests ["foo" (S64 2) (S64 3) => (S64 5)])
@@ -568,15 +569,15 @@
               #:tests ["foo" (record x (S64 1) y (S64 2)) => (S64 1)])
        )
      ;; Test for F-expander syntax
-     (TProg (define-fun (plus1 [n : S32]) : S32
+     (TProg (define-fun S32 plus1 ([S32 n])
               (+ n 1))
-            (define-fun (go) : S32
+            (define-fun S32 go ()
               (define x := (plus1 (S32 5)))
               x)
             #:tests ["go" => (S32 6)])
-     (TProg (define-fun (square [n : S32]) : S32
+     (TProg (define-fun S32 square ([S32 n])
               (* n n))
-            (define-fun (go) : S32
+            (define-fun S32 go ()
               (define x : S32 := (square (S32 5)))
               x)
             #:tests ["go" => (S32 25)])
