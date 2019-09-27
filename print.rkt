@@ -154,7 +154,7 @@
 
 (define (print-ast ast [out (current-output-port)] [width (current-page-width)])
   (pretty-print (ast-doc ast) out width)
-  (newline))
+  (void))
 
 (provide
  (contract-out

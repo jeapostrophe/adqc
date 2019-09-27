@@ -49,7 +49,8 @@
                                       (eval-program the-p n args-i)))))
   (when eval-ans
     (define (print-ast! _)
-      (print-ast the-fun (current-error-port)))
+      (print-ast the-fun (current-error-port))
+      (newline (current-error-port)))
     (with-chk ([chk-inform! print-ast!])
       (chk (#:src stx eval-ans)
            (#:src stx eval-expect-ans))))
@@ -649,6 +650,8 @@
              (* (c -> x) (c -> y)))
            (S32 6))
        (TS (let ([n (Int/Flo #:i (S32 5))]) (n as i)) (S32 5))
-       ;; XXX example of many clauses in a let expression
+       (TS (let ([n (Int/Flo #:i (S32 1))] [c (Coord (S32 2) (S32 3))])
+             (+ (n as i) (* (c -> x) (c -> y))))
+           (S32 7))
        )
      )))

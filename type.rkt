@@ -6,11 +6,20 @@
          racket/match
          racket/set
          syntax/parse/define
-         "ast.rkt")
+         "ast.rkt"
+         "print.rkt")
+
+(define (snoc l x) (append l (list x)))
 
 ;; Type for exceptions raised by the ADQC type checker.
 (struct exn:fail:adqc:type exn:fail ())
 (provide (struct-out exn:fail:adqc:type))
+
+(define (raise-adqc-type-error fmt args blame cc)
+  (define out (open-output-string))
+  (print-ast blame out)
+  (define msg (apply format fmt (snoc args (get-output-string out))))
+  (raise (exn:fail:adqc:type msg cc)))
 
 ;; XXX Maybe this isn't the best way to do this. My first instinct is to capture
 ;; the AST node which is creating the error and print it along with the error
@@ -27,11 +36,11 @@
            [(_ msg:str args:expr (... ...))
             #:with msg-full (datum->syntax
                              #'msg (string-append
-                                    (syntax->datum #'msg) "\nBlaming AST: ~v"))
+                                    (syntax->datum #'msg) "\nBlaming AST: ~a"))
             (syntax/loc stx*
-              (raise (exn:fail:adqc:type
-                      (apply format msg-full (list args (... ...) blame-ast))
-                      (current-continuation-marks))))])))]))
+              (raise-adqc-type-error
+               msg-full (list args (... ...)) blame-ast
+               (current-continuation-marks)))])))]))
 
 (struct env-info (env) #:transparent)
 (struct type-info env-info (ty) #:transparent)
