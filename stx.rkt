@@ -918,6 +918,8 @@
   + - * / modulo
   bitwise-ior bitwise-and bitwise-xor
   = < <= > >=
+  ;; XXX 'and' and 'or' don't belong here, as they don't
+  ;; evaluate their arguments strictly. Move to their own macros.
   and or not zero? min max)
 
 (begin-for-syntax
