@@ -918,9 +918,7 @@
   + - * / modulo
   bitwise-ior bitwise-and bitwise-xor
   = < <= > >=
-  ;; XXX 'and' and 'or' don't belong here, as they don't
-  ;; evaluate their arguments strictly. Move to their own macros.
-  and or not zero? min max)
+  not zero? min max)
 
 (begin-for-syntax
   (struct E/A-expander (E-impl A-impl)
@@ -1001,6 +999,18 @@
     [(_ [else a]) (syntax/loc this-syntax (ANF a))]
     [(_ [q a] . more)
      (syntax/loc this-syntax (ANF (if q a (cond . more))))]))
+(define-A-free-syntax and
+  (syntax-parser
+    [(_) (syntax/loc this-syntax (N 1))]
+    [(_ a) (syntax/loc this-syntax (ANF a))]
+    [(_ a as ...) (syntax/loc this-syntax (ANF (if a (and as ...) (N 0))))]))
+(define-A-free-syntax or
+  (syntax-parser
+    [(_) (syntax/loc this-syntax (N 0))]
+    [(_ a) (syntax/loc this-syntax (ANF a))]
+    [(_ a as ...)
+     (syntax/loc this-syntax
+       (ANF (let ([tmp a]) (if tmp tmp (or as ...)))))]))
 
 (begin-for-syntax
   (struct S/A-expander (S-impl A-impl)

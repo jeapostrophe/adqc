@@ -654,5 +654,6 @@
        (TS (let ([n (Int/Flo #:i (S32 1))] [c (Coord (S32 2) (S32 3))])
              (+ (n as i) (* (c -> x) (c -> y))))
            (S32 7))
+       ;; XXX Tests for 'and' and 'or'
        )
      )))
