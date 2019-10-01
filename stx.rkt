@@ -725,7 +725,7 @@
 (struct anf-type (var es) #:transparent)
 (struct anf-union (var m e) #:transparent)
 
-;; XXX error, let/ec, unsyntax
+;; XXX error, let/ec
 (define-syntax (ANF stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -843,6 +843,15 @@
        #:declare macro-id (static A-expander? "A expander")
        (record-disappeared-uses #'macro-id)
        (A-expand (attribute macro-id.value) #'macro-use)]
+      [(_ (unsyntax e))
+       (record-disappeared-uses #'unsyntax)
+       ;; XXX Maybe this should support the user passing nvs and args
+       ;; at phase-0, instead of just assuming that e is an Expr.
+       (quasisyntax/loc stx
+         (if (Expr? e)
+             (values '() e)
+             (raise-syntax-error
+              #f "unsyntaxed expression must be Expr" #'#,stx)))]
       [(_ e) (syntax/loc stx (values '() (E e)))])))
 
 (define (ANF-compose ret-fn nvs arg)
@@ -1001,12 +1010,12 @@
      (syntax/loc this-syntax (ANF (if q a (cond . more))))]))
 (define-A-free-syntax and
   (syntax-parser
-    [(_) (syntax/loc this-syntax (N 1))]
+    [(_) (syntax/loc this-syntax (ANF #,(N 1)))]
     [(_ a) (syntax/loc this-syntax (ANF a))]
     [(_ a as ...) (syntax/loc this-syntax (ANF (if a (and as ...) (N 0))))]))
 (define-A-free-syntax or
   (syntax-parser
-    [(_) (syntax/loc this-syntax (N 0))]
+    [(_) (syntax/loc this-syntax (ANF #,(N 0)))]
     [(_ a) (syntax/loc this-syntax (ANF a))]
     [(_ a as ...)
      (syntax/loc this-syntax
