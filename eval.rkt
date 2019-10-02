@@ -225,6 +225,10 @@
     [(ArrT dim ety) (build-vector dim (λ (_) (box (type-zero ety))))]
     [(RecT f->ty _ _) (hash-map-ht f->ty (λ (ty) (box (type-zero ty))))]
     [(UniT mode->ty _) (hash-map-ht mode->ty (λ (ty) (box (type-zero ty))))]
+    ;; XXX Using an unboxed #f to represent void variables will cause
+    ;; issues if we want to evaluate void functions later. What is
+    ;; a reasonable racket value to return from an evaluated void function?
+    [(VoiT) #f]
     [(? ExtT?) (error 'type-zero "XXX Cannot interp external types yet: ~e" ty)]))
 
 (define (eval-init σ i)

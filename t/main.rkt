@@ -45,15 +45,14 @@
                            (unbox (eval-init (hash) expect-ans-i))))
   (define eval-ans #f)
   (define comp-ans #f)
-  (chk #:t (#:src stx (set! eval-ans (unpack-MetaE
-                                      (eval-program the-p n args-i)))))
-  (when eval-ans
-    (define (print-ast! _)
-      (print-ast the-fun (current-error-port))
-      (newline (current-error-port)))
-    (with-chk ([chk-inform! print-ast!])
-      (chk (#:src stx eval-ans)
-           (#:src stx eval-expect-ans))))
+  (define (print-the-fun! _)
+    (print-ast the-fun (current-error-port))
+    (newline (current-error-port)))
+  (with-chk ([chk-inform! print-the-fun!])
+    (chk #:t (#:src stx (set! eval-ans (unpack-MetaE
+                                        (eval-program the-p n args-i)))))
+    (when eval-ans
+      (chk (#:src stx eval-ans) (#:src stx eval-expect-ans))))
   (define c-path (make-temporary-file "adqc~a.c"))
   (unless the-cp
     (chk #:t (set! the-cp (link-program the-p c-path))))
@@ -645,6 +644,12 @@
      (TS (>= (S32 2) (S32 3)) (S32 0))
      (TS (add1 (S32 1)) (S32 2))
      (TS (sub1 (S32 2)) (S32 1))
+     (TS (let ([n (S32 1)])
+           (void) n)
+         (S32 1))
+     (TS (let ([n (S32 1)])
+           (set! n (S32 5)) n)
+         (S32 5))
      (TS (let ([x (S32 5)]) (square x)) (S32 25))
      (TS (let ([c (Coord (S32 2) (S32 3))])
            (* (c -> x) (c -> y)))
