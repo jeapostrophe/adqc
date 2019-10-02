@@ -2,8 +2,7 @@
 (require racket/require reprovide/reprovide)
 (reprovide
  (subtract-in "ast.rkt" "type.rkt")
- (subtract-in "type.rkt" "partial-eval.rkt")
- "partial-eval.rkt"
+ "type.rkt"
  "eval.rkt"
  "stx.rkt"
  "compile.rkt"
