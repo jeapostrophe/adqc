@@ -6,6 +6,7 @@
                      racket/list
                      racket/syntax
                      syntax/id-table)
+         racket/contract/base
          racket/list
          racket/match
          racket/require
@@ -718,12 +719,15 @@
   A-free-macros define-A-free-syntax
   A-expander A-expand define-A-expander)
 
-(struct anf-void (var pre) #:transparent)
-(struct anf-let (var xe) #:transparent)
-(struct anf-call (x ty f es) #:transparent)
-(struct anf-if (var p-arg t-nv t-arg f-nv f-arg) #:transparent)
-(struct anf-type (var es) #:transparent)
-(struct anf-union (var m e) #:transparent)
+(struct anf-nv () #:transparent)
+(struct anf-void anf-nv (var pre) #:transparent)
+(struct anf-let anf-nv (var xe) #:transparent)
+(struct anf-call anf-nv (x ty f es) #:transparent)
+(struct anf-if anf-nv (var p-arg t-nv t-arg f-nv f-arg) #:transparent)
+(struct anf-type anf-nv (var es) #:transparent)
+(struct anf-union anf-nv (var m e) #:transparent)
+
+(define listof-nvs? (listof anf-nv?))
 
 ;; XXX error, let/ec
 (define-syntax (ANF stx)
@@ -843,15 +847,17 @@
        #:declare macro-id (static A-expander? "A expander")
        (record-disappeared-uses #'macro-id)
        (A-expand (attribute macro-id.value) #'macro-use)]
-      [(_ (unsyntax e))
+      [(_ (unsyntax a))
        (record-disappeared-uses #'unsyntax)
-       ;; XXX Maybe this should support the user passing nvs and args
-       ;; at phase-0, instead of just assuming that e is an Expr.
        (quasisyntax/loc stx
-         (if (Expr? e)
-             (values '() e)
+         (let-values ([(nvs arg) a])
+           (unless (Expr? arg)
              (raise-syntax-error
-              #f "unsyntaxed expression must be Expr" #'#,stx)))]
+              #f "unsyntaxed ANF arg must be Expr" #'#,stx))
+           (unless (listof-nvs? nvs)
+             (raise-syntax-error
+              #f "unsyntaxed ANF nvs must be list of anf-nv" #'#,stx))
+           (values nvs arg)))]
       [(_ e) (syntax/loc stx (values '() (E e)))])))
 
 (define (ANF-compose ret-fn nvs arg)
@@ -1010,12 +1016,14 @@
      (syntax/loc this-syntax (ANF (if q a (cond . more))))]))
 (define-A-free-syntax and
   (syntax-parser
-    [(_) (syntax/loc this-syntax (ANF #,(N 1)))]
+    [(_) (syntax/loc this-syntax (ANF #,(values '() (N 1))))]
     [(_ a) (syntax/loc this-syntax (ANF a))]
-    [(_ a as ...) (syntax/loc this-syntax (ANF (if a (and as ...) (N 0))))]))
+    [(_ a as ...)
+     (syntax/loc this-syntax
+       (ANF (if a (and as ...) #,(values '() (N 0)))))]))
 (define-A-free-syntax or
   (syntax-parser
-    [(_) (syntax/loc this-syntax (ANF #,(N 0)))]
+    [(_) (syntax/loc this-syntax (ANF #,(values '() (N 0))))]
     [(_ a) (syntax/loc this-syntax (ANF a))]
     [(_ a as ...)
      (syntax/loc this-syntax

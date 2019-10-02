@@ -659,6 +659,8 @@
              (let ([m (Int/Flo #:i n)])
                (+ (m as i) (S32 1))))
            (S32 6))
+       (TS #,(values '() (E (S32 5))) (S32 5))
+       (TS (+ (S32 2) #,(values '() (E (S32 3)))) (S32 5))
        ;; XXX More tests for 'and' and 'or'
        (TS (or) (S8 0))
        )
