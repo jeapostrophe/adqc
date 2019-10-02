@@ -755,10 +755,12 @@
        #:with x-id (generate-temporary 'void)
        (record-disappeared-uses #'set!)
        (syntax/loc stx
-         (let-values ([(a-nv a-arg) (ANF a)])
+         (let* ([the-p (P p)] [p-ty (path-type the-p)])
+           (define-values (a-nv a-arg)
+             (syntax-parameterize ([expect-ty #'p-ty]) (ANF a)))
            (define x-id 'x-id)
            (define the-x-ref (Var x-id (T void)))
-           (values (snoc a-nv (anf-void the-x-ref (Assign (P p) a-arg)))
+           (values (snoc a-nv (anf-void the-x-ref (Assign the-p a-arg)))
                    (Read the-x-ref))))]
       [(_ (if p t f))
        #:with x-id (generate-temporary)
