@@ -1041,7 +1041,6 @@
     [(_) (syntax/loc this-syntax (ANF #,(values '() (N 0))))]
     [(_ a) (syntax/loc this-syntax (ANF a))]
     [(_ a as ...)
-     #:with tmp (generate-temporary)
      (syntax/loc this-syntax
        (let-values ([(a-nv a-arg) (ANF a)])
          (define arg-ty (expr-type a-arg))
