@@ -1028,14 +1028,28 @@
     [(_ a) (syntax/loc this-syntax (ANF a))]
     [(_ a as ...)
      (syntax/loc this-syntax
-       (ANF (if a (and as ...) #,(values '() (N 0)))))]))
+       (let-values ([(a-nv a-arg) (ANF a)])
+         (define arg-ty (expr-type a-arg))
+         (define-values (as-nv as-arg)
+           (syntax-parameterize ([expect-ty #'arg-ty])
+             (ANF (and as ...))))
+         (ANF (if #,(values a-nv a-arg)
+                  #,(values as-nv as-arg)
+                  #,(values '() (N arg-ty 0))))))]))
 (define-A-free-syntax or
   (syntax-parser
     [(_) (syntax/loc this-syntax (ANF #,(values '() (N 0))))]
     [(_ a) (syntax/loc this-syntax (ANF a))]
     [(_ a as ...)
+     #:with tmp (generate-temporary)
      (syntax/loc this-syntax
-       (ANF (let ([tmp a]) (if tmp tmp (or as ...)))))]))
+       (let-values ([(a-nv a-arg) (ANF a)])
+         (define arg-ty (expr-type a-arg))
+         (define-values (as-nv as-arg)
+           (syntax-parameterize ([expect-ty #'arg-ty])
+             (ANF (or as ...))))
+         (ANF (let ([tmp #,(values a-nv a-arg)])
+                (if tmp tmp #,(values as-nv as-arg))))))]))
 
 (begin-for-syntax
   (struct S/A-expander (S-impl A-impl)
