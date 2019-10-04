@@ -291,14 +291,21 @@
   (syntax-parser
     [(_) (syntax/loc this-syntax (N 1))]
     [(_ e) (syntax/loc this-syntax (E e))]
-    [(_ x e ...) (syntax/loc this-syntax (E (if x (and e ...) (N 0))))]))
+    [(_ e es ...)
+     (syntax/loc this-syntax
+       (let* ([the-e (E e)] [e-ty (expr-type the-e)])
+         (IfE the-e
+              (syntax-parameterize ([expect-ty #'e-ty]) (E (and es ...)))
+              (N e-ty 0))))]))
 (define-E-free-syntax or
   (syntax-parser
     [(_) (syntax/loc this-syntax (N 0))]
     [(_ e) (syntax/loc this-syntax (E e))]
-    [(_ x e ...)
+    [(_ e es ...)
      (syntax/loc this-syntax
-       (E (let ([tmp x]) (if tmp tmp (or e ...)))))]))
+       (let* ([the-e (E e)] [e-ty (expr-type the-e)])
+         (IfE the-e the-e
+              (syntax-parameterize ([expect-ty #'e-ty]) (E (or es ...))))))]))
 (define (not* the-e)
   (define e-ty (expr-type the-e))
   (define one
