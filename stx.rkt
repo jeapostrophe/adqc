@@ -848,10 +848,10 @@
        #:declare macro-id (static A-expander? "A expander")
        (record-disappeared-uses #'macro-id)
        (A-expand (attribute macro-id.value) #'macro-use)]
-      [(_ (unsyntax a))
+      [(_ (unsyntax nvs/arg))
        (record-disappeared-uses #'unsyntax)
        (quasisyntax/loc stx
-         (let-values ([(nvs arg) a])
+         (let-values ([(nvs arg) nvs/arg])
            (unless (Expr? arg)
              (raise-syntax-error
               #f "unsyntaxed ANF arg must be Expr" #'#,stx))
