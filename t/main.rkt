@@ -652,6 +652,18 @@
      (TS (>= (S32 2) (S32 3)) (S32 0))
      (TS (add1 (S32 1)) (S32 2))
      (TS (sub1 (S32 2)) (S32 1))
+     ;; XXX let/ec is failing the type checker right now
+     #;
+     (TProg (define-fun S32 foo ([S32 x])
+              (let/ec (esc S32)
+                (let ([y (S32 2)])
+                  (if (< x 0)
+                      (esc x)
+                      (let ([z (S32 3)])
+                        (* (+ x y) z))))))
+            #:tests
+            ["foo" (S32 -1) => (S32 -1)]
+            ["foo" (S32 1) => (S32 9)])
      (TS (let ([n (S32 1)])
            (void) n)
          (S32 1))

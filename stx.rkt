@@ -727,6 +727,7 @@
 
 (struct anf-nv () #:transparent)
 (struct anf-void anf-nv (var pre) #:transparent)
+(struct anf-let/ec (var k e) #:transparent)
 (struct anf-let anf-nv (var xe) #:transparent)
 (struct anf-call anf-nv (x ty f es) #:transparent)
 (struct anf-if anf-nv (var p-arg t-nv t-arg f-nv f-arg) #:transparent)
@@ -735,7 +736,7 @@
 
 (define listof-nvs? (listof anf-nv?))
 
-;; XXX error, let/ec
+;; XXX error
 (define-syntax (ANF stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -780,6 +781,30 @@
            (define x-ty (expr-type t-arg))
            (define the-x-ref (Var x-id x-ty))
            (values (snoc p-nv (anf-if the-x-ref p-arg t-nv t-arg f-nv f-arg))
+                   (Read the-x-ref))))]
+      [(_ (let/ec (k:id ty) body ...+))
+       #:with x-id (generate-temporary)
+       #:with k-id (generate-temporary #'k)
+       (record-disappeared-uses #'let/ec)
+       (syntax/loc stx
+         (let ([x-id 'x-id] [k-id 'k-id] [the-ty (T ty)])
+           (define the-x-ref (Var x-id the-ty))
+           (define-values (body-nv body-arg)
+             (let-syntax
+                 ([k (A-expander
+                      (syntax-parser
+                        [(_ a)
+                         #:with x-id* (generate-temporary 'void)
+                         (syntax/loc this-syntax
+                           (let* ([x-id* 'x-id] [the-x-ref* (Var x-id* (T void))])
+                             (define-values (a-nv a-arg) (ANF a))
+                             (define the-stmt
+                               (Begin (Assign the-x-ref a-arg)
+                                      (Jump k-id)))
+                             (values (snoc a-nv (anf-void the-x-ref* the-stmt))
+                                     (Read the-x-ref*))))]))])
+               (ANF (begin body ...))))
+           (values (snoc body-nv (anf-let/ec the-x-ref k-id body-arg))
                    (Read the-x-ref))))]
       [(_ (let ([x:id xe] ...) body ...+))
        #:with (x-id ...) (generate-temporaries #'(x ...))
@@ -875,6 +900,11 @@
     [(cons (anf-void var pre) more)
      (match-define (Var x ty) (unpack-MetaP var))
      (Let x ty (UndI ty) (Begin (or pre (Skip #f)) (rec more arg)))]
+    [(cons (anf-let/ec var k e) more)
+     (match-define (Var x ty) (unpack-MetaP var))
+     (Let x ty (UndI ty)
+          (Let/ec k (Begin (Assign var e)
+                           (rec more arg))))]
     [(cons (anf-let var xe) more)
      (match-define (Var x ty) (unpack-MetaP var))
      (Let x ty (UndI ty)
@@ -1098,7 +1128,7 @@
       (provide name)) ...))
 (define-S/A-increment-ops [+=1 add1] [-=1 sub1])
 
-;; XXX 'assert!', 'while', 'for' for ANF.
+;; XXX 'assert!', 'let loop', 'for' for ANF.
 
 (begin-for-syntax
   (define-syntax-class Farg
