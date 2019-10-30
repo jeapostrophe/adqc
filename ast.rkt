@@ -112,12 +112,15 @@
 (struct UniT Type (mode->ty mode->c) #:transparent)
 (struct ExtT Type (src name) #:transparent)
 (struct VoiT Type () #:transparent)
+(struct ErrT Type () #:transparent)
 
 (define non-void-type? (and/c Type? (not/c VoiT?)))
+(define non-err-type? (and/c Type? (not/c ErrT?)))
 
 (provide
  (contract-out
   [non-void-type? predicate/c]
+  [non-err-type? predicate/c]
   [struct Type ()]
   [struct IntT ([signed? boolean?]
                 [bits (apply or/c integer-bit-widths)])]
@@ -129,7 +132,8 @@
   [struct UniT ([mode->ty (hash/c symbol? non-void-type?)]
                 [mode->c (hash/c symbol? c-identifier-string?)])]
   [struct ExtT ([src ExternSrc?] [name string?])]
-  [struct VoiT ()]))
+  [struct VoiT ()]
+  [struct ErrT ()]))
 
 ;; Path
 (struct Path () #:transparent)
