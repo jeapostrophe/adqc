@@ -51,21 +51,32 @@
 (define f-cmp-ops '(foeq fone fogt foge folt fole fueq fune
                          fugt fuge fult fule ffalse ftrue ford funo))
 
+(define (type=? L R)
+  (or (AnyT? L) (AnyT? R) (equal? L R)))
+
 (define (union-subset? u ty)
   (match-define (UniT m->ty _) u)
   (for/or ([u-ty (in-hash-values m->ty)])
-    (cond [(equal? ty u-ty) #t]
+    (cond [(type=? ty u-ty) #t]
           [(UniT? u-ty) (union-subset? u-ty ty)]
           [else #f])))
 
 (define (resolve-type L R)
-  (cond [(equal? L R) L]
+  (cond [(AnyT? L) R]
+        [(AnyT? R) L]
+        [(equal? L R) L]
         [else (cond [(and (UniT? L) (union-subset? L R)) L]
                     [(and (UniT? R) (union-subset? R L)) R]
                     [else (error 'resolve-type "type mismatch L: ~v R: ~v" L R)])]))
 
 (define (env-union e0 . es)
   (apply hash-union e0 es #:combine resolve-type))
+
+(define (IntT/any? v)
+  (or (IntT? v) (AnyT? v)))
+
+(define (FloT/any? v)
+  (or (FloT? v) (AnyT? v)))
 
 (define (expr-type-info e)
   (define-reporter report e)
@@ -92,21 +103,22 @@
        (expr-type-info L))
      (match-define (type-info R-env R-ty)
        (expr-type-info R))
-     (unless (equal? L-ty R-ty)
+     (unless (type=? L-ty R-ty)
        (report "BinOp: LHS type ~v and RHS type ~v not equal" L-ty R-ty))
+     (define the-ty (resolve-type L-ty R-ty))
      (when (or (set-member? i-arith-ops op) (set-member? i-cmp-ops op))
-       (unless (IntT? L-ty)
+       (unless (IntT/any? the-ty)
          (report "BinOp: integer op expects integral arguments, given ~v, ~v"
                  L-ty R-ty)))
      (when (or (set-member? f-arith-ops op) (set-member? f-cmp-ops op))
-       (unless (FloT? L-ty)
+       (unless (FloT/any? the-ty)
          (report
           "BinOp: floating-point op expects floating-point arguments, given ~v, ~v"
           L-ty R-ty)))
      ;; XXX add logic for union types.
      (define env (env-union L-env R-env))
      (cond [(or (set-member? i-arith-ops op) (set-member? f-arith-ops op))
-            (type-info env L-ty)]
+            (type-info env the-ty)]
            [(or (set-member? i-cmp-ops op) (set-member? f-cmp-ops op))
             (type-info env (IntT #t 32))])]
     [(LetE x ty xe be)
@@ -128,16 +140,17 @@
     [(IfE ce te fe)
      (match-define (type-info ce-env ce-ty)
        (expr-type-info ce))
-     (unless (IntT? ce-ty)
+     (unless (IntT/any? ce-ty)
        (report "IfE: predicate type ~v not integral" ce-ty))
      (match-define (type-info te-env te-ty)
        (expr-type-info te))
      (match-define (type-info fe-env fe-ty)
        (expr-type-info fe))
-     (unless (equal? te-ty fe-ty)
+     (unless (type=? te-ty fe-ty)
        (report "IfE: 'then' type ~v and 'else' type ~v not equal" te-ty fe-ty))
+     (define the-ty (resolve-type te-ty fe-ty))
      (define env (env-union ce-env te-env fe-env))
-     (type-info env te-ty)]))
+     (type-info env the-ty)]))
 
 (define (path-type-info p)
   (define-reporter report p)
@@ -152,7 +165,7 @@
     [(Select p ie)
      (match-define (type-info ie-env ie-ty)
        (expr-type-info ie))
-     (unless (IntT? ie-ty)
+     (unless (IntT/any? ie-ty)
        (report "Select: index type ~v not integral" ie-ty))
      (match-define (type-info p-env (and (ArrT dim ety) p-ty))
        (path-type-info p))
@@ -191,7 +204,7 @@
        (path-type-info p))
      (match-define (type-info e-env e-ty)
        (expr-type-info e))
-     (unless (equal? p-ty e-ty)
+     (unless (type=? p-ty e-ty)
        (report
         "Assign: path type ~v and expression type ~v not equal"
         p-ty e-ty))
@@ -201,13 +214,13 @@
        (expr-type-info p))
      (match-define (env-info t-env) (rec t))
      (match-define (env-info f-env) (rec f))
-     (unless (IntT? p-ty)
+     (unless (IntT/any? p-ty)
        (report "If: predicate type ~v not integral" p-ty))
      (env-info (env-union p-env t-env f-env))]
     [(While p body)
      (match-define (type-info p-env p-ty)
        (expr-type-info p))
-     (unless (IntT? p-ty)
+     (unless (IntT/any? p-ty)
        (report "While: predicate type ~v not integral" p-ty))
      (match-define (env-info body-env) (rec body))
      (env-info (env-union p-env body-env))]
@@ -216,7 +229,7 @@
      (check-init-type s ty xi)
      (match-define (env-info bs-env) (rec bs))
      (define bs-x-ty (hash-ref bs-env x ty))
-     (unless (equal? ty bs-x-ty)
+     (unless (type=? ty bs-x-ty)
        (report
         "Let: declaration '~a' has type ~v but is referenced as type ~v in body"
         x ty bs-x-ty))
@@ -236,11 +249,11 @@
        (define a-ty (type-info-ty
                      (cond [(Expr? a) (expr-type-info a)]
                            [(Path? a) (path-type-info a)])))
-       (unless (equal? a-ty (Arg-ty fa))
+       (unless (type=? a-ty (Arg-ty fa))
          (report "Call: expected type ~v for argument ~a, given ~v" fa i a)))
      (match-define (env-info bs-env) (rec bs))
      (define bs-x-ty (hash-ref bs-env x ty))
-     (unless (equal? ty bs-x-ty)
+     (unless (type=? ty bs-x-ty)
        (report
         "Call: declaration '~a' has type ~v but is referenced as type ~v in body"
         x ty bs-x-ty))
