@@ -98,6 +98,10 @@
 (define-T-free-syntax void
   (syntax-parser [_ (syntax/loc this-syntax the-void-ref)]))
 
+(define the-any-ref (AnyT))
+(define-T-expander any
+  (syntax-parser [_ (syntax/loc this-syntax the-any-ref)]))
+
 (define-expanders&macros
   P-free-macros define-P-free-syntax
   P-expander P-expand define-P-expander)
@@ -794,9 +798,9 @@
                  ([k (A-expander
                       (syntax-parser
                         [(_ a)
-                         #:with x-id* (generate-temporary 'void)
+                         #:with x-id* (generate-temporary 'any)
                          (syntax/loc this-syntax
-                           (let* ([x-id* 'x-id] [the-x-ref* (Var x-id* (T void))])
+                           (let* ([x-id* 'x-id] [the-x-ref* (Var x-id* (T any))])
                              (define-values (a-nv a-arg) (ANF a))
                              (define the-stmt
                                (Begin (Assign the-x-ref a-arg)

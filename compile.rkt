@@ -255,7 +255,7 @@
 (define (compile-decl ty name [val #f])
   (define assign (and val (list* " = " val)))
   (match ty
-    [(? VoiT?) #f]
+    [(or (? VoiT?) (? AnyT?)) #f]
     [(or (? IntT?) (? FloT?) (? ArrT?) (? RecT?) (? UniT?))
      (list* (compile-type/ref ty name) " " name assign ";")]
     [(ExtT src ext)
@@ -330,6 +330,9 @@
      (list* "// " c))
    ind-nl))
 
+(define (VoiT/any? v)
+  (or (VoiT? v) (AnyT? v)))
+
 (define (compile-stmt γ ρ s)
   (define (rec s) (compile-stmt γ ρ s))
   (match s
@@ -344,7 +347,7 @@
             "exit(1);")]
     [(Assign path e)
      (define-values (path-ast path-ty) (compile-path/deref ρ path))
-     (cond [(and (VoiT? path-ty) (VoiT? (expr-type e))) #f]
+     (cond [(and (VoiT/any? path-ty) (VoiT/any? (expr-type e))) #f]
            [else (list* path-ast " = " (compile-expr ρ e) ";")])]
     [(Begin f s)
      (cond [(and (Skip? f) (not (Skip-comment f))) (rec s)]
