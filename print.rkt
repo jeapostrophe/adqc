@@ -28,7 +28,8 @@
          (hs-append (sym m) (type-doc ty))))
      (h-append (text "(union ") (apply hs-append m-docs) rparen)]
     [(ExtT _ name) (text name)]
-    [(? VoiT?) (text "void")]))
+    [(? VoiT?) (text "void")]
+    [(? AnyT?) (text "any")]))
 
 (define (path-doc p)
   (match (unpack-MetaP p)
@@ -135,7 +136,7 @@
        (for/list ([a (in-list args)])
          (match-define (Arg x ty mode) a)
          (define mode-doc (h-append (text "#:") (sym mode)))
-         (h-append lbracket mode-doc space (sym x) space (type-doc ty) rbracket)))
+         (h-append lbracket mode-doc space (type-doc ty) space (sym x) rbracket)))
      (define head
        (h-append (text "(F ") (type-doc ret-ty) space
                  lparen (apply hs-append arg-docs) rparen))

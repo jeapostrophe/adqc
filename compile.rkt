@@ -10,6 +10,7 @@
          racket/string
          racket/system
          "ast.rkt"
+         "print.rkt"
          (only-in "type.rkt" expr-type))
 
 ;; XXX Read through https://queue.acm.org/detail.cfm?id=3212479 and
@@ -454,37 +455,44 @@
 (define (compile-fun mf)
   (define f (unpack-MetaFun mf))
   (match-define (IntFun as ret-x ret-ty ret-lab body) f)
+  ;; XXX Instead of using catch->log->raise here, make a new exn
+  ;; type that is a tuple of the blamed function and the inner exn.
+  (define (print-fun!)
+    (newline (current-error-port))
+    (print-ast f (current-error-port))
+    (newline (current-error-port)))
   (parameterize ([current-fun f])
-    (define fun-name (hash-ref (current-Σ) f))
-    (define-values (ρ ref-args)
-      (for/fold ([ρ (hasheq)] [ref-args (set)])
-                ([a (in-list as)])
-        (match-define (Arg x ty mode) a)
-        (define x* (cify x))
-        (values (hash-set ρ x x*)
-                (cond [(and (or (IntT? ty) (FloT? ty)) (eq? mode 'ref))
-                       (set-add ref-args x*)]
-                      [else ref-args]))))
-    (define ret-x* (cify ret-x))
-    (define ret-lab* (cify ret-lab))
-    (define γ (hasheq ret-lab ret-lab*))
-    (parameterize ([current-ret-info (ret-info ret-x* ret-lab*)]
-                   [current-ref-vars ref-args])
-      (define args-ast
-        (add-between
-         (for/list ([a (in-list as)])
-           (match-define (Arg x ty _) a)
-           (define x* (hash-ref ρ x))
-           (list* (compile-type/ref ty x*) " " (hash-ref ρ x)))
-         ", "))
-      (define decl-part
-        (list* (compile-type/ref ret-ty ret-x*) " " fun-name "(" args-ast ")"))
-      (define defn-part
-        (list* decl-part "{" ind++ ind-nl
-               (compile-decl ret-ty ret-x*) ind-nl
-               (compile-stmt γ (hash-set ρ ret-x ret-x*) body)
-               ind-- ind-nl "}" ind-nl))
-      (values decl-part defn-part))))
+    (with-handlers ([exn:fail? (λ (e) (print-fun!) (raise e))])
+      (define fun-name (hash-ref (current-Σ) f))
+      (define-values (ρ ref-args)
+        (for/fold ([ρ (hasheq)] [ref-args (set)])
+                  ([a (in-list as)])
+          (match-define (Arg x ty mode) a)
+          (define x* (cify x))
+          (values (hash-set ρ x x*)
+                  (cond [(and (or (IntT? ty) (FloT? ty)) (eq? mode 'ref))
+                         (set-add ref-args x*)]
+                        [else ref-args]))))
+      (define ret-x* (cify ret-x))
+      (define ret-lab* (cify ret-lab))
+      (define γ (hasheq ret-lab ret-lab*))
+      (parameterize ([current-ret-info (ret-info ret-x* ret-lab*)]
+                     [current-ref-vars ref-args])
+        (define args-ast
+          (add-between
+           (for/list ([a (in-list as)])
+             (match-define (Arg x ty _) a)
+             (define x* (hash-ref ρ x))
+             (list* (compile-type/ref ty x*) " " (hash-ref ρ x)))
+           ", "))
+        (define decl-part
+          (list* (compile-type/ref ret-ty ret-x*) " " fun-name "(" args-ast ")"))
+        (define defn-part
+          (list* decl-part "{" ind++ ind-nl
+                 (compile-decl ret-ty ret-x*) ind-nl
+                 (compile-stmt γ (hash-set ρ ret-x ret-x*) body)
+                 ind-- ind-nl "}" ind-nl))
+        (values decl-part defn-part)))))
 
 (define (compile-program prog)
   (match-define (Program n->g n->ty n->f) prog)
