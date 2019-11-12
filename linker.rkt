@@ -6,7 +6,8 @@
          (except-in ffi/unsafe ->)
          "ast.rkt"
          "compile.rkt"
-         "stx.rkt")
+         "stx.rkt"
+         "print.rkt")
 
 (struct linked-program (lib type-map ty->tag tag->ty ret-tys) #:transparent)
 (struct typed-pointer (ty ptr) #:transparent)
@@ -98,6 +99,12 @@
     (define in (open-input-file c-path))
     (for ([ch (in-port read-char in)])
       (display ch (current-error-port)))
+    (newline (current-error-port))
+    (for ([(n f) (in-hash (Program-name->fun p))])
+      (eprintf "~a:\n" n)
+      (print-ast (unpack-MetaFun f) (current-error-port))
+      (newline (current-error-port)))
+    (newline (current-error-port))
     (close-input-port in)
     (unless given-c-path (delete-file c-path))
     (error 'link-program "call to compile-library failed (see stderr)"))

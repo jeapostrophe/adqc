@@ -731,7 +731,7 @@
 
 (struct anf-nv () #:transparent)
 (struct anf-void anf-nv (var pre) #:transparent)
-(struct anf-let/ec (var k e) #:transparent)
+(struct anf-let/ec (var k b-arg b-nv) #:transparent)
 (struct anf-let anf-nv (var xe) #:transparent)
 (struct anf-call anf-nv (x ty f es) #:transparent)
 (struct anf-if anf-nv (var p-arg t-nv t-arg f-nv f-arg) #:transparent)
@@ -775,7 +775,7 @@
            (values (snoc a-nv (anf-void the-x-ref (Assign the-p a-arg)))
                    (Read the-x-ref))))]
       [(_ (if p t f))
-       #:with x-id (generate-temporary)
+       #:with x-id (generate-temporary 'if)
        (record-disappeared-uses #'if)
        (syntax/loc stx
          (let-values ([(p-nv p-arg) (ANF p)]
@@ -787,7 +787,7 @@
            (values (snoc p-nv (anf-if the-x-ref p-arg t-nv t-arg f-nv f-arg))
                    (Read the-x-ref))))]
       [(_ (let/ec (k:id ty) body ...+))
-       #:with x-id (generate-temporary)
+       #:with x-id (generate-temporary 'letec)
        #:with k-id (generate-temporary #'k)
        (record-disappeared-uses #'let/ec)
        (syntax/loc stx
@@ -808,7 +808,7 @@
                              (values (snoc a-nv (anf-void the-x-ref* the-stmt))
                                      (Read the-x-ref*))))]))])
                (ANF (begin body ...))))
-           (values (snoc body-nv (anf-let/ec the-x-ref k-id body-arg))
+           (values (list (anf-let/ec the-x-ref k-id body-arg body-nv))
                    (Read the-x-ref))))]
       [(_ (let ([x:id xe] ...) body ...+))
        #:with (x-id ...) (generate-temporaries #'(x ...))
@@ -822,9 +822,13 @@
          (let-values ([(xe-nv xe-arg) (ANF xe)] ...)
            (define x-id 'x-id) ...
            (define xe-ty (expr-type xe-arg)) ...
-           (when (ormap VoiT? (list xe-ty ...))
-             (raise-syntax-error
-              'let "new variable cannot be of type void" #'#,stx))
+           (for ([ty (in-list (list xe-ty ...))])
+             (when (VoiT? ty)
+               (raise-syntax-error
+                'let "new variable cannot be of type void" #'#,stx))
+             (when (AnyT? ty)
+               (raise-syntax-error
+                'let "new variable cannot be of type any" #'#,stx)))
            (define ref-ty? (or (ArrT? xe-ty) (RecT? xe-ty) (UniT? xe-ty))) ...
            (define the-x-ref (if ref-ty? (Read-p xe-arg) (Var x-id xe-ty))) ...
            (define-values (body-nv body-arg)
@@ -904,11 +908,14 @@
     [(cons (anf-void var pre) more)
      (match-define (Var x ty) (unpack-MetaP var))
      (Let x ty (UndI ty) (Begin (or pre (Skip #f)) (rec more arg)))]
-    [(cons (anf-let/ec var k e) more)
+    [(cons (anf-let/ec var k b-arg b-nv) more)
      (match-define (Var x ty) (unpack-MetaP var))
+     (define (body-ret arg)
+       (Assign var arg))
      (Let x ty (UndI ty)
-          (Let/ec k (Begin (Assign var e)
-                           (rec more arg))))]
+          (Begin
+            (Let/ec k (ANF-compose body-ret b-nv b-arg))
+            (rec more arg)))]
     [(cons (anf-let var xe) more)
      (match-define (Var x ty) (unpack-MetaP var))
      (Let x ty (UndI ty)
