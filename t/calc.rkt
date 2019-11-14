@@ -15,14 +15,13 @@
 
 (define main
   (F+ ([S32 n1] [U8 op] [S32 n2]) : S32
-      (define result
-        (cond [(= op (C #\+)) (+ n1 n2)]
-              [(= op (C #\-)) (- n1 n2)]
-              [(= op (C #\*)) (* n1 n2)]
-              [(= op (C #\/)) (/ n1 n2)]
-              [else (error "invalid op\n")]))
-      (println result)
-      ;; XXX type can be inferred here.
+      (println
+       (cond [(= op (C #\+)) (+ n1 n2)]
+             [(= op (C #\-)) (- n1 n2)]
+             [(= op (C #\*)) (* n1 n2)]
+             [(= op (C #\/)) (/ n1 n2)]
+             [else (error "invalid op\n")]))
+      ;; XXX type can be inferred here?
       (S32 0)))
 
 (define calc (Prog (include-fun main)))
