@@ -1,17 +1,10 @@
 #lang racket/base
-(require (for-syntax racket/base
-                     syntax/parse)
-         adqc
+(require adqc
          racket/file
-         racket/port
-         racket/stxparam
-         syntax/parse/define)
+         racket/port)
 
-(define-E-expander C
-  (syntax-parser
-    [(_ c)
-     (syntax/loc this-syntax
-       (E (U8 (char->integer c))))]))
+(define-simple-E-expander (C c)
+  (E (U8 (char->integer c))))
 
 (define main
   (F+ ([S32 n1] [U8 op] [S32 n2]) : S32

@@ -34,8 +34,8 @@
 
 (define-syntax (define-expanders&macros stx)
   (syntax-parse stx
-    [(_ S-free-macros define-S-free-syntax
-        S-expander S-expand define-S-expander)
+    [(_ S-free-macros define-S-free-syntax S-expander
+        S-expand define-S-expander define-simple-S-expander)
      #:with expander-struct (generate-temporary #'S-expander)
      #:with gen-S-expander (format-id #'S-expander "gen:~a" #'S-expander)
      (syntax/loc stx
@@ -51,11 +51,18 @@
          (define-simple-macro (define-S-free-syntax id impl)
            (begin-for-syntax (dict-set! S-free-macros #'id impl)))
          (define-simple-macro (define-S-expander id impl)
-           (define-syntax id (expander-struct impl)))))]))
+           (define-syntax id (expander-struct impl)))
+         (define-simple-macro (define-simple-S-expander (id . args) body)
+           (define-S-expander id
+             (syntax-parser
+               [(_ . args) (syntax/loc this-syntax body)])))
+         (provide define-S-free-syntax
+                  define-S-expander
+                  define-simple-S-expander)))]))
 
 (define-expanders&macros
-  T-free-macros define-T-free-syntax
-  T-expander T-expand define-T-expander)
+  T-free-macros define-T-free-syntax T-expander
+  T-expand define-T-expander define-simple-T-expander)
 (define-syntax (T stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -103,8 +110,8 @@
   (syntax-parser [_ (syntax/loc this-syntax the-any-ref)]))
 
 (define-expanders&macros
-  P-free-macros define-P-free-syntax
-  P-expander P-expand define-P-expander)
+  P-free-macros define-P-free-syntax P-expander
+  P-expand define-P-expander define-simple-P-expander)
 (define-syntax (P stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -187,8 +194,8 @@
      (quasisyntax/loc stx (construct-number #'#,stx ty n))]))
 
 (define-expanders&macros
-  E-free-macros define-E-free-syntax
-  E-expander E-expand define-E-expander)
+  E-free-macros define-E-free-syntax E-expander
+  E-expand define-E-expander define-simple-E-expander)
 
 (begin-for-syntax
   (define-literal-set E-bin-op
@@ -476,8 +483,8 @@
   [U64 #f 64])
 
 (define-expanders&macros
-  I-free-macros define-I-free-syntax
-  I-expander I-expand define-I-expander)
+  I-free-macros define-I-free-syntax I-expander
+  I-expand define-I-expander define-simple-I-expander)
 ;; XXX should undef, zero, array, record, and union be literals?
 (define-syntax (I stx)
   (with-disappeared-uses
@@ -518,8 +525,8 @@
 (define-syntax-parameter S-in-tail? #f)
 
 (define-expanders&macros
-  S-free-macros define-S-free-syntax
-  S-expander S-expand define-S-expander)
+  S-free-macros define-S-free-syntax S-expander
+  S-expand define-S-expander define-simple-S-expander)
 (define-syntax (S stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -726,8 +733,8 @@
        (S (begin (set! current-return-var e) (return))))]))
 
 (define-expanders&macros
-  A-free-macros define-A-free-syntax
-  A-expander A-expand define-A-expander)
+  A-free-macros define-A-free-syntax A-expander
+  A-expand define-A-expander define-simple-A-expander)
 
 (struct anf-nv () #:transparent)
 (struct anf-void anf-nv (var pre) #:transparent)
@@ -1481,10 +1488,6 @@
   (define name (Prog* pf ...)))
 
 (provide while assert! return
-         define-T-free-syntax define-T-expander
-         define-I-free-syntax define-I-expander
-         define-E-free-syntax define-E-expander
-         define-S-free-syntax define-S-expander
          F-body-default
          define-type define-fun define-global
          define-extern-fun define-extern-type
