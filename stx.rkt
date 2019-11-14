@@ -740,7 +740,6 @@
 
 (define listof-nvs? (listof anf-nv?))
 
-;; XXX error
 (define-syntax (ANF stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -751,6 +750,13 @@
        (syntax/loc stx
          (let* ([x-id 'x-id] [the-x-ref (Var x-id (T void))])
            (values (list (anf-void the-x-ref #f)) (Read the-x-ref))))]
+      [(_ (error m))
+       #:with x-id (generate-temporary 'any)
+       (record-disappeared-uses #'error)
+       (syntax/loc stx
+         (let* ([x-id 'x-id] [the-x-ref (Var x-id (T any))])
+           (values (list (anf-void the-x-ref (Fail m)))
+                   (Read the-x-ref))))]
       [(_ (begin (define . d) . b))
        (record-disappeared-uses (list #'begin #'define))
        (syntax/loc stx (ANF (let (d) . b)))]

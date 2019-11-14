@@ -348,7 +348,7 @@
             "exit(1);")]
     [(Assign path e)
      (define-values (path-ast path-ty) (compile-path/deref ρ path))
-     (cond [(and (VoiT/any? path-ty) (VoiT/any? (expr-type e))) #f]
+     (cond [(or (VoiT/any? path-ty) (VoiT/any? (expr-type e))) #f]
            [else (list* path-ast " = " (compile-expr ρ e) ";")])]
     [(Begin f s)
      (cond [(and (Skip? f) (not (Skip-comment f))) (rec s)]

@@ -652,6 +652,9 @@
      (TS (>= (S32 2) (S32 3)) (S32 0))
      (TS (add1 (S32 1)) (S32 2))
      (TS (sub1 (S32 2)) (S32 1))
+     (TS (let ([x (S32 2)] [y (S32 3)])
+           (if (< x y) (+ x y) (error "x not less than y\n")))
+         (S32 5))
      ;; XXX let/ec is failing the type checker right now
      #;
      (TProg (define-fun S32 foo ([S32 x])
