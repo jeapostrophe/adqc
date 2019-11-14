@@ -1607,6 +1607,23 @@
     [(_ es ...)
      (syntax/loc this-syntax (S (print es ... "\n")))]))
 
+(define-A-free-syntax print
+  (syntax-parser
+    [(_ as ...)
+     #:with x-id (generate-temporary 'void)
+     (syntax/loc this-syntax
+       (let* ([x-id 'x-id] [the-x-ref (Var x-id (T void))])
+         (values (list (anf-void the-x-ref (S (print as ...))))
+                 (Read the-x-ref))))]))
+(define-A-free-syntax println
+  (syntax-parser
+    [(_ as ...)
+     #:with x-id (generate-temporary 'void)
+     (syntax/loc this-syntax
+       (let* ([x-id 'x-id] [the-x-ref (Var x-id (T void))])
+         (values (list (anf-void the-x-ref (S (println as ...))))
+                 (Read the-x-ref))))]))
+
 (provide T P N E I F F+ S S+)
 
 
