@@ -58,19 +58,22 @@
      (h-append lparen (expr-doc e) space colon space (type-doc ty) rparen)]
     [(Read p) (path-doc p)]
     [(BinOp op L R)
-     (h-append
-      lparen
-      (hs-append (sym op) (expr-doc L) (expr-doc R))
-      rparen)]
+     (group
+      (h-append
+       lparen
+       (nest 2 (v-append (sym op) (expr-doc L) (expr-doc R)))
+       rparen))]
     [(LetE x _ xe be)
-     (nest 2 (v-append
-              (h-append (text "(LetE ([") (sym x) space (expr-doc xe) (text "])"))
-              (expr-doc be)))]
+     (define decl
+       (h-append (text "LetE ([") (sym x) space (expr-doc xe) (text "])")))
+     (group (h-append lparen (nest 2 (v-append decl (expr-doc be))) rparen))]
     [(IfE ce te fe)
-     (h-append
-      lparen
-      (hs-append (text "IfE") (expr-doc ce) (expr-doc te) (expr-doc fe))
-      rparen)]))
+     (group
+      (h-append
+       lparen
+       (nest 2 (v-append (hs-append (text "IfE") (expr-doc ce))
+                         (expr-doc te) (expr-doc fe)))
+       rparen))]))
 
 (define (init-doc i)
   (match i
@@ -99,19 +102,27 @@
     [(Fail msg)
      (h-append (text "(error \"") (text msg) dquote rparen)]
     [(Begin f s)
-     (nest 2 (v-append (text "(begin")
-                       (stmt-doc f)
-                       (h-append (stmt-doc s) rparen)))]
+     (group
+      (h-append
+       lparen
+       (nest 2 (v-append (text "begin") (stmt-doc f) (stmt-doc s)))
+       rparen))]
     [(Assign p e)
      (h-append (text "(set! ") (path-doc p) space (expr-doc e) rparen)]
     [(If p t f)
-     (h-append
-      lparen
-      (hs-append (text "If") (expr-doc p) (stmt-doc t) (stmt-doc f))
-      rparen)]
+     (group
+      (h-append
+       lparen
+       (nest 2 (v-append (hs-append (text "If") (expr-doc p))
+                         (stmt-doc t) (stmt-doc f)))
+       rparen))]
     [(While p b)
-     (nest 2 (v-append (h-append (text "(while ") (expr-doc p))
-                       (h-append (stmt-doc b) rparen)))]
+     (group
+      (h-append
+       lparen
+       (nest 2 (v-append (h-append (text "while") (expr-doc p))
+                         (stmt-doc b)))
+       rparen))]
     [(Jump l)
      (h-append (text "(Jump ") (sym l) rparen)]
     [(Let/ec l b)
@@ -119,15 +130,15 @@
                        (h-append (stmt-doc b) rparen)))]
     [(Let x ty xi bs)
      (define decl
-       (h-append (sym x) (text " : ") (type-doc ty) (text " := ") (init-doc xi)))
-     (nest 2 (v-append (h-append (text "(Let ([") decl (text "])"))
-                       (h-append (stmt-doc bs) rparen)))]
+       (h-append (text "Let ([") (sym x) (text " : ") (type-doc ty)
+                       (text " := ") (init-doc xi) (text "])")))
+     (group (h-append lparen (nest 2 (v-append decl (stmt-doc bs))) rparen))]
     [(Call x ty f as bs)
      (define f-name (given-name f))
      (define f-doc (if f-name (sym f-name) (fun-doc f)))
-     (define decl (h-append (sym x) (text " := ") f-doc))
-     (nest 2 (v-append (h-append (text "(Call ([") decl (text "])"))
-                       (h-append (stmt-doc bs) rparen)))]))
+     (define decl
+       (h-append (text "Call ([") (sym x) (text " := ") f-doc (text "])")))
+     (group (h-append lparen (v-append decl (stmt-doc bs)) rparen))]))
 
 (define (fun-doc f)
   (match (unpack-MetaFun f)
