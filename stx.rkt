@@ -795,7 +795,7 @@
                       [(t-nv t-arg) (ANF t)]
                       [(f-nv f-arg) (ANF f)])
            (define x-id 'x-id)
-           (define x-ty (expr-type t-arg))
+           (define x-ty (resolve-type (expr-type t-arg) (expr-type f-arg)))
            (define the-x-ref (Var x-id x-ty))
            (values (snoc p-nv (anf-if the-x-ref p-arg t-nv t-arg f-nv f-arg))
                    (Read the-x-ref))))]
@@ -1400,7 +1400,7 @@
          (begin
            (define the-e (E e))
            (define e-ty (expr-type the-e))
-           (define the-glob (Global e-ty (ConI the-e)))
+           (define the-glob (give-name (Global e-ty (ConI the-e)) 'x))
            (define-syntax x
              (P-expander (syntax-parser [_ #'the-glob])))))]
       ;; fully annonated
@@ -1408,10 +1408,8 @@
        (syntax/loc stx
          (begin
            (define the-ty (T ty))
-           (define the-glob
-             (Global the-ty
-                     (syntax-parameterize ([expect-ty #'the-ty])
-                       (I xi))))
+           (define the-init (syntax-parameterize ([expect-ty #'the-ty]) (I xi)))
+           (define the-glob (give-name (Global the-ty the-init) 'x))
            (define-syntax x
              (P-expander (syntax-parser [_ #'the-glob])))))]
       ;; uninitialied variable

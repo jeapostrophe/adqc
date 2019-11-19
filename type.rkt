@@ -68,6 +68,9 @@
         [else (cond [(and (UniT? L) (union-subset? L R)) L]
                     [(and (UniT? R) (union-subset? R L)) R]
                     [else (error 'resolve-type "type mismatch L: ~v R: ~v" L R)])]))
+(provide
+ (contract-out
+  [resolve-type (-> Type? Type? Type?)]))
 
 (define (env-union e0 . es)
   (apply hash-union e0 es #:combine resolve-type))
