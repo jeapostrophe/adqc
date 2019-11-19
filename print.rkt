@@ -34,10 +34,15 @@
 (define (path-doc p)
   (match (unpack-MetaP p)
     [(Var x _) (sym x)]
-    ;; XXX Better printing for globals, probably by modifying define-global
-    ;; to store name info as metadata
-    [(Global ty _)
-     (h-append lparen (text "SomeGlobal") space (type-doc ty) rparen)]
+    [(Global ty xi)
+     (define g-name (given-name p))
+     (if g-name
+         (sym g-name)
+         (group
+          (h-append
+           lparen
+           (nest 2 (v-append (text "Global") (type-doc ty) (init-doc xi)))
+           rparen)))]
     [(Select p ie)
      (h-append lparen (path-doc p) (text " @ ") (expr-doc ie) rparen)]
     [(Field p f)
