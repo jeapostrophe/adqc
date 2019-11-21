@@ -813,7 +813,7 @@
                         [(_ a)
                          #:with x-id* (generate-temporary 'any)
                          (syntax/loc this-syntax
-                           (let* ([x-id* 'x-id] [the-x-ref* (Var x-id* (T any))])
+                           (let* ([x-id* 'x-id*] [the-x-ref* (Var x-id* (T any))])
                              (define-values (a-nv a-arg) (ANF a))
                              (define the-stmt
                                (Begin (Assign the-x-ref a-arg)
