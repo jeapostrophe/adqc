@@ -547,7 +547,7 @@
       (define pub-global-decls (make-queue))
       (define globals-ast
         (for/list ([(g x) (in-hash globals)])
-          (match-define (Global ty xi) g)
+          (match-define (Global ty xi) (unpack-MetaP g))
           (define-values (storage-ast x-init-ast)
             (compile-storage/init ty xi (compile-init (hasheq) ty xi)))
           (when (set-member? pub-globals g)

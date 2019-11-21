@@ -152,6 +152,10 @@
 (define-Path Mode ([p Path?] [m symbol?]))
 (define-Path ExtVar ([src ExternSrc?] [name c-identifier-string?] [ty non-void-type?]))
 
+(define (Global*? x)
+  (or (Global? x)
+      (and (MetaP? x) (Global*? (MetaP-p x)))))
+
 ;; Expressions
 (struct Expr () #:transparent)
 (struct MetaE Expr (m e) #:transparent)
@@ -319,6 +323,6 @@
 
 (provide
  (contract-out
-  [struct Program ([name->global (hash/c c-identifier-string? Global?)]
+  [struct Program ([name->global (hash/c c-identifier-string? Global*?)]
                    [name->ty (hash/c c-identifier-string? Type?)]
                    [name->fun (hash/c c-identifier-string? IntFun*?)])]))
