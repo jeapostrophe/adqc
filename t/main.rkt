@@ -655,15 +655,12 @@
      (TS (let ([x (S32 2)] [y (S32 3)])
            (if (< x y) (+ x y) (error "x not less than y\n")))
          (S32 5))
-     ;; XXX let/ec is failing the type checker right now
-     
      (TProg (define-fun S32 foo ([S32 x])
               (let/ec (esc S32)
                 (if (< x 0) (esc x) (+ x (S32 2)))))
             #:tests
             ["foo" (S32 -1) => (S32 -1)]
             ["foo" (S32 1) => (S32 3)])
-     #;
      (TProg (define-fun S32 foo ([S32 x])
               (let/ec (esc S32)
                 (let ([y (S32 2)])
