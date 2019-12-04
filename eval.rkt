@@ -228,7 +228,7 @@
     ;; XXX Using an unboxed #f to represent void variables will cause
     ;; issues if we want to evaluate void functions later. What is
     ;; a reasonable racket value to return from an evaluated void function?
-    [(VoiT) #f]
+    [(or (VoiT) (AnyT)) #f]
     [(? ExtT?) (error 'type-zero "XXX Cannot interp external types yet: ~e" ty)]))
 
 (define (eval-init σ i)
