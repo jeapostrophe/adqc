@@ -8,6 +8,7 @@
  "compile.rkt"
  "linker.rkt"
  "exec.rkt"
- "print.rkt")
+ "print.rkt"
+ "util.rkt")
 (module reader syntax/module-reader
   adqc/module)

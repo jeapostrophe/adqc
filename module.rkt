@@ -1,8 +1,8 @@
 #lang racket/base
-(require racket/file
-         syntax/parse/define
+(require syntax/parse/define
          "exec.rkt"
-         "stx.rkt")
+         "stx.rkt"
+         "util.rkt")
 
 ;; XXX support require
 ;; XXX fix syntax so that failures blame consuming module, not this one
@@ -12,29 +12,19 @@
 ;; XXX Disable REPL after running? Right now the user gets dumped into a racket/base
 ;; REPL after running, which is awkward/misleading.
 
-(define (echo-port port [out (current-output-port)])
-  (for ([ch (in-port read-char port)])
-    (display ch out)))
-
 (define (run-module the-p)
-  (define c-path (make-temporary-file "adqc~a.c"))
-  (define bin-path (make-temporary-file "adqc~a"))
-  (define (cleanup! exn)
-    (define in (open-input-file c-path))
-    (echo-port in (current-error-port))
-    (newline (current-error-port))
-    (close-input-port in)
-    (delete-file c-path)
-    (delete-file bin-path)
-    (raise exn))
-  (define exe (make-executable the-p c-path bin-path))
-  (with-handlers ([exn:fail? cleanup!])
-    (define args (vector->list (current-command-line-arguments)))
-    (define stdout (apply executable-run exe args))
-    (echo-port stdout)
-    (close-input-port stdout))
-  (delete-file c-path)
-  (delete-file bin-path))
+  (with-temp-files (c-path bin-path)
+    (define exe (make-executable the-p c-path bin-path))
+    (define (on-error e)
+      (define in (open-input-file c-path))
+      (echo-port in (current-error-port))
+      (newline (current-error-port))
+      (raise e))
+    (with-handlers ([exn:fail? on-error])
+      (define args (vector->list (current-command-line-arguments)))
+      (define stdout (apply executable-run exe args))
+      (echo-port stdout)
+      (close-input-port stdout))))
 
 (define-simple-macro (adqc-module-begin body ...+)
   (#%module-begin (run-module (Prog* body ...))))

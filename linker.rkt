@@ -1,13 +1,13 @@
 #lang racket/base
 (require racket/contract/base
-         racket/file
          racket/match
          syntax/parse/define
          (except-in ffi/unsafe ->)
          "ast.rkt"
          "compile.rkt"
          "stx.rkt"
-         "print.rkt")
+         "print.rkt"
+         "util.rkt")
 
 (struct linked-program (lib type-map ty->tag tag->ty ret-tys) #:transparent)
 (struct typed-pointer (ty ptr) #:transparent)
@@ -91,14 +91,11 @@
                    (T U8) 'uint8 (T U16) 'uint16 (T U32) 'uint32 (T U64) 'uint64
                    (T F32) 'float (T F64) 'double))
        
-(define (link-program p [given-c-path #f])
-  (define c-path (or given-c-path (make-temporary-file "adqc~a.c")))
-  (define bin-path (make-temporary-file "adqc~a"))
+(define (link-program p c-path bin-path)
   (unless (compile-library p c-path bin-path)
-    (newline (current-error-port))
     (define in (open-input-file c-path))
-    (for ([ch (in-port read-char in)])
-      (display ch (current-error-port)))
+    (newline (current-error-port))
+    (echo-port in (current-error-port))
     (newline (current-error-port))
     (for ([(n f) (in-hash (Program-name->fun p))])
       (eprintf "~a:\n" n)
@@ -106,9 +103,7 @@
       (newline (current-error-port)))
     (newline (current-error-port))
     (close-input-port in)
-    (unless given-c-path (delete-file c-path))
     (error 'link-program "call to compile-library failed (see stderr)"))
-  (unless given-c-path (delete-file c-path))
   (define lib (ffi-lib bin-path))
   (define name->fun (Program-name->fun p))
   (define-values (ty->tag tag->ty) (default-tag-tables))
@@ -196,7 +191,7 @@
                           [tag->ty (hash/c symbol? Type?)]
                           [ret-tys (hash/c c-identifier-string? Type?)])]
   [struct typed-pointer ([ty Type?] [ptr cpointer?])]
-  [link-program (->* [Program?] [(or/c path? #f)] linked-program?)]
+  [link-program (-> Program? path? path? linked-program?)]
   [linked-program-run (-> linked-program? c-identifier-string? list? any/c)]
   [linked-program-alloc (-> linked-program? Type? typed-pointer?)]
   [linked-program-read (-> linked-program? any/c any/c)]

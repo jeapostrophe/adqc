@@ -8,7 +8,8 @@
          (subtract-in "ast.rkt" "type.rkt")
          "compile.rkt"
          "stx.rkt"
-         "type.rkt")
+         "type.rkt"
+         "util.rkt")
 
 (define char* (ExtT (ExternSrc '() '()) "char*"))
 (define stdlib-h (ExternSrc '() '("stdlib.h")))
@@ -57,11 +58,8 @@
   (unless (compile-exe prog* c-path bin-path)
     (newline (current-error-port))
     (define in (open-input-file c-path))
-    (for ([ch (in-port read-char in)])
-      (display ch (current-error-port)))
+    (echo-port in (current-error-port))
     (close-input-port in)
-    (delete-file c-path)
-    (delete-file bin-path)
     (error "call to compile-exe failed (see stderr)"))
   (executable bin-path))
 

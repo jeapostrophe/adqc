@@ -1,6 +1,5 @@
 #lang racket/base
 (require adqc
-         racket/file
          racket/port)
 
 (define-simple-E-expander (C c)
@@ -21,31 +20,27 @@
 
 (module+ test
   (require chk)
-  (define c-path (make-temporary-file "adqc~a.c"))
-  (define bin-path (make-temporary-file "adqc~a"))
-  (define exe (make-executable calc c-path bin-path))
-  (define (go args expect)
-    (define output (apply executable-run exe args))
-    (define result (read output))
-    (close-input-port output)
-    (chk result expect))
-  (define (!go args)
-    (define result
-      (with-handlers ([exn:fail? (λ (e) e)])
-        (define output
-          (parameterize ([current-error-port (open-output-nowhere)])
-            (apply executable-run exe args)))
-        (define r (read output))
-        (close-input-port output)
-        r))
-    (chk #:? exn:fail? result))
-  (chk*
-   (go '("2" "+" "3") 5)
-   (go '("3" "-" "1") 2)
-   (go '("2" "*" "4") 8)
-   (go '("6" "/" "2") 3)
-   (!go '("5" "x" "3"))
-   )
-  (delete-file c-path)
-  (delete-file bin-path)
-  )
+  (with-temp-files (c-path bin-path)
+    (define exe (make-executable calc c-path bin-path))
+    (define (go args expect)
+      (define output (apply executable-run exe args))
+      (define result (read output))
+      (close-input-port output)
+      (chk result expect))
+    (define (!go args)
+      (define result
+        (with-handlers ([exn:fail? (λ (e) e)])
+          (define output
+            (parameterize ([current-error-port (open-output-nowhere)])
+              (apply executable-run exe args)))
+          (define r (read output))
+          (close-input-port output)
+          r))
+      (chk #:? exn:fail? result))
+    (chk*
+     (go '("2" "+" "3") 5)
+     (go '("3" "-" "1") 2)
+     (go '("2" "*" "4") 8)
+     (go '("6" "/" "2") 3)
+     (!go '("5" "x" "3"))
+     )))

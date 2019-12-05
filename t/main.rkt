@@ -3,7 +3,6 @@
                      racket/syntax)
          adqc
          chk
-         racket/file
          racket/match
          racket/stxparam
          syntax/parse/define)
@@ -31,10 +30,9 @@
   (for ([ch (in-port read-char in)])
     (display ch (current-error-port)))
   (newline (current-error-port))
-  (close-input-port in)
-  (delete-file c-path))
+  (close-input-port in))
 
-(define (TProg1* stx the-p the-cp n args-i expect-ans-i)
+(define (TProg1* stx the-p the-cp c-path n args-i expect-ans-i)
   ;; Get type info for args and ans.
   (define the-fun (unpack-MetaFun (hash-ref (Program-name->fun the-p) n)))
   (match-define (IntFun (list (Arg _ arg-tys _) ...) _ ans-ty _ _)
@@ -53,7 +51,6 @@
                                         (eval-program the-p n args-i)))))
     (when eval-ans
       (chk (#:src stx eval-ans) (#:src stx eval-expect-ans))))
-  (define c-path (make-temporary-file "adqc~a.c"))
   (unless the-cp
     (chk #:t (set! the-cp (link-program the-p c-path))))
   (when the-cp
@@ -72,22 +69,22 @@
             (chk #:! (#:src stx comp-ans*)
                  (#:src stx comp-expect-ans))
             (chk (#:src stx comp-ans*)
-                 (#:src stx comp-expect-ans)))))
-    (delete-file c-path)))
+                 (#:src stx comp-expect-ans)))))))
 
 (define-syntax (TProg1 stx)
   (syntax-parse stx
-    [(_ the-p:id the-cp:id . t)
+    [(_ the-p:id the-cp:id c-path . t)
      #:with (n:expr (~and arg-e (~not (~datum =>))) ... (~datum =>) ans) #'t
      (syntax/loc stx
-       (TProg1* #'t the-p the-cp n (list (I arg-e) ...) (I ans)))]))
+       (TProg1* #'t the-p the-cp c-path n (list (I arg-e) ...) (I ans)))]))
 (define-syntax (TProgN stx)
   (syntax-parse stx
     [(_ the-p:id t ...)
      (syntax/loc stx
-       (let ([the-cp #f])
-         (chk #:t (#:stx #,stx (set! the-cp (link-program the-p))))
-         (TProg1 the-p the-cp . t) ...))]))
+       (with-temp-files (c-path bin-path)
+         (define the-cp #f)
+         (chk #:t (#:stx #,stx (set! the-cp (link-program the-p c-path bin-path))))
+         (TProg1 the-p the-cp c-path . t) ...))]))
 (define-syntax (TProg stx)
   (syntax-parse stx
     [(_ p-body ... #:tests t ...)
