@@ -16,7 +16,10 @@
   (for ([ch (in-port read-char port)])
     (display ch out)))
 
+(define (snoc l x) (append l (list x)))
+
 (provide
  with-temp-files
  (contract-out
-  [echo-port (->* (input-port?) (output-port?) void?)]))
+  [echo-port (->* (input-port?) (output-port?) void?)]
+  [snoc (-> list? any/c list?)]))

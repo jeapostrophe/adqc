@@ -15,7 +15,8 @@
          racket/stxparam
          syntax/parse/define
          (subtract-in "ast.rkt" "type.rkt")
-         "type.rkt")
+         "type.rkt"
+         "util.rkt")
 
 ;; XXX This module should use plus not ast (i.e. the thing that does
 ;; type checking, termination checking, and resource analysis). And
@@ -26,8 +27,6 @@
 ;; structure some how? (perhaps plus should do that with meta?)
 
 ;; XXX Use remix for #%dot and #%braces
-
-(define (snoc l x) (append l (list x)))
 
 (define (keyword->symbol kw)
   (string->symbol (keyword->string kw)))

@@ -7,9 +7,8 @@
          racket/set
          syntax/parse/define
          "ast.rkt"
-         "print.rkt")
-
-(define (snoc l x) (append l (list x)))
+         "print.rkt"
+         "util.rkt")
 
 ;; Type for exceptions raised by the ADQC type checker.
 (struct exn:fail:adqc:type exn:fail ())
