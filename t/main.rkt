@@ -77,57 +77,34 @@
 
 (define-syntax (TProg1 stx)
   (syntax-parse stx
-    [(_ the-p:id
-        (~optional (~seq #:compiled compiled-p:id)
-                   #:defaults ([compiled-p #''#f]))
-        . t)
-     #:with (n:expr (~and arg-e (~not (~datum =>))) ...
-                    (~optional (~seq (~datum =>) ans (~bind [ans-e #'(I ans)]))
-                               #:defaults ([ans-e #'#f]))) #'t
-     (quasisyntax/loc stx
-       (TProg1* #'t the-p compiled-p n (list (I arg-e) ...) ans-e))]))
-
+    [(_ the-p:id the-cp:id . t)
+     #:with (n:expr (~and arg-e (~not (~datum =>))) ... (~datum =>) ans) #'t
+     (syntax/loc stx
+       (TProg1* #'t the-p the-cp n (list (I arg-e) ...) (I ans)))]))
 (define-syntax (TProgN stx)
   (syntax-parse stx
-    [(_ the-p:id
-        (~optional (~seq #:compiled compiled-p:id)
-                   #:defaults ([compiled-p #f]))
-        t ...)
+    [(_ the-p:id t ...)
      (syntax/loc stx
-       (begin (TProg1 the-p (~@ . (~? (#:compiled compiled-p) ())) . t)
-              ...))]))
-
+       (let ([the-cp #f])
+         (chk #:t (#:stx #,stx (set! the-cp (link-program the-p))))
+         (TProg1 the-p the-cp . t) ...))]))
 (define-syntax (TProg stx)
   (syntax-parse stx
     [(_ p-body ... #:tests t ...)
-     (quasisyntax/loc stx
-       (let ([the-p #f]
-             [the-cp #f])
+     (syntax/loc stx
+       (let ([the-p #f])
          (chk #:t (#:stx #,stx (set! the-p (Prog p-body ...))))
-         (chk #:t (#:stx #,stx (set! the-cp (link-program the-p))))
-         (TProgN the-p #:compiled the-cp t ...)))]))
-
+         (TProgN the-p t ...)))]))
 (define-syntax (TS stx)
   (syntax-parse stx
-    [(_ the-s (~optional (~seq ans)
-                         #:defaults ([ans #f])))
-     #:with f (generate-temporary)
-     ;; XXX Right now TS & TE only work when returning Int/Flo types
-     ;; because the 'ans' must be a value which can be initialized with 'E'.
-     #:with the-ty #'(~? #,(expr-type (E ans)) S64)
-     (quasisyntax/loc stx
-       (TProg (define-fun (f) : the-ty the-s)
-              #:tests
-              #,(syntax/loc stx
-                  [(symbol->string 'f) (~@ . (~? (=> ans) ()))])))]))
-
-(define-syntax (TE stx)
-  (syntax-parse stx
-    [(_ the-e (~optional ans
-                         #:defaults ([ans #f])))
+    [(_ the-s ans)
      #:with f (generate-temporary)
      (syntax/loc stx
-       (TS the-e (~@ . (~? (ans) ()))))]))
+       (let* ([ans-e (E ans)] [ans-ty (expr-type ans-e)])
+         (TProg (define-fun #,ans-ty f () the-s)
+                #:tests [(symbol->string 'f) => ans])))]))
+(define-simple-macro (TE the-e ans)
+  (TS the-e ans))
 
 (define-simple-macro (TT the-ast)
   (chk #:x the-ast exn:fail:adqc:type?))
