@@ -1344,25 +1344,15 @@
 (define-syntax (define-fun stx)
   (with-disappeared-uses
     (syntax-parse stx
-      [(_ x:id #:as n:expr . more)
-       (quasisyntax/loc stx
-         (begin
-           (define the-fun #,(syntax/loc #'more (give-name (F . more) 'x)))
-           (define-syntax x
-             (F-expander (syntax-parser [_ #'the-fun])))
-           (include-fun #:maybe n x)))]
-      ;; XXX Remove old-style syntax, support '#:as' in new style.
-      ;; XXX Change 'F' to use new style syntax. Thinking something like:
-      ;; (F ret-ty ([arg-ty arg-x] ...) body ...)
-      [(_ ret-ty x:id ([arg-ty arg-x:id] ...) body ...+)
+      [(_ ret-ty x:id #:as n:expr (args ...) . more)
        (syntax/loc stx
-         (define-fun (x [arg-x : arg-ty] ...) : ret-ty body ...))]
-      [(_ x:id . more)
-       (quasisyntax/loc stx
-         (define-fun x #:as (symbol->c-name 'x) . more))]
-      [(_ (x:id . args) . more)
-       (quasisyntax/loc stx
-         (define-fun x . #,(syntax/loc #'args (args . more))))])))
+         (begin
+           (define the-fun (give-name (F (args ...) : ret-ty . more) 'x))
+           (define-syntax x (F-expander (syntax-parser [_ #'the-fun])))
+           (include-fun #:maybe n x)))]
+      [(_ ret-ty x:id (args ...) . more)
+       (syntax/loc stx
+         (define-fun ret-ty x #:as (symbol->c-name 'x) (args ...) . more))])))
 
 (define-syntax (define-extern-fun stx)
   (with-disappeared-uses

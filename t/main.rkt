@@ -420,8 +420,7 @@
               (define a : S64 := bar <- n)
               n)
             #:tests ["foo" (S64 5) => (S64 6)]))
-   ;; XXX Can't use #:ref here with new arg syntax? Look into this
-   (TProg (define-fun (bar [#:ref m : S64]) : S64
+   (TProg (define-fun S64 bar ([#:ref S64 m])
             (set! m (iadd m (S64 1)))
             (S64 1))
           (define-fun S64 foo ([S64 n])
@@ -430,7 +429,7 @@
           #:tests ["foo" (S64 5) => (S64 6)])
    ;; Private function
    (let ([c-add1 (F ([n : S32]) : S32 (iadd n (S32 1)))])
-     (TProg (define-fun (foo [x : S32]) : S32
+     (TProg (define-fun S32 foo ([S32 x])
               (define r : S32 := c-add1 <- x)
               r)
             #:tests ["foo" (S32 5) => (S32 6)]))

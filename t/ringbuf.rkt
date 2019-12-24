@@ -10,13 +10,13 @@
                                  count U32
                                  inptr U32
                                  outptr U32))
-  (define-fun (make-ringbuf [rb : ringbuf_t] [arr : buf_t]) : S32
+  (define-fun S32 make-ringbuf ([ringbuf_t rb] [buf_t arr])
     (set! (rb -> buf) arr)
     (set! (rb -> count) 0)
     (set! (rb -> inptr) 0)
     (set! (rb -> outptr) 0)
     (return 0))
-  (define-fun (ringbuf-push [rb : ringbuf_t] [v : #,ty]) : S32
+  (define-fun S32 ringbuf-push ([ringbuf_t rb] [#,ty v])
     (cond [(= (rb -> count) (U32 max-count))
            (return -1)]
           [else
@@ -28,7 +28,7 @@
            (return 0)]))
   ;; XXX It would be nice to have syntax that made returning values
   ;; through reference arguments more ergonomic.
-  (define-fun (ringbuf-pop [rb : ringbuf_t] [#:ref out : #,ty]) : S32
+  (define-fun S32 ringbuf-pop ([ringbuf_t rb] [#:ref #,ty out])
     (cond [(zero? (rb -> count))
            (return -1)]
           [else

@@ -3,7 +3,7 @@
 
 (define fib-p
   (Prog
-   (define-fun (fib [n : S64]) : S64
+   (define-fun S64 fib ([S64 n])
      (define a : S64 := (S64 0))
      (define b : S64 := (S64 1))
      (define i : S64 := (S64 0))
