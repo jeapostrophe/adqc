@@ -15,15 +15,42 @@
 
 AST nodes used in construction of ADQC programs.
 
-@; with-cify-couner
-@; c-identifier-string?
-@; c-library-string?
-@; c-header-string?
-@; cify
+@defproc[c-identifier-string? ([v any/c]) boolean?]{
+ Predicate returns @racket[#t] if @racket[v] is a valid identifier string in C.
+ This is a partial test.
+}
+
+@defproc[c-library-string? ([v any/c]) boolean?]{
+ Predicate returns @racket[#t] if @racket[v] is a valid name for a C library,
+ meaning that it would be valid to the right of @code["-l"] in @code["cc"].
+ Currently this is equivalent to @racket[string?].
+}
+
+@defproc[c-header-string? ([v any/c]) boolean?]{
+ Predicate returns @racket[#t] if @racket[v] is a valid name
+ for C header file, meaning that it would be valid inside the
+ @code["< >"]s of an @code["#include"]. Currently this is equivalent
+ to @racket[string?].
+}
+
+@defproc[cify ([s symbol?]) c-identifier-string?]{
+ Sanitizes a variable name by removing from it any characters which are
+ not valid in a C identifier, and appending it with a unique number. These
+ numbers are monotonically increasing, although this counter can be reset
+ using @racket[with-cify-counter]. Note that although the argument @racket[s]
+ is a @racket[symbol?], the return value is a @racket[string?].
+}
+
+@defform[(with-cify-counter body ...+)]{
+ Calls to @racket[cify] within @racket[body] will use a new counter when
+ generating unique variable names, starting at @racket[0].
+}
 
 @defstruct*[ExternSrc ([ls (listof c-library-string?)]
                        [hs (listof c-header-string?)])]{
-
+ Represents an external code source, with @racket[ls] being a list of
+ libraries to link against, and @racket[hs] being a list of header files
+ to include.
 }
 
 @defstruct*[Type ()]{
