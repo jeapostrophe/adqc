@@ -184,3 +184,31 @@ AST nodes used in construction of ADQC programs.
 @defstruct*[(IfE Expr) ([ce Expr?] [te Expr?] [fe Expr?])]{
 
 }
+
+@defstruct*[Init ()]{
+
+}
+
+@defstruct*[(UndI Init) ([ty Type?])]{
+
+}
+
+@defstruct*[(ConI Init) ([e Expr?])]{
+
+}
+
+@defstruct*[(ZedI Init) ([ty Type?])]{
+
+}
+
+@defstruct*[(ArrI Init) ([is (listof Init?)])]{
+
+}
+
+@defstruct*[(RecI Init) ([field->i (hash/c symbol? Init?)])]{
+
+}
+
+@defstruct*[(UniI Init) ([mode symbol?] [i Init?])]{
+
+}
