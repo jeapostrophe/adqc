@@ -15,6 +15,8 @@
 
 AST nodes used in construction of ADQC programs.
 
+@; XXX Unpackers?
+
 @defproc[c-identifier-string? ([v any/c]) boolean?]{
  Predicate returns @racket[#t] if @racket[v] is a valid identifier string in C.
  This is a partial test.
@@ -61,7 +63,7 @@ AST nodes used in construction of ADQC programs.
  A @racket[Type] representing a signed or unsigned integer value.
 }
 
-@defstruct*[(FloT Type) ([bits (or/c 8 16 32 64)])]{
+@defstruct*[(FloT Type) ([bits (or/c 32 64)])]{
  A @racket[Type] represending a floating-point value.                         
 }
 
@@ -105,4 +107,80 @@ AST nodes used in construction of ADQC programs.
 
 @defproc[(non-void-type? [v any/c]) boolean?]{
  Equivalent to @racket[(and/c Type? (not/c VoiT?))].
+}
+
+@defstruct*[Path ()]{
+ All ADQC paths are derived from this type. A Path is a reference some
+ previously declared value in memory.
+}
+
+@defstruct*[(MetaP Path) ([m any/c] [p Path?])]{
+ A "Meta Path" containing some metadata @racket[m], which describes a
+ @racket[Path] @racket[p]. Multiple layers of nesting are allowed, so
+ @racket[p] may itself a @racket[MetaP?].
+}
+
+@defstruct*[(Var Path) ([x symbol?] [ty Type?])]{
+
+}
+
+@defstruct*[(Global Path) ([ty non-void-type?] [xi Init?])]{
+
+}
+
+@defstruct*[(Select Path) ([p Path?] [ie Expr?])]{
+
+}
+
+@defstruct*[(Field Path) ([p Path?] [f symbol?])]{
+
+}
+
+@defstruct*[(Mode Path) ([p Path?] [m symbol?])]{
+
+}
+
+@defstruct*[(ExtVar Path) ([src ExternSrc?]
+                           [name c-identifier-string?]
+                           [ty non-void-type?])]{
+
+}
+
+@defstruct*[Expr ()]{
+
+}
+
+@defstruct*[(MetaE Expr) ([m any/c] [e Expr?])]{
+
+}
+
+@defstruct*[(Int Expr) ([signed? boolean?]
+                        [bits (or/c 8 16 32 64)]
+                        [val exact-integer?])]{
+
+}
+
+@defstruct*[(Flo Expr) ([bits (or/c 32 64)]
+                        [val (or/c single-flonum? double-flonum?)])]{
+
+}
+
+@defstruct*[(Cast Expr) ([ty Type?] [e Expr?])]{
+
+}
+
+@defstruct*[(Read Expr) ([p Path?])]{
+
+}
+
+@defstruct*[(BinOp Expr) ([op symbol?] [L Expr?] [R Expr?])]{
+
+}
+
+@defstruct*[(LetE Expr) ([x symbol?] [ty Type?] [xe Expr?] [be Expr?])]{
+
+}
+
+@defstruct*[(IfE Expr) ([ce Expr?] [te Expr?] [fe Expr?])]{
+
 }
