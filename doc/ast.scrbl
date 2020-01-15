@@ -118,7 +118,7 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 @defstruct*[(MetaP Path) ([m any/c] [p Path?])]{
  A "Meta Path" containing some metadata @racket[_m], which describes a
  @racket[Path] @racket[_p]. Multiple layers of nesting are allowed, so
- @racket[_p] may itself a @racket[MetaP?].
+ @racket[_p] may itself be a @racket[MetaP].
 }
 
 @defstruct*[(Var Path) ([x symbol?] [ty Type?])]{
@@ -162,68 +162,87 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 }
 
 @defstruct*[Expr ()]{
-
+ All @racketmodname[adqc] expressions are derived from @racket[Expr].
+ Expressions produce a value and have no side effects, other than reading
+ from memory.
 }
 
 @defstruct*[(MetaE Expr) ([m any/c] [e Expr?])]{
-
+ A "Meta Expression" containing some metadata @racket[_m], which describes an
+ @racket[Expr] @racket[e]. Multiple layers of nesting are allowed, so @racket[e]
+ may itself be a @racket[MetaE].
 }
 
 @defstruct*[(Int Expr) ([signed? boolean?]
                         [bits (or/c 8 16 32 64)]
                         [val exact-integer?])]{
-
+ An integer value, signed or unsigned.
 }
 
 @defstruct*[(Flo Expr) ([bits (or/c 32 64)]
                         [val (or/c single-flonum? double-flonum?)])]{
-
+ An IEEE 754 floating point value.
 }
 
 @defstruct*[(Cast Expr) ([ty Type?] [e Expr?])]{
-
+ Casts @racket[_e] to a new type. The types @racket[_ty] and
+ @racket[_e] must be arithmetic (i.e., @racket[IntT?] or @racket[FloT?]).
 }
 
 @defstruct*[(Read Expr) ([p Path?])]{
-
+ Produces the value stored at @racket[_p].
 }
 
 @defstruct*[(BinOp Expr) ([op symbol?] [L Expr?] [R Expr?])]{
-
+ A binary operation with left-hand side @racket[_L] and right-hand side
+ @racket[_R]. XXX: List of valid ops.
 }
 
 @defstruct*[(LetE Expr) ([x symbol?] [ty Type?] [xe Expr?] [be Expr?])]{
-
+ Like @racket[Let], but as an @racket[Expr]. The syntax produced by @racket[_xe]
+ is substituted literally for @racket[_x] in @racket[_be]. I.e.,
+ @code["(let ([x (+ 1 2)])\n(* x x)"] is equivalent to
+ @code["(* (+ 1 2) (+ 1 2))"].
 }
 
 @defstruct*[(IfE Expr) ([ce Expr?] [te Expr?] [fe Expr?])]{
-
+ Like @racket[If], but as an @racket[Expr].
+ Equivalent to the ternary operator in C.
 }
 
 @defstruct*[Init ()]{
-
+ Produces a value that is suitable for initializing a newly-declared
+ variable. All @racketmodname[adqc] initializers are derived from @racket[Init].
 }
 
 @defstruct*[(UndI Init) ([ty Type?])]{
-
+ Perform no initialization. This is equialent to to declaration like
+ @code["int x;"] in C.
 }
 
 @defstruct*[(ConI Init) ([e Expr?])]{
-
+ Initialize with the value produced by @racket[_e]. If @racket[_e] contains
+ any @racket[Read]s, then the resulting program is considered unsafe.
 }
 
 @defstruct*[(ZedI Init) ([ty Type?])]{
-
+ Initialize with zero. This is equivalent to @code["{ 0 }"] when initializing
+ a value of type @racket[ArrT?], @racket[RecT?], or @racket[UniT?] (an array,
+ record, or union).
 }
 
 @defstruct*[(ArrI Init) ([is (listof Init?)])]{
-
+ Initialize an array. The value being initialized must be of type
+ @racket[ArrT?], and length of @racket[_is] must be equal to the length
+ of the array being initialized.
 }
 
 @defstruct*[(RecI Init) ([field->i (hash/c symbol? Init?)])]{
-
+ Initialize a record. The value being initialized must be of type
+ @racket[RecT?]. XXX: Does field->i need entry for every field?
 }
 
 @defstruct*[(UniI Init) ([mode symbol?] [i Init?])]{
-
+ Initialize a union. The value being initialized must be of type
+ @racket[UniT?], and @racket[_mode] must be a mode of that union.
 }
