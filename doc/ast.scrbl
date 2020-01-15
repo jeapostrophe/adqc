@@ -15,8 +15,6 @@
 
 AST nodes used in construction of @racketmodname[adqc] programs.
 
-@; XXX Unpackers?
-
 @defproc[c-identifier-string? ([v any/c]) boolean?]{
  Predicate returns @racket[#t] if @racket[_v] is a valid identifier string in C.
  This is a partial test.
@@ -245,4 +243,109 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 @defstruct*[(UniI Init) ([mode symbol?] [i Init?])]{
  Initialize a union. The value being initialized must be of type
  @racket[UniT?], and @racket[_mode] must be a mode of that union.
+}
+
+@defstruct*[Stmt ()]{
+                     
+}
+
+@defstruct*[(MetaS Stmt) ([m any/c] [bs Stmt?])]{
+
+}
+
+@defstruct*[(Skip Stmt) ([comment (or/c #f string?)])]{
+
+}
+
+@defstruct*[(Fail Stmt) ([msg string?])]{
+
+}
+
+@defstruct*[(Begin Stmt) ([f Stmt?] [s Stmt?])]{
+
+}
+
+@defstruct*[(Assign Stmt) ([p Path?] [e Expr?])]{
+
+}
+
+@defstruct*[(If Stmt) ([p Expr?] [t Stmt] [f Stmt])]{
+
+}
+
+@defstruct*[(While Stmt) ([p Expr?] [body Stmt?])]{
+
+}
+
+@defstruct*[(Jump Stmt) ([label symbol?])]{
+
+}
+
+@defstruct*[(Let/ec Stmt) ([label symbol?] [body Stmt?])]{
+
+}
+
+@defstruct*[(Let Stmt) ([x symbol?] [ty Type?] [xi Init?] [bs Stmt?])]{
+
+}
+
+@defstruct*[(Call Stmt) ([x symbol?]
+                         [ty Type?]
+                         [f Fun?]
+                         [as (listof (or/c Expr? Path?))]
+                         [bs Stmt?])]{
+
+}
+
+@defstruct*[Fun ()]{
+
+}
+
+@defstruct*[(MetaFun Fun) ([m any/c] [f Fun?])]{
+
+}
+
+@defstruct*[(IntFun Fun) ([args (listof Arg?)]
+                          [ret-x symbol?]
+                          [ret-ty Type?]
+                          [ret-lab symbol?]
+                          [body Stmt?])]{
+
+}
+
+@defstruct*[(ExtFun Fun) ([src ExternSrc?]
+                          [args (listof Arg?)]
+                          [ret-ty Type?]
+                          [name c-identifier-string?])]{
+
+}
+
+@defstruct*[Arg ([x symbol?]
+                 [ty non-void-type?]
+                 [mode (or/c 'read-only 'copy 'ref)])]{
+
+}
+
+@defproc[Fun-args ([f (or/c IntFun? ExtFun?)]) (listof ARg?)]{
+
+}
+
+@defproc[Fun-ret-ty ([f (or/c IntFun? ExtFun?)]) Type?]{
+
+}
+
+@; XXX Unpackers
+
+@defproc[give-name ([v (or/c Path? Fun?)] [n symbol?]) (or/c MetaP? MetaFun?)]{
+
+}
+
+@defproc[given-name ([v (or/c Path? Fun?)]) (or/c symbol? #f)]{
+
+}
+
+@defstruct*[Program ([name->global (hash/c c-identifier-string? Global?)]
+                     [name->ty (hash/c c-identifier-string? Type?)]
+                     [name->fun (hash/c c-identifier-string IntFun?)])]{
+
 }
