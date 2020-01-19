@@ -154,7 +154,7 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 @defstruct*[(ExtVar Path) ([src ExternSrc?]
                            [name c-identifier-string?]
                            [ty non-void-type?])]{
- A @racket[Path] to an externally-declared variable, e.g., @code["errno"].
+ A @racket[Path] to an externally-defined variable, e.g., @code["errno"].
  The string provided for @racket[_name] is emitted literally into the resulting
  C program. Programs that use @racket[ExtVar] are considered unsafe.
 }
@@ -167,8 +167,8 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 
 @defstruct*[(MetaE Expr) ([m any/c] [e Expr?])]{
  A "Meta Expression" containing some metadata @racket[_m], which describes an
- @racket[Expr] @racket[e]. Multiple layers of nesting are allowed, so @racket[e]
- may itself be a @racket[MetaE].
+ @racket[Expr] @racket[_e]. Multiple layers of nesting are allowed, so
+ @racket[_e] may itself be a @racket[MetaE].
 }
 
 @defstruct*[(Int Expr) ([signed? boolean?]
@@ -246,47 +246,60 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 }
 
 @defstruct*[Stmt ()]{
-                     
+ A statement does not produce a value, but instead has some side effect.
+ All @racketmodname[adqc] statements are derived from @racket[Stmt].
 }
 
 @defstruct*[(MetaS Stmt) ([m any/c] [bs Stmt?])]{
-
+ A "Meta Statement" containing some metadata @racket[_m], which describes a
+ @racket[Stmt] @racket[_bs]. Multiple layers of nesting are allowed, so
+ @racket[_bs] may itself be a @racket[MetaS].
 }
 
 @defstruct*[(Skip Stmt) ([comment (or/c #f string?)])]{
-
+ A null operation, or no-op. If @racket[_comment] is not @racket[#f], then
+ it is emitted into the resulting program as a comment.
 }
 
 @defstruct*[(Fail Stmt) ([msg string?])]{
-
+ Signal that some error has occurred. Currently, this prints @racket[_msg]
+ to @code["stderr"], then calls @code["exit(1)"].
 }
 
 @defstruct*[(Begin Stmt) ([f Stmt?] [s Stmt?])]{
-
+ Execute @racket[_f], then @racket[_s].
 }
 
 @defstruct*[(Assign Stmt) ([p Path?] [e Expr?])]{
-
+ Assign a new value to a previously-declared variable.
 }
 
 @defstruct*[(If Stmt) ([p Expr?] [t Stmt] [f Stmt])]{
-
+ If @racket[_p] is truthy (non-zero), then execute @racket[_t]. Otherwise,
+ execute @racket[_f]. The @racket[Expr] @racket[_p] must produce a value
+ of type @racket[IntT?]. Equivalent to an @code["if"] statement in C.
 }
 
 @defstruct*[(While Stmt) ([p Expr?] [body Stmt?])]{
-
+ Executes @racket[_body] as long as @racket[_p] is truthy (non-zero). The
+ @racket[Expr] @racket[_p] must produce a value of type @racket[IntT?].
+ Equivalent to a @code["while"] statement in C.
 }
 
 @defstruct*[(Jump Stmt) ([label symbol?])]{
-
+ Jump to @racket[_label]. Equivalent to @code["goto"] in C.
 }
 
 @defstruct*[(Let/ec Stmt) ([label symbol?] [body Stmt?])]{
-
+ Execute @racket[_body]. Within @racket[_body], @racket[Jump]ing to
+ @racket[_label] wil skip the rest of @racket[_body]. Like @racket[let/ec]
+ in Racket, but without a return value.
 }
 
 @defstruct*[(Let Stmt) ([x symbol?] [ty Type?] [xi Init?] [bs Stmt?])]{
-
+ Declares a new variable. Within the body statement @racket[_bs], @racket[_x]
+ refers to a @racket[Var] of type @racket[_ty], initialized with @racket[_xi].
+ Equivalent to a local variable declaration in C.
 }
 
 @defstruct*[(Call Stmt) ([x symbol?]
@@ -294,15 +307,20 @@ AST nodes used in construction of @racketmodname[adqc] programs.
                          [f Fun?]
                          [as (listof (or/c Expr? Path?))]
                          [bs Stmt?])]{
-
+ Invokes the function @racket[_f] with arguments @racket[_as], storing the
+ result in a new @racket[Var] named @racket[_x]. Works similarly to
+ @racket[Let], creating a new variable that can be referenced within
+ @racket[_body].
 }
 
 @defstruct*[Fun ()]{
-
+ A function, which can be invoked through @racket[Call].
 }
 
 @defstruct*[(MetaFun Fun) ([m any/c] [f Fun?])]{
-
+ A "Meta Function" containing some metadata @racket[_m], which describes an
+ @racket[Fun] @racket[_f]. Multiple layers of nesting are allowed, so
+ @racket[_f] may itself be a @racket[MetaFun].
 }
 
 @defstruct*[(IntFun Fun) ([args (listof Arg?)]
@@ -310,42 +328,64 @@ AST nodes used in construction of @racketmodname[adqc] programs.
                           [ret-ty Type?]
                           [ret-lab symbol?]
                           [body Stmt?])]{
-
+ An "Internal Function". Functions written in @racketmodname[adqc] are compiled
+ into these. Functions in @racketmodname[adqc] convey their return value by
+ declaring a variable @racket[_ret-x] to hold it, and return by @racket[Jump]ing
+ to the label @racket[_ret-lab]. This enables easily inlining an @racket[IntFun]
+ by transforming it int an equivalent @racket[Let/ec].
 }
 
 @defstruct*[(ExtFun Fun) ([src ExternSrc?]
                           [args (listof Arg?)]
                           [ret-ty Type?]
                           [name c-identifier-string?])]{
-
+ An "External Function" that references some externally-defined native function,
+ e.g., @code["exit"] or @code["write"]. Programs that use @racket[ExtFun] are
+ considered unsafe.
 }
 
 @defstruct*[Arg ([x symbol?]
                  [ty non-void-type?]
                  [mode (or/c 'read-only 'copy 'ref)])]{
+ An argument in a function declaration. Specifies the name, @racket[_x],
+ of the argument, as well as it's type, and whether it is to be passed by
+ value (@racket['copy]), reference (@racket['ref]), or immutable reference
+ (@racket['read-only]).
 
+ Arrays, records, and unions are always passed by reference, even if
+ @racket['copy] is specified for @racket[_mode]. Types smaller than a pointer
+ will be passed by value if @racket['read-only] is specified for @racket[_mode],
+ as an optimization. Immutability is still enforced.
 }
 
-@defproc[Fun-args ([f (or/c IntFun? ExtFun?)]) (listof ARg?)]{
-
+@defproc[Fun-args ([f (or/c IntFun? ExtFun?)]) (listof Arg?)]{
+ Returns a list containing the arguments for @racket[_f]. This is defined for
+ convenience and works with both @racket[IntFun] and @racket[ExtFun].
 }
 
 @defproc[Fun-ret-ty ([f (or/c IntFun? ExtFun?)]) Type?]{
-
+ Returns the return type of @racket[_f]. This is defined for convenience and
+ works with both @racket[IntFun] and @racket[ExtFun].
 }
 
 @; XXX Unpackers
 
 @defproc[give-name ([v (or/c Path? Fun?)] [n symbol?]) (or/c MetaP? MetaFun?)]{
-
+ Attaches metadata to @racket[_v] which suggests to the compiler that
+ @racket[_n] should be used as the name for @racket[_v] in the output
+ program. The name @racket[_n] is not emitted literally in the output
+ program - it is still uniquified through @racket[cify].
 }
 
 @defproc[given-name ([v (or/c Path? Fun?)]) (or/c symbol? #f)]{
-
+ Returns the name previously given to @racket[_v] through @racket[give-name],
+ or @racket[#f] if @racket[_v] was not previously given a name.
 }
 
 @defstruct*[Program ([name->global (hash/c c-identifier-string? Global?)]
                      [name->ty (hash/c c-identifier-string? Type?)]
                      [name->fun (hash/c c-identifier-string IntFun?)])]{
-
+ A whole @racketmodname[adqc] program. @racket[_name->global],
+ @racket[_name->ty], and @racket[_name->fun] refer to public global variables,
+ type declarations, and funcions respectively.
 }
