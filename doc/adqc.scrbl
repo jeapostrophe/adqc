@@ -13,3 +13,4 @@ This manual documents the @racketmodname[adqc] collection.
 @local-table-of-contents[#:style 'immediate-only]
 
 @include-section["ast.scrbl"]
+@;include-section["stx.scrbl"]
