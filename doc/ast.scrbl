@@ -16,43 +16,7 @@
 
 AST nodes used in construction of @racketmodname[adqc] programs.
 
-@defproc[(c-identifier-string? [v any/c]) boolean?]{
- Predicate returns @racket[#t] if @racket[v] is a valid identifier string in C.
- This is a partial test.
-}
-
-@defproc[(c-library-string? [v any/c]) boolean?]{
- Predicate returns @racket[#t] if @racket[v] is a valid name for a C library,
- meaning that it would be valid to the right of @tt{-l} in @tt{cc}.
- Currently this is equivalent to @racket[string?].
-}
-
-@defproc[(c-header-string? [v any/c]) boolean?]{
- Predicate returns @racket[#t] if @racket[v] is a valid name
- for C header file, meaning that it would be valid inside the
- @tt{< >}s of an @tt{#include}. Currently this is equivalent
- to @racket[string?].
-}
-
-@defproc[(cify [s symbol?]) c-identifier-string?]{
- Sanitizes a variable name by removing from it any characters which are
- not valid in a C identifier, and appending it with a unique number. These
- numbers are monotonically increasing, although this counter can be reset
- using @racket[with-cify-counter]. Note that although the argument @racket[s]
- is a @racket[symbol?], the return value is a @racket[string?].
-}
-
-@defform[(with-cify-counter body ...+)]{
- Calls to @racket[cify] within @racket[body] will use a new counter when
- generating unique variable names, starting at @racket[0].
-}
-
-@defstruct*[ExternSrc ([ls (listof c-library-string?)]
-                       [hs (listof c-header-string?)])]{
- Represents an external code source, with @racket[ls] being a list of
- libraries to link against, and @racket[hs] being a list of header files
- to include.
-}
+@section{Types}
 
 @defstruct*[Type ()]{
  Basic type that all @racketmodname[adqc] types are derived from.         
@@ -109,6 +73,8 @@ AST nodes used in construction of @racketmodname[adqc] programs.
  Equivalent to @racket[(and/c Type? (not/c VoiT?))].
 }
 
+@section{Paths}
+
 @defstruct*[Path ()]{
  All @racketmodname[adqc] paths are derived from this type. A @racket[Path]
  is a reference some previously declared value in memory.
@@ -118,6 +84,11 @@ AST nodes used in construction of @racketmodname[adqc] programs.
  A "Meta Path" containing some metadata @racket[m], which describes a
  @racket[Path] @racket[p]. Multiple layers of nesting are allowed, so
  @racket[p] may itself be a @racket[MetaP].
+}
+
+@defproc[(unpack-MetaP [p Path?]) Path?]{
+ Recursively removes metadata from @racket[p], returning the @racket[Path]
+ within, with no metadata.
 }
 
 @defstruct*[(Var Path) ([x symbol?] [ty Type?])]{
@@ -160,6 +131,8 @@ AST nodes used in construction of @racketmodname[adqc] programs.
  C program. Programs that use @racket[ExtVar] are considered unsafe.
 }
 
+@section{Expressions}
+
 @defstruct*[Expr ()]{
  All @racketmodname[adqc] expressions are derived from @racket[Expr].
  Expressions produce a value and have no side effects, other than reading
@@ -170,6 +143,11 @@ AST nodes used in construction of @racketmodname[adqc] programs.
  A "Meta Expression" containing some metadata @racket[m], which describes an
  @racket[Expr] @racket[e]. Multiple layers of nesting are allowed, so
  @racket[e] may itself be a @racket[MetaE].
+}
+
+@defproc[(unpack-MetaE [e Expr?]) Expr?]{
+ Recursively removes metadata from @racket[e], returning the @racket[Expr]
+ within, with no metadata.
 }
 
 @defstruct*[(Int Expr) ([signed? boolean?]
@@ -208,6 +186,8 @@ AST nodes used in construction of @racketmodname[adqc] programs.
  Equivalent to the ternary operator in C.
 }
 
+@section{Initializers}
+
 @defstruct*[Init ()]{
  Produces a value that is suitable for initializing a newly-declared
  variable. All @racketmodname[adqc] initializers are derived from @racket[Init].
@@ -245,6 +225,8 @@ AST nodes used in construction of @racketmodname[adqc] programs.
  @racket[UniT?], and @racket[mode] must be a mode of that union.
 }
 
+@section{Statements}
+
 @defstruct*[Stmt ()]{
  A statement does not produce a value, but instead has some side effect.
  All @racketmodname[adqc] statements are derived from @racket[Stmt].
@@ -254,6 +236,11 @@ AST nodes used in construction of @racketmodname[adqc] programs.
  A "Meta Statement" containing some metadata @racket[m], which describes a
  @racket[Stmt] @racket[bs]. Multiple layers of nesting are allowed, so
  @racket[bs] may itself be a @racket[MetaS].
+}
+
+@defproc[(unpack-MetaS [s Stmt?]) Stmt?]{
+ Recursively removes metadata from @racket[s], returning the @racket[Stmt]
+ within, with no metadata.
 }
 
 @defstruct*[(Skip Stmt) ([comment (or/c #f string?)])]{
@@ -313,6 +300,8 @@ AST nodes used in construction of @racketmodname[adqc] programs.
  @racket[body].
 }
 
+@section{Functions}
+
 @defstruct*[Fun ()]{
  A function, which can be invoked through @racket[Call].
 }
@@ -321,6 +310,11 @@ AST nodes used in construction of @racketmodname[adqc] programs.
  A "Meta Function" containing some metadata @racket[m], which describes an
  @racket[Fun] @racket[f]. Multiple layers of nesting are allowed, so
  @racket[f] may itself be a @racket[MetaFun].
+}
+
+@defproc[(unpack-MetaFun [f Fun?]) Fun?]{
+ Recursively removes metadata from @racket[f], returning the @racket[Fun]
+ within, with no metadata.
 }
 
 @defstruct*[(IntFun Fun) ([args (listof Arg?)]
@@ -370,6 +364,56 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 
 @; XXX Unpackers
 
+@section{Program}
+
+@defstruct*[Program ([name->global (hash/c c-identifier-string? Global?)]
+                     [name->ty (hash/c c-identifier-string? Type?)]
+                     [name->fun (hash/c c-identifier-string IntFun?)])]{
+ A whole @racketmodname[adqc] program. @racket[name->global],
+ @racket[name->ty], and @racket[name->fun] refer to public global variables,
+ type declarations, and funcions respectively.
+}
+
+@section{Misc}
+
+@defproc[(c-identifier-string? [v any/c]) boolean?]{
+ Predicate returns @racket[#t] if @racket[v] is a valid identifier string in C.
+ This is a partial test.
+}
+
+@defproc[(c-library-string? [v any/c]) boolean?]{
+ Predicate returns @racket[#t] if @racket[v] is a valid name for a C library,
+ meaning that it would be valid to the right of @tt{-l} in @tt{cc}.
+ Currently this is equivalent to @racket[string?].
+}
+
+@defproc[(c-header-string? [v any/c]) boolean?]{
+ Predicate returns @racket[#t] if @racket[v] is a valid name
+ for C header file, meaning that it would be valid inside the
+ @tt{< >}s of an @tt{#include}. Currently this is equivalent
+ to @racket[string?].
+}
+
+@defproc[(cify [s symbol?]) c-identifier-string?]{
+ Sanitizes a variable name by removing from it any characters which are
+ not valid in a C identifier, and appending it with a unique number. These
+ numbers are monotonically increasing, although this counter can be reset
+ using @racket[with-cify-counter]. Note that although the argument @racket[s]
+ is a @racket[symbol?], the return value is a @racket[string?].
+}
+
+@defform[(with-cify-counter body ...+)]{
+ Calls to @racket[cify] within @racket[body] will use a new counter when
+ generating unique variable names, starting at @racket[0].
+}
+
+@defstruct*[ExternSrc ([ls (listof c-library-string?)]
+                       [hs (listof c-header-string?)])]{
+ Represents an external code source, with @racket[ls] being a list of
+ libraries to link against, and @racket[hs] being a list of header files
+ to include.
+}
+
 @defproc[(give-name [v (or/c Path? Fun?)] [n symbol?]) (or/c MetaP? MetaFun?)]{
  Attaches metadata to @racket[v] which suggests to the compiler that
  @racket[n] should be used as the name for @racket[v] in the output
@@ -382,10 +426,8 @@ AST nodes used in construction of @racketmodname[adqc] programs.
  or @racket[#f] if @racket[v] was not previously given a name.
 }
 
-@defstruct*[Program ([name->global (hash/c c-identifier-string? Global?)]
-                     [name->ty (hash/c c-identifier-string? Type?)]
-                     [name->fun (hash/c c-identifier-string IntFun?)])]{
- A whole @racketmodname[adqc] program. @racket[name->global],
- @racket[name->ty], and @racket[name->fun] refer to public global variables,
- type declarations, and funcions respectively.
+@defproc[(unpack-any [v (or/c Path? Expr? Stmt? Fun?)])
+         (or/c Path? Expr? Stmt? Fun?)]{
+ Recursively unpack any @racket[Path], @racket[Expr], @racket[Stmt],
+ or @racket[Fun] given as an argument.
 }
