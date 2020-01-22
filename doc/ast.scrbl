@@ -19,7 +19,7 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 @section{Types}
 
 @defstruct*[Type ()]{
- Basic type that all @racketmodname[adqc] types are derived from.         
+ All @racketmodname[adqc] types are derived from @racket[Type].
 }
 
 @defstruct*[(IntT Type) ([signed? boolean?] [bits (or/c 8 16 32 64)])]{
@@ -75,9 +75,10 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 
 @section{Paths}
 
+A Path is a reference some previously declared value in memory.
+
 @defstruct*[Path ()]{
- All @racketmodname[adqc] paths are derived from this type. A @racket[Path]
- is a reference some previously declared value in memory.
+ All @racketmodname[adqc] paths are derived from @racket[Path].
 }
 
 @defstruct*[(MetaP Path) ([m any/c] [p Path?])]{
@@ -133,10 +134,11 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 
 @section{Expressions}
 
+Expressions produce a value and have no side effects, other than reading
+from memory.
+
 @defstruct*[Expr ()]{
  All @racketmodname[adqc] expressions are derived from @racket[Expr].
- Expressions produce a value and have no side effects, other than reading
- from memory.
 }
 
 @defstruct*[(MetaE Expr) ([m any/c] [e Expr?])]{
@@ -188,9 +190,11 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 
 @section{Initializers}
 
+An initializer produces a value that is suitable for initializing a
+newly-declared variable.
+
 @defstruct*[Init ()]{
- Produces a value that is suitable for initializing a newly-declared
- variable. All @racketmodname[adqc] initializers are derived from @racket[Init].
+  All @racketmodname[adqc] initializers are derived from @racket[Init].
 }
 
 @defstruct*[(UndI Init) ([ty Type?])]{
@@ -227,8 +231,9 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 
 @section{Statements}
 
+A statement does not produce a value, but instead has some side effect.
+
 @defstruct*[Stmt ()]{
- A statement does not produce a value, but instead has some side effect.
  All @racketmodname[adqc] statements are derived from @racket[Stmt].
 }
 
@@ -302,8 +307,10 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 
 @section{Functions}
 
+A function, which can be invoked through @racket[Call].
+
 @defstruct*[Fun ()]{
- A function, which can be invoked through @racket[Call].
+ All @racketmodname[adqc] functions are derived from @racket[Fun].
 }
 
 @defstruct*[(MetaFun Fun) ([m any/c] [f Fun?])]{
@@ -361,8 +368,6 @@ AST nodes used in construction of @racketmodname[adqc] programs.
  Returns the return type of @racket[f]. This is defined for convenience and
  works with both @racket[IntFun] and @racket[ExtFun].
 }
-
-@; XXX Unpackers
 
 @section{Program}
 
@@ -428,6 +433,7 @@ AST nodes used in construction of @racketmodname[adqc] programs.
 
 @defproc[(unpack-any [v (or/c Path? Expr? Stmt? Fun?)])
          (or/c Path? Expr? Stmt? Fun?)]{
- Recursively unpack any @racket[Path], @racket[Expr], @racket[Stmt],
- or @racket[Fun] given as an argument.
+ Calls @racket[unpack-MetaP], @racket[unpack-MetaE], @racket[unpack-MetaS],
+ or @racket[unpack-MetaFun] depending on the type of the argument. Defined
+ for convenience.
 }
