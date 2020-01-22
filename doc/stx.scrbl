@@ -16,20 +16,33 @@
 Syntax and standard library functions for constructing @racketmodname[adqc]
 programs.
 
-@; XXX let, E-expander, E-free-syntax
+@; XXX Put define-type, define-fun, define-global, define-prog, etc. together,
+@; or in their own sections?
+
+@section{Type Syntax}
+
+@section{Path Syntax}
+
+@section{Expression Syntax}
+
+@; XXX let, E-expander, E-free-syntax, unsyntax
 @defform[(E e)
          #:grammar
          ([e (bin-op e e)
              (e : ty)
              (if e e e)
-             (unsyntax v)
              n
              p
              x])
          #:contracts ([ty Type?]
-                      [v Expr?]
                       [n number?]
                       [p Path?]
                       [x symbol?])]{
  Produces an @racket[Expr] from @racket[e].
 }
+
+@section{Initializer Syntax}
+
+@section{Statement Syntax}
+
+@section{Function Syntax}
