@@ -21,6 +21,16 @@ programs.
 
 @section{Type Syntax}
 
+@defform[(T ty)
+         #:grammar
+         ([ty (array dim ty)
+              (record f ty ... ...)
+              (union m I)])
+         #:contracts ([dim exact-positive-integer?]
+                      [m symbol?])]{
+ Produces a @racket[Type] from @racket[ty].
+}
+
 @section{Path Syntax}
 
 @section{Expression Syntax}
