@@ -413,7 +413,7 @@
             a)
           #:tests ["foo" (S64 5) => (S64 6)])
    ;; Callee takes an integer argument by reference, assigns to it
-   (let ([bar (F ([#:ref S64 m]) : S64
+   (let ([bar (F S64 ([#:ref S64 m])
                  (set! m (iadd m (S64 1)))
                  (S64 1))])
      (TProg (define-fun S64 foo ([S64 n])
@@ -428,7 +428,7 @@
             n)
           #:tests ["foo" (S64 5) => (S64 6)])
    ;; Private function
-   (let ([c-add1 (F ([n : S32]) : S32 (iadd n (S32 1)))])
+   (let ([c-add1 (F S32 ([S32 n]) (iadd n (S32 1)))])
      (TProg (define-fun S32 foo ([S32 x])
               (define r : S32 := c-add1 <- x)
               r)
@@ -598,7 +598,7 @@
      (TTS (let ([x : S32 := square <- (S64 5)]) (void)))
      (TTS (let ([x : S32 := square <- (S32 5)])
             (x <- (S64 10)))))
-   (TT (F ([n : S32]) : S32
+   (TT (F S32 ([S32 n])
           ((imul n n) : S64)))
    ;; ANF
    (syntax-parameterize ([F-body-default (make-rename-transformer #'S+)])

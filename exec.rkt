@@ -34,7 +34,7 @@
   (define tys (map Arg-ty args))
   (define fns (map ty->ExtFun tys))
   (define arg-xs (map gensym (make-list nargs 'arg)))
-  (F ([S32 argc] [(array (add1 nargs) #,char*) argv]) : S32
+  (F S32 ([S32 argc] [(array (add1 nargs) #,char*) argv])
      (assert! #:dyn #:msg (format "exactly ~a arguments supplied" nargs)
               (ieq argc (S32 (add1 nargs))))
      #,(let ([user-call

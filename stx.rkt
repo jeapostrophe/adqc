@@ -1192,7 +1192,7 @@
 (define-syntax (F stx)
   (with-disappeared-uses
     (syntax-parse stx
-      [(_ (a:Farg ...) (~datum :) r:Fret
+      [(_ r:Fret (a:Farg ...)
           (~optional (~seq #:pre pre)
                      #:defaults ([pre #'(S64 1)]))
           (~optional (~seq #:post post)
@@ -1464,7 +1464,7 @@
          (list defs nons))
        (syntax/loc stx
          (Prog def ...
-               (define-fun main () : S32
+               (define-fun S32 main ()
                  non ...
                  (return 0))))])))
 
@@ -1504,7 +1504,7 @@
       (match ty
         ;; XXX UniT, ExtT (?)
         [(RecT _ _ c-order)
-         (F ([rec : #,ty]) : S32
+         (F S32 ([#,ty rec])
             (print "{")
             #,(let loop ([f (first c-order)] [fs (rest c-order)])
                 (cond [(empty? fs)
@@ -1520,7 +1520,7 @@
   (define (new-array-printer!)
     (define ety (ArrT-ety ty))
     (define print-fn
-      (F ([arr : #,ty] [count : U64]) : S32
+      (F S32 ([#,ty arr] [U64 count])
          (let ([i : U64 := (U64 0)])
            (print "[")
            (while (< i count)
