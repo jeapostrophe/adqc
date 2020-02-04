@@ -6,7 +6,7 @@
   (E (U8 (char->integer c))))
 
 (define main
-  (F+ ([S32 n1] [U8 op] [S32 n2]) : S32
+  (F+ S32 ([S32 n1] [U8 op] [S32 n2])
       (println
        (cond [(= op (C #\+)) (+ n1 n2)]
              [(= op (C #\-)) (- n1 n2)]

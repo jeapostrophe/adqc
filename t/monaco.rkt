@@ -99,7 +99,7 @@
     (assert! #:dyn (= (NODE @ x -> pq) NULL-NODE)))
 
   (define (make-do-children fn)
-    (F ([NodePtr pr]) : void
+    (F void ([NodePtr pr])
        (define c := (NODE @ pr -> lc))
        (while (!= c NULL-NODE)
          (define void1 := fn <- c)

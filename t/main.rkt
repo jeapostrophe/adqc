@@ -592,7 +592,7 @@
    (TTS (let ([x : S32 := (U64 5)]) (void)))
    (TTS (let ([x : (union a S32 b S64) := (S32 6)]) (void)))
    (TTS (let ([x : (array 2 S32) := (array (S32 1) (S32 2) (S32 3))]) (void)))
-   (let ([square (F ([n : S32]) : S32 (imul n n))])
+   (let ([square (F S32 ([S32 n]) (imul n n))])
      (TTS (let ([x : S32 := square <- (S32 5) (S32 6)]) (void)))
      (TTS (let ([x : S64 := square <- (S32 5)]) (void)))
      (TTS (let ([x : S32 := square <- (S64 5)]) (void)))
