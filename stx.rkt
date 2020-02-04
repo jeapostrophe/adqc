@@ -1161,15 +1161,6 @@
      ((~optional (~or (~and #:copy (~bind [mode #''copy]))
                       (~and #:ref (~bind [mode #''ref])))
                  #:defaults ([mode #''read-only]))
-      x:id (~datum :) ty)
-     #:attr ref (generate-temporary #'x)
-     #:attr var (syntax/loc this-syntax (Var 'ref (T ty)))
-     #:attr arg (syntax/loc this-syntax (Arg (Var-x ref) (Var-ty ref) mode))]
-    ;; XXX Delete old syntax when everything is migrated over
-    [pattern
-     ((~optional (~or (~and #:copy (~bind [mode #''copy]))
-                      (~and #:ref (~bind [mode #''ref])))
-                 #:defaults ([mode #''read-only]))
       ty x:id)
      #:attr ref (generate-temporary #'x)
      #:attr var (syntax/loc this-syntax (Var 'ref (T ty)))
