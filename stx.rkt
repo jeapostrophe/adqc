@@ -1347,7 +1347,7 @@
       [(_ ret-ty x:id #:as n:expr (args ...) . more)
        (syntax/loc stx
          (begin
-           (define the-fun (give-name (F (args ...) : ret-ty . more) 'x))
+           (define the-fun (give-name (F ret-ty (args ...) . more) 'x))
            (define-syntax x (F-expander (syntax-parser [_ #'the-fun])))
            (include-fun #:maybe n x)))]
       [(_ ret-ty x:id (args ...) . more)
