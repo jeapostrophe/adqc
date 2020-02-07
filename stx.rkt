@@ -433,44 +433,50 @@
   [(IntT #f _) iuge]
   [(? FloT?) foge])
 
+(begin-for-syntax
+  (struct T/E-expander (T-impl E-impl)
+    #:property prop:procedure
+    (λ (this stx)
+      (raise-syntax-error #f "Illegal outside T or E" stx))
+    #:methods gen:T-expander
+    [(define (T-expand this stx)
+       ((T/E-expander-T-impl this) stx))]
+    #:methods gen:E-expander
+    [(define (E-expand this stx)
+       ((T/E-expander-E-impl this) stx))]))
+
 (define-simple-macro (define-flo-stx [name:id bits] ...)
   (begin
-    (begin
-      (define-syntax (name stx) (raise-syntax-error 'name "Illegal outside T or E" stx))
-      (define-T-free-syntax name
-        (syntax-parser
-          [_:id
-           (record-disappeared-uses #'name)
-           #'(FloT bits)]))
-      (define-E-free-syntax name
-        (syntax-parser
-          [(_ n:expr)
-           (record-disappeared-uses #'name)
-           (quasisyntax/loc this-syntax
-             (construct-number #'#,this-syntax (FloT bits) n))]))
-      (provide name))
-    ...))
+    (define-syntax name
+      (T/E-expander
+       (syntax-parser
+         [_:id
+          (record-disappeared-uses #'name)
+          (syntax/loc this-syntax (FloT bits))])
+       (syntax-parser
+         [(_ n:expr)
+          (record-disappeared-uses #'name)
+          (quasisyntax/loc this-syntax
+            (construct-number #'#,this-syntax (FloT bits) n))]))) ...
+    (provide name ...)))
 (define-flo-stx
   [F32 32]
   [F64 64])
 
 (define-simple-macro (define-int-stx [name:id signed? bits] ...)
   (begin
-    (begin
-      (define-syntax (name stx) (raise-syntax-error 'name "Illegal outside T or E" stx))
-      (define-T-free-syntax name
-        (syntax-parser
-          [_:id
-           (record-disappeared-uses #'name)
-           #'(IntT signed? bits)]))
-      (define-E-free-syntax name
-        (syntax-parser
-          [(_ n:expr)
-           (record-disappeared-uses #'name)
-           (quasisyntax/loc this-syntax
-             (construct-number #'#,this-syntax (IntT signed? bits) n))]))
-      (provide name))
-    ...))
+    (define-syntax name
+      (T/E-expander
+       (syntax-parser
+         [_:id
+          (record-disappeared-uses #'name)
+          (syntax/loc this-syntax (IntT signed? bits))])
+       (syntax-parser
+         [(_ n:expr)
+          (record-disappeared-uses #'name)
+          (quasisyntax/loc this-syntax
+            (construct-number #'#,this-syntax (IntT signed? bits) n))]))) ...
+    (provide name ...)))
 (define-int-stx
   [S8  #t  8]
   [S16 #t 16]
