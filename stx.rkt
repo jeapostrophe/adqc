@@ -752,6 +752,22 @@
 
 (define listof-nvs? (listof anf-nv?))
 
+(begin-for-syntax
+  (struct A-esc-k (var id)
+    #:methods gen:A-expander
+    [(define (A-expand this stx)
+       (syntax-parse stx
+         [(_ a)
+          #:with void-id (generate-temporary 'any)
+          #:with k-var (A-esc-k-var this)
+          #:with k-id (A-esc-k-id this)
+          (syntax/loc stx
+            (let* ([void-id 'void-id] [void-ref (Var void-id (T any))])
+              (define-values (a-nv a-arg) (ANF a))
+              (define the-stmt (Begin (Assign k-var a-arg) (Jump k-id)))
+              (values (snoc a-nv (anf-void void-ref the-stmt))
+                      (Read void-ref))))]))]))
+
 (define-syntax (ANF stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -812,19 +828,7 @@
          (let ([x-id 'x-id] [k-id 'k-id] [the-ty (T ty)])
            (define the-x-ref (Var x-id the-ty))
            (define-values (body-nv body-arg)
-             (let-syntax
-                 ([k (A-expander
-                      (syntax-parser
-                        [(_ a)
-                         #:with x-id* (generate-temporary 'any)
-                         (syntax/loc this-syntax
-                           (let* ([x-id* 'x-id*] [the-x-ref* (Var x-id* (T any))])
-                             (define-values (a-nv a-arg) (ANF a))
-                             (define the-stmt
-                               (Begin (Assign the-x-ref a-arg)
-                                      (Jump k-id)))
-                             (values (snoc a-nv (anf-void the-x-ref* the-stmt))
-                                     (Read the-x-ref*))))]))])
+             (let-syntax ([k (A-esc-k #'the-x-ref #'k-id)])
                (ANF (begin body ...))))
            (values (list (anf-let/ec the-x-ref k-id body-arg body-nv))
                    (Read the-x-ref))))]
@@ -1004,6 +1008,9 @@
 
 (begin-for-syntax
   (struct E/A-expander (E-impl A-impl)
+    #:property prop:procedure
+    (λ (this stx)
+      (raise-syntax-error #f "Illegal outside E or S+" stx))
     #:methods gen:E-expander
     [(define (E-expand this stx)
        ((E/A-expander-E-impl this) stx))]
