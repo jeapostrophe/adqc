@@ -1,5 +1,6 @@
 #lang racket/base
 (require (for-syntax racket/base
+                     racket/struct-info
                      racket/syntax)
          racket/contract/base
          racket/hash
@@ -337,29 +338,41 @@
 (define-ensurer ensure-stmt-env MetaS stmt-env-info)
 (define-ensurer ensure-fun-type MetaFun fun-type-info)
 
+(begin-for-syntax
+  (struct typed-constructor (ctor ensure)
+    #:property prop:struct-info
+    (λ (this)
+      (make-struct-type-property
+       (syntax->datum (typed-constructor-ctor this))))
+    #:property prop:match-expander
+    (λ (this stx)
+      (syntax-parse stx
+        [(_ args:expr ...)
+         #:with ctor (typed-constructor-ctor this)
+         (syntax/loc stx
+           (ctor args ...))]))
+    #:property prop:procedure
+    (λ (this stx)
+      (syntax-parse stx
+        [me:id
+         #:with ctor (typed-constructor-ctor this)
+         #:with ensure (typed-constructor-ensure this)
+         (quasisyntax/loc stx
+           (contract
+            (value-contract ctor)
+            (λ args (ensure (apply ctor args)))
+            (syntax-source #'ctor) #'#,stx 'me #'ctor))]
+        [(me:id . args)
+         (syntax/loc stx
+           (#%app me . args))]))))
+
 (define-syntax (define-constructor stx)
   (syntax-parse stx
     [(_ name:id ensure)
      #:with name^ (generate-temporary #'name)
      (syntax/loc stx
        (begin
-         (define-match-expander name^
-           (λ (stx*)
-             (syntax-parse stx*
-               [(_ args:expr (... ...))
-                (syntax/loc stx*
-                  (name args (... ...)))]))
-           (λ (stx*)
-             (syntax-parse stx*
-               [me:id
-                (quasisyntax/loc stx*
-                  (contract
-                   (value-contract name)
-                   (λ args (ensure (apply name args)))
-                   (syntax-source #'name) #'#,stx* 'me #'name))]
-               [(me:id . args)
-                (syntax/loc stx*
-                  (#%app me . args))])))
+         (define-syntax name^ (typed-constructor #'name #'ensure))
          (provide (rename-out [name^ name]))))]))
 
 (define-simple-macro (define-exprs name:id ...)

@@ -1,5 +1,6 @@
 #lang racket/base
 (require (for-syntax racket/base
+                     racket/struct-info
                      racket/syntax)
          racket/contract/base
          racket/match
@@ -10,6 +11,10 @@
 
 (begin-for-syntax
   (struct constructor-instance (ctc ctor)
+    #:property prop:struct-info
+    (λ (this)
+      (make-struct-type-property
+       (syntax->datum (constructor-instance-ctor this))))
     #:property prop:match-expander
     (λ (this stx)
       (syntax-parse stx
