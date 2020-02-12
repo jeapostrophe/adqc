@@ -1358,6 +1358,19 @@
        (syntax/loc stx
          (define-fun ret-ty x #:as (symbol->c-name 'x) (args ...) . more))])))
 
+(define-syntax (define-fun+ stx)
+  (with-disappeared-uses
+    (syntax-parse stx
+      [(_ ret-ty x:id #:as n:expr (args ...) . more)
+       (syntax/loc stx
+         (begin
+           (define the-fun (give-name (F+ ret-ty (args ...) . more) 'x))
+           (define-syntax x (F-expander (syntax-parser [_ #'the-fun])))
+           (include-fun #:maybe n x)))]
+      [(_ ret-ty x:id (args ...) . more)
+       (syntax/loc stx
+         (define-fun+ ret-ty x #:as (symbol->c-name 'x) (args ...) . more))])))
+
 (define-syntax (define-extern-fun stx)
   (with-disappeared-uses
     (syntax-parse stx
@@ -1480,7 +1493,7 @@
 
 (provide while assert! return
          F-body-default
-         define-type define-fun define-global
+         define-type define-fun define-fun+ define-global
          define-extern-fun define-extern-type
          include-fun include-type include-global
          Prog Prog* define-prog define-prog*)
