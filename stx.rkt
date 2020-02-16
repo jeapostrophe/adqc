@@ -159,11 +159,11 @@
        (report "integer value ~a too large for ~a~a" n prefix bits))
      (Int signed? bits n)]
     [(FloT bits)
-     (when (and (= bits 32) (not (single-flonum? n)))
-       (report "expected single-flonum?\n  given: ~v" n))
-     (when (and (= bits 64) (not (double-flonum? n)))
-       (report "expected double-flonum?\n  given: ~v" n))
-     (Flo bits n)]
+     (define val
+       (match bits
+         [32 (real->single-flonum n)]
+         [64 (real->double-flonum n)]))
+     (Flo bits val)]
     [#f (cond
           [(single-flonum? n) (freenum (Flo 32 n))]
           [(double-flonum? n) (freenum (Flo 64 n))]

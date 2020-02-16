@@ -569,8 +569,6 @@
    (TTN U32 (expt 2 32) -1)
    (TTN S64 (expt 2 63) (sub1 (- (expt 2 63))))
    (TTN U64 (expt 2 64) -1)
-   (TTN F32 23.0 23)
-   (TTN F64 23.0f0 23)
    (TTE (iadd (S32 5) (S64 5)))
    (TTE (fadd (S32 5) (S32 1)))
    (TTE (iadd (F32 5f0) (S32 2)))
