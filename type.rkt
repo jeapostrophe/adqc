@@ -340,10 +340,7 @@
 
 (begin-for-syntax
   (struct typed-constructor (ctor ensure)
-    #:property prop:struct-info
-    (λ (this)
-      (make-struct-type-property
-       (syntax->datum (typed-constructor-ctor this))))
+    ;; XXX prop:struct-info
     #:property prop:match-expander
     (λ (this stx)
       (syntax-parse stx

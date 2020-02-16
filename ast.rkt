@@ -1,5 +1,6 @@
 #lang racket/base
 (require (for-syntax racket/base
+                     racket/list
                      racket/struct-info
                      racket/syntax)
          racket/contract/base
@@ -10,29 +11,32 @@
 (define integer-bit-widths '(8 16 32 64))
 
 (begin-for-syntax
-  (struct constructor-instance (ctc ctor)
+  (struct constructor (ctc name name? base fields)
     #:property prop:struct-info
     (λ (this)
-      (make-struct-type-property
-       (syntax->datum (constructor-instance-ctor this))))
+      (define fields (reverse (syntax->list (constructor-fields this))))
+      (list #f
+            (constructor-name this)
+            (constructor-name? this)
+            fields
+            (make-list (length fields) #f)
+            (constructor-base this)))
     #:property prop:match-expander
     (λ (this stx)
       (syntax-parse stx
         [(_ args:expr ...)
-         #:with ctor (constructor-instance-ctor this)
-         (syntax/loc stx
-           (ctor args ...))]))
+         #:with name (constructor-name this)
+         (syntax/loc stx (name args ...))]))
     #:property prop:procedure
     (λ (this stx)
       (syntax-parse stx
         [(me args:expr ...)
-         (syntax/loc stx
-           (#%app me args ...))]
+         (syntax/loc stx (#%app me args ...))]
         [me:id
-         #:with ctc (constructor-instance-ctc this)
-         #:with ctor (constructor-instance-ctor this)
+         #:with ctc (constructor-ctc this)
+         #:with name (constructor-name this)
          (quasisyntax/loc stx
-           (contract ctc ctor (syntax-source #'ctor) #'#,stx 'me #'ctor))]))))
+           (contract ctc name (syntax-source #'name) #'#,stx 'me #'name))]))))
 
 (define-syntax (struct+ stx)
   (syntax-parse stx
@@ -50,7 +54,8 @@
      (syntax/loc stx
        (begin
          (struct name base (field ...) #:transparent)
-         (define-syntax ctor (constructor-instance #'ctor-ctc #'name))
+         (define-syntax ctor
+           (constructor #'ctor-ctc #'name #'name? #'base #'(field-accessor ...)))
          (define (name?^ v)
            (and (base? v) (name? (unpack v))))
          (define (field-accessor^ v)
