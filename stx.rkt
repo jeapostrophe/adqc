@@ -772,13 +772,13 @@
   (with-disappeared-uses
     (syntax-parse stx
       #:literals (void error begin define set! if let/ec let unsyntax)
-      [(_ (void))
+      [(_ (void ~!))
        #:with x-id (generate-temporary 'void)
        (record-disappeared-uses #'void)
        (syntax/loc stx
          (let* ([x-id 'x-id] [the-x-ref (Var x-id (T void))])
            (values (list (anf-void the-x-ref #f)) (Read the-x-ref))))]
-      [(_ (error m))
+      [(_ (error ~! m))
        #:with x-id (generate-temporary 'any)
        (record-disappeared-uses #'error)
        (syntax/loc stx
@@ -791,13 +791,13 @@
       [(_ (begin a))
        (record-disappeared-uses #'begin)
        (syntax/loc stx (ANF a))]
-      [(_ (begin a . as))
+      [(_ (begin ~! a . as))
        (record-disappeared-uses #'begin)
        (syntax/loc stx
          (let-values ([(a-nv a-arg) (ANF a)]
                       [(as-nv as-arg) (ANF (begin . as))])
            (values (append a-nv as-nv) as-arg)))]
-      [(_ (set! p a))
+      [(_ (set! ~! p a))
        #:with x-id (generate-temporary 'void)
        (record-disappeared-uses #'set!)
        (syntax/loc stx
@@ -808,7 +808,7 @@
            (define the-x-ref (Var x-id (T void)))
            (values (snoc a-nv (anf-void the-x-ref (Assign the-p a-arg)))
                    (Read the-x-ref))))]
-      [(_ (if p t f))
+      [(_ (if ~! p t f))
        #:with x-id (generate-temporary 'if)
        (record-disappeared-uses #'if)
        (syntax/loc stx
@@ -820,7 +820,7 @@
            (define the-x-ref (Var x-id x-ty))
            (values (snoc p-nv (anf-if the-x-ref p-arg t-nv t-arg f-nv f-arg))
                    (Read the-x-ref))))]
-      [(_ (let/ec (k:id ty) body ...+))
+      [(_ (let/ec ~! (k:id ty) body ...+))
        #:with x-id (generate-temporary 'letec)
        #:with k-id (generate-temporary #'k)
        (record-disappeared-uses #'let/ec)
@@ -832,7 +832,7 @@
                (ANF (begin body ...))))
            (values (list (anf-let/ec the-x-ref k-id body-arg body-nv))
                    (Read the-x-ref))))]
-      [(_ (let ([x:id xe] ...) body ...+))
+      [(_ (let ~! ([x:id xe] ...) body ...+))
        #:with (x-id ...) (generate-temporaries #'(x ...))
        #:with (xe-ty ...) (generate-temporaries #'(x ...))
        #:with (ref-ty? ...) (generate-temporaries #'(x ...))
@@ -863,7 +863,7 @@
                         #:unless ref?)
                (anf-let x-ref arg)))
            (values (append xe-nv ... the-nvs body-nv) body-arg)))]
-      [(_ (fn as ...))
+      [(_ (fn ~! as ...))
        #:declare fn (static F-expander? "F expander")
        #:with x-id (generate-temporary #'fn)
        #:with (as-nv ...) (generate-temporaries #'(as ...))
@@ -877,7 +877,7 @@
            (values (snoc (append as-nv ...)
                          (anf-call x-id x-ty fn (list as-arg ...)))
                    (Read the-x-ref))))]
-      [(_ (ty m:keyword a:expr))
+      [(_ (ty m:keyword ~! a:expr))
        #:declare ty (static (and/c T-expander? I-expander?) "T/I expander")
        #:with x-id (generate-temporary #'ty)
        (record-disappeared-uses #'ty)
@@ -888,7 +888,7 @@
            (define the-x-ref (Var x-id x-ty))
            (values (snoc a-nv (anf-union the-x-ref (keyword->symbol 'm) a-arg))
                    (Read the-x-ref))))]
-      [(_ (ty as ...))
+      [(_ (ty ~! as ...))
        #:declare ty (static (and/c T-expander? I-expander?) "T/I expander")
        #:with x-id (generate-temporary #'ty)
        #:with (as-nv ...) (generate-temporaries #'(as ...))
@@ -910,7 +910,7 @@
        #:declare macro-id (static A-expander? "A expander")
        (record-disappeared-uses #'macro-id)
        (A-expand (attribute macro-id.value) #'macro-use)]
-      [(_ (unsyntax nvs/arg))
+      [(_ (unsyntax ~! nvs/arg))
        (record-disappeared-uses #'unsyntax)
        (quasisyntax/loc stx
          (let-values ([(nvs arg) nvs/arg])
@@ -921,7 +921,7 @@
              (raise-syntax-error
               #f "unsyntaxed ANF nvs must be list of anf-nv" #'#,stx))
            (values nvs arg)))]
-      [(_ e) (syntax/loc stx (values '() (E e)))])))
+      [(_ e ~!) (syntax/loc stx (values '() (E e)))])))
 
 (define (ANF-compose ret-fn nvs arg)
   (define (rec nvs arg) (ANF-compose ret-fn nvs arg))
