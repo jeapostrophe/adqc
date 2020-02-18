@@ -101,12 +101,10 @@
        #'e])))
 
 (define the-void-ref (VoiT))
-(define-T-free-syntax void
-  (syntax-parser [_ (syntax/loc this-syntax the-void-ref)]))
+(define-T-free-syntax void (syntax-parser [_ #'the-void-ref]))
 
 (define the-any-ref (AnyT))
-(define-T-expander any
-  (syntax-parser [_ (syntax/loc this-syntax the-any-ref)]))
+(define-T-free-syntax any (syntax-parser [_ #'the-any-ref]))
 
 (define-expanders&macros
   P-free-macros define-P-free-syntax P-expander
