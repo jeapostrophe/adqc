@@ -82,6 +82,7 @@
             (board @ (sub1 (- n j)) @ i))
       (set! (board @ (sub1 (- n j)) @ i) tmp))))
 
+
 (define-fun U8 move-up ([Board board])
   (define success := (U8 0))
   (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
@@ -89,29 +90,29 @@
     (set! success (bitwise-ior success sa-result)))
   (return success))
 
-(define-fun U8 move-left ([Board board])
-  (define void1 := (rotate-board board))
-  (define success := (move-up board))
-  (define void2 := (rotate-board board))
-  (define void3 := (rotate-board board))
-  (define void4 := (rotate-board board))
-  (return success))
+(define-fun+ U8 move-left ([Board b])
+  (rotate-board b)
+  (define success (move-up b))
+  (rotate-board b)
+  (rotate-board b)
+  (rotate-board b)
+  success)
 
-(define-fun U8 move-down ([Board board])
-  (define void1 := (rotate-board board))
-  (define void2 := (rotate-board board))
-  (define success := (move-up board))
-  (define void3 := (rotate-board board))
-  (define void4 := (rotate-board board))
-  (return success))
+(define-fun+ U8 move-down ([Board b])
+  (rotate-board b)
+  (rotate-board b)
+  (define success (move-up b))
+  (rotate-board b)
+  (rotate-board b)
+  success)
 
-(define-fun U8 move-right ([Board board])
-  (define void1 := (rotate-board board))
-  (define void2 := (rotate-board board))
-  (define void3 := (rotate-board board))
-  (define success := (move-up board))
-  (define void4 := (rotate-board board))
-  (return success))
+(define-fun+ U8 move-right ([Board b])
+  (rotate-board b)
+  (rotate-board b)
+  (rotate-board b)
+  (define success (move-up b))
+  (rotate-board b)
+  success)
 
 (define-fun U8 find-pair-down ([Board board])
   (for ([x := (U8 0)] (< x (U8 SIZE)) (+=1 x))
@@ -130,6 +131,7 @@
         (+=1 count))))
   (return count))
 
+
 (define-fun U8 game-ended ([Board board])
   ;; XXX Awkward because no ANF. Need can't put function call inside
   ;; predicate, so we need 2 conditional statements instead of an 'or'
@@ -146,6 +148,19 @@
   (define void3 := (rotate-board board))
   (define void4 := (rotate-board board))
   (return ended))
+
+;; XXX Issue with type of first cond case, I think related to
+;; 'or' macro?
+#;
+(define-fun+ U8 game-ended ([Board b])
+  (cond [(or (not (zero? (count-empty b))) (find-pair-down b)) 0]
+        [else
+         (rotate-board b)
+         (defined ended (not (find-pair-down b)))
+         (rotate-board b)
+         (rotate-board b)
+         (rotate-board b)
+         ended]))
 
 (define-extern-fun S32 rand () #:src (ExternSrc '() '("stdlib.h")))
 
