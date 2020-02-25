@@ -340,7 +340,9 @@
 
 (begin-for-syntax
   (struct typed-constructor (ctor ensure)
-    ;; XXX prop:struct-info
+    #:property prop:struct-info
+    (λ (this)
+      (extract-struct-info (typed-constructor-ctor this)))
     #:property prop:match-expander
     (λ (this stx)
       (syntax-parse stx
