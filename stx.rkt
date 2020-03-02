@@ -537,10 +537,10 @@
       [(_ (void))
        (record-disappeared-uses #'void)
        (syntax/loc stx (Skip #f))]
-      [(_ (void m))
+      [(_ (void ~! m))
        (record-disappeared-uses #'void)
        (syntax/loc stx (Skip m))]
-      [(_ (error m))
+      [(_ (error ~! m))
        (record-disappeared-uses #'error)
        (syntax/loc stx (Fail m))]
       [(_ (begin))
@@ -553,23 +553,23 @@
       [(_ (begin s))
        (record-disappeared-uses #'begin)
        (syntax/loc stx (S s))]
-      [(_ (begin a . d))
+      [(_ (begin ~! a . d))
        (record-disappeared-uses #'begin)
        (syntax/loc stx
          (Begin (syntax-parameterize ([S-in-tail? #f])
                   (S a))
                 (S (begin . d))))]
-      [(_ (set! p e))
+      [(_ (set! ~! p e))
        (record-disappeared-uses #'set!)
        (syntax/loc stx
          (let* ([the-p (P p)] [p-ty (path-type the-p)])
            (Assign the-p (syntax-parameterize ([expect-ty #'p-ty])
                            (E e)))))]
       [(_ {p (~datum <-) e}) (syntax/loc stx (S (set! p e)))]
-      [(_ (if p t f))
+      [(_ (if ~! p t f))
        (record-disappeared-uses #'if)
        (syntax/loc stx (If (E p) (S t) (S f)))]
-      [(_ (let/ec k:id . b))
+      [(_ (let/ec ~! k:id . b))
        #:with k-id (generate-temporary #'k)
        (record-disappeared-uses #'let/ec)
        (syntax/loc stx
@@ -648,7 +648,7 @@
        #:declare macro-id (static S-expander? "S expander")
        (record-disappeared-uses #'macro-id)
        (S-expand (attribute macro-id.value) #'macro-use)]
-      [(_ (unsyntax e))
+      [(_ (unsyntax ~! e))
        (record-disappeared-uses #'unsyntax)
        #'e]
       [(_ e ~!)
