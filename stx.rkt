@@ -1018,6 +1018,27 @@
 (define-simple-macro (define-E/A-expander x:id E-impl A-impl)
   (define-syntax x (E/A-expander E-impl A-impl)))
 
+(begin-for-syntax
+  (define (make-E/A-binop-expander op-stx impl-stx)
+    (E/A-expander
+     (syntax-parser
+       [(_ l r)
+        (quasisyntax/loc this-syntax
+          (#,impl-stx (E l) (E r)))])
+     (syntax-parser
+       [(_ as ...)
+        #:with x-id (generate-temporary)
+        #:with (as-nv ...) (generate-temporaries #'(as ...))
+        #:with (as-arg ...) (generate-temporaries #'(as ...))
+        #:with op op-stx
+        (syntax/loc this-syntax
+          (let-values ([(as-nv as-arg) (ANF as)] ...)
+            (define x-id 'x-id)
+            (define arg-e (E (op #,as-arg ...)))
+            (define x-ty (expr-type arg-e))
+            (define the-x-ref (Var x-id x-ty))
+            (values (snoc (append as-nv ...) (anf-let the-x-ref arg-e))
+                    (Read the-x-ref))))]))))
 (define-syntax (define-E/A-binop stx)
   (syntax-parse stx
     [(_ name:id [match-clause op:id] ...+)
@@ -1027,27 +1048,8 @@
          (define (name^ the-lhs the-rhs)
            (match (expr-type the-lhs)
              [match-clause (E (op #,the-lhs #,the-rhs))] ...))
-         (define-E/A-expander name
-           (syntax-parser
-             [(_ l r)
-              (syntax/loc this-syntax
-                (name^ (E l) (E r)))])
-           (syntax-parser
-             [(_ as (... ...))
-              #:with x-id (generate-temporary)
-              #:with (as-nv (... ...)) (generate-temporaries #'(as (... ...)))
-              #:with (as-arg (... ...)) (generate-temporaries #'(as (... ...)))
-              (syntax/loc this-syntax
-                (let-values ([(as-nv as-arg) (ANF as)] (... ...))
-                  (define x-id 'x-id)
-                  (define arg-e (E (name #,as-arg (... ...))))
-                  (define x-ty (expr-type arg-e))
-                  (define the-x-ref (Var x-id x-ty))
-                  (values (snoc (append as-nv (... ...))
-                                (anf-let the-x-ref arg-e))
-                          (Read the-x-ref))))]))
+         (define-syntax name (make-E/A-binop-expander #'name #'name^))
          (provide name)))]))
-
 (define-E/A-binop << [(? IntT?) ishl])
 (define-E/A-binop >> [(IntT #t _) iashr] [(IntT #f _) ilshr])
 ;; Note: behavior of C's != operator is unordered for floats
