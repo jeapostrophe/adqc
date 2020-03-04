@@ -27,20 +27,19 @@
 ;; nodes, as they contain the rest of the function as their body. Maybe have
 ;; different reporting schemes for syntax which makes declarations and has a body
 ;; (Let, LetE, Call, IntFun, etc?) and other types of syntax?
-(define-syntax (define-reporter stx)
-  (syntax-parse stx
-    [(_ name:id blame-ast:expr)
-     (syntax/loc stx
-       (define-syntax (name stx*)
-         (syntax-parse stx*
-           [(_ msg:str args:expr (... ...))
-            #:with msg-full (datum->syntax
-                             #'msg (string-append
-                                    (syntax->datum #'msg) "\nBlaming AST: ~a"))
-            (syntax/loc stx*
-              (raise-adqc-type-error
-               msg-full (list args (... ...)) blame-ast
-               (current-continuation-marks)))])))]))
+(begin-for-syntax
+  (define (make-reporter blame-ast-stx)
+    (syntax-parser
+      [(_ msg:str args:expr ...)
+       (define msg-str (syntax->datum #'msg))
+       (define msg-full-str (string-append msg-str "\nBlaming AST: ~a"))
+       (with-syntax ([msg-full (datum->syntax #'msg msg-full-str)])
+         (quasisyntax/loc this-syntax
+           (raise-adqc-type-error
+            msg-full (list args ...) #,blame-ast-stx
+            (current-continuation-marks))))])))
+(define-simple-macro (define-reporter name:id blame-ast:expr)
+  (define-syntax name (make-reporter #'blame-ast)))
 
 (struct env-info (env) #:transparent)
 (struct type-info env-info (ty) #:transparent)
