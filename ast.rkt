@@ -11,16 +11,10 @@
 (define integer-bit-widths '(8 16 32 64))
 
 (begin-for-syntax
-  (struct constructor (ctc name name? base fields)
+  (struct constructor (ctc name)
     #:property prop:struct-info
     (λ (this)
-      (define fields (reverse (syntax->list (constructor-fields this))))
-      (list #f
-            (constructor-name this)
-            (constructor-name? this)
-            fields
-            (make-list (length fields) #f)
-            (constructor-base this)))
+      (extract-struct-info (syntax-local-value (constructor-name this))))
     #:property prop:match-expander
     (λ (this stx)
       (syntax-parse stx
@@ -54,8 +48,7 @@
      (syntax/loc stx
        (begin
          (struct name base (field ...) #:transparent)
-         (define-syntax ctor
-           (constructor #'ctor-ctc #'name #'name? #'base #'(field-accessor ...)))
+         (define-syntax ctor (constructor #'ctor-ctc #'name))
          (define (name?^ v)
            (and (base? v) (name? (unpack v))))
          (define (field-accessor^ v)

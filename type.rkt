@@ -342,7 +342,8 @@
   (struct typed-constructor (ctor ensure)
     #:property prop:struct-info
     (λ (this)
-      (extract-struct-info (typed-constructor-ctor this)))
+      (extract-struct-info
+       (syntax-local-value (typed-constructor-ctor this))))
     #:property prop:match-expander
     (λ (this stx)
       (syntax-parse stx
