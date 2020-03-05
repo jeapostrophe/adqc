@@ -980,24 +980,24 @@
       (S (return #,arg)))
     (ANF-compose ret-fn nvs arg)))
 
+(begin-for-syntax
+  (define (make-A-op-parser op-stx)
+    (syntax-parser
+      [(_ as ...)
+       #:with x-id (generate-temporary)
+       #:with (as-nv ...) (generate-temporaries #'(as ...))
+       #:with (as-arg ...) (generate-temporaries #'(as ...))
+       #:with op op-stx
+       (syntax/loc this-syntax
+         (let-values ([(as-nv as-arg) (ANF as)] ...)
+           (define x-id 'x-id)
+           (define arg-e (E (op #,as-arg ...)))
+           (define x-ty (expr-type arg-e))
+           (define the-x-ref (Var x-id x-ty))
+           (values (snoc (append as-nv ...) (anf-let the-x-ref arg-e))
+                   (Read the-x-ref))))])))
 (define-simple-macro (define-A-free-ops op:id ...)
-  (begin
-    (define-A-free-syntax op
-      (syntax-parser
-        [(_ as (... ...))
-         #:with x-id (generate-temporary)
-         #:with (as-nv (... ...)) (generate-temporaries #'(as (... ...)))
-         #:with (as-arg (... ...)) (generate-temporaries #'(as (... ...)))
-         ;; XXX Maybe try to pull some of this out to a phase-0 function?
-         (syntax/loc this-syntax
-           (let-values ([(as-nv as-arg) (ANF as)] (... ...))
-             (define x-id 'x-id)
-             (define arg-e (E (op #,as-arg (... ...))))
-             (define x-ty (expr-type arg-e))
-             (define the-x-ref (Var x-id x-ty))
-             (values (snoc (append as-nv (... ...))
-                           (anf-let the-x-ref arg-e))
-                     (Read the-x-ref))))])) ...))
+  (begin (define-A-free-syntax op (make-A-op-parser #'op)) ...))
 (define-A-free-ops
   + - * / modulo
   bitwise-ior bitwise-and bitwise-xor
@@ -1025,20 +1025,7 @@
        [(_ l r)
         (quasisyntax/loc this-syntax
           (#,impl-stx (E l) (E r)))])
-     (syntax-parser
-       [(_ as ...)
-        #:with x-id (generate-temporary)
-        #:with (as-nv ...) (generate-temporaries #'(as ...))
-        #:with (as-arg ...) (generate-temporaries #'(as ...))
-        #:with op op-stx
-        (syntax/loc this-syntax
-          (let-values ([(as-nv as-arg) (ANF as)] ...)
-            (define x-id 'x-id)
-            (define arg-e (E (op #,as-arg ...)))
-            (define x-ty (expr-type arg-e))
-            (define the-x-ref (Var x-id x-ty))
-            (values (snoc (append as-nv ...) (anf-let the-x-ref arg-e))
-                    (Read the-x-ref))))]))))
+     (make-A-op-parser op-stx))))
 (define-syntax (define-E/A-binop stx)
   (syntax-parse stx
     [(_ name:id [match-clause op:id] ...+)
