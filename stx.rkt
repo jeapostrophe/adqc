@@ -1248,15 +1248,6 @@
   (syntax-parameterize ([F-body-default (make-rename-transformer #'S+)])
     (F . more)))
 
-(begin-for-syntax
-  (struct T/I-expander (T-impl I-impl)
-    #:property prop:procedure (struct-field-index T-impl)
-    #:methods gen:T-expander
-    [(define (T-expand this stx)
-       ((T/I-expander-T-impl this) stx))]
-    #:methods gen:I-expander
-    [(define (I-expand this stx)
-       ((T/I-expander-I-impl this) stx))]))
 (define (apply-union-ctor-init stx ty m i)
   (unless (UniT? ty)
     (raise-syntax-error #f "union syntax used for non-union type" stx))
@@ -1270,31 +1261,41 @@
        (raise-syntax-error #f "constructor arity mismatch" stx))
      (I (record #,@(map cons c-order is)))]
     [_ (raise-syntax-error #f "invalid constructor syntax" stx)]))
+(begin-for-syntax
+  (struct T/I-expander (T-impl I-impl)
+    #:property prop:procedure (struct-field-index T-impl)
+    #:methods gen:T-expander
+    [(define (T-expand this stx)
+       ((T/I-expander-T-impl this) stx))]
+    #:methods gen:I-expander
+    [(define (I-expand this stx)
+       ((T/I-expander-I-impl this) stx))])
+  (define (make-type-binding ty-stx)
+    (T/I-expander
+     (syntax-parser
+       [_ (quasisyntax/loc this-syntax #,ty-stx)])
+     (syntax-parser
+       [(_ m:keyword ~! i:expr)
+        (quasisyntax/loc this-syntax
+          (apply-union-ctor-init
+           #'#,this-syntax #,ty-stx (keyword->symbol 'm) (I i)))]
+       [(_ i:expr ...)
+        (quasisyntax/loc this-syntax
+          (apply-ctor-inits
+           #'#,this-syntax #,ty-stx (list (I i) ...)))]))))
 (define-syntax (define-type stx)
   (syntax-parse stx
-    [(_ #:public name:id ty-stx)
+    [(_ #:public name:id ty)
      #:fail-unless (syntax-parameter-value #'current-Prog)
      "Cannot define public type outside of Prog"
      (syntax/loc stx
-       (begin (define-type name ty-stx)
+       (begin (define-type name ty)
               (include-type name)))]
-    [(_ name:id ty-stx)
+    [(_ name:id ty)
      (syntax/loc stx
        (begin
-         (define ty (T ty-stx))
-         (define-syntax name
-           (T/I-expander
-            (syntax-parser
-              [_ (syntax/loc this-syntax ty)])
-            (syntax-parser
-              [(_ m:keyword i:expr)
-               (quasisyntax/loc this-syntax
-                 (apply-union-ctor-init
-                  #'#,this-syntax ty (keyword->symbol 'm) (I i)))]
-              [(_ i:expr (... ...))
-               (quasisyntax/loc this-syntax
-                 (apply-ctor-inits
-                  #'#,this-syntax ty (list (I i) (... ...))))])))))]))
+         (define the-ty (T ty))
+         (define-syntax name (make-type-binding #'the-ty))))]))
 
 (define-syntax (include-type stx)
   (with-disappeared-uses
